@@ -1,5 +1,15 @@
 __pycache__/
 *.pyc
-savedata/
 .git/
 .DS_Store
+
+# 1. 先无情地忽略 savedata 下的所有东西（为了安全）
+savedata/*
+
+# 2. 然后用感叹号 (!) "复活" 您想分享的预设文件
+!savedata/logic_rules.json
+!savedata/replace_rules.txt
+!savedata/resolutions.txt
+
+# 3. 再次确保 API 设置文件绝对被忽略（双重保险）
+savedata/llm_settings.txt

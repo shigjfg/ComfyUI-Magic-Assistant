@@ -1,0 +1,9 @@
+{
+    "📈 智能放大 (SDXL)": "# === SDXL 精确比例放大 ===\n# 变量: w=宽, h=高\n\n# 1. 精确 2:3 画幅 (w*3 == h*2)\n# 例如: 768x1152, 1024x1536\nIF w*3 == h*2 and w <= 768 RETURN 1152, 1728\nIF w*3 == h*2 and w == 1152 RETURN 1536, 2304\n\n# 2. 精确 3:2 画幅 (w*2 == h*3)\n# 例如: 1152x768, 1536x1024\nIF w*2 == h*3 and w <= 1152 RETURN 1728, 1152\nIF w*2 == h*3 and w == 1728 RETURN 2304, 1536\n\n# 3. 精确 3:4 画幅 (w*4 == h*3)\n# 例如: 768x1024\nIF w*4 == h*3 and w <= 768 RETURN 1152, 1536\nIF w*4 == h*3 and w == 1152 RETURN 1536, 2048\n\n# 4. 精确 4:3 画幅 (w*3 == h*4)\n# 例如: 1024x768\nIF w*3 == h*4 and w <= 1024 RETURN 1536, 1152\nIF w*3 == h*4 and w == 1536 RETURN 2048, 1536\n\n# 5. 其他任何比例 (包括 832x1216) -> 普通两倍放大\nRETURN w * 2, h * 2",
+    "📉 智能缩小 (SDXL)": "# === SDXL 精确比例缩小 ===\n\n# 1. 精确 2:3 缩小\nIF w*3 == h*2 and w >= 1152 RETURN 768, 1152\n\n# 2. 精确 3:2 缩小\nIF w*2 == h*3 and w >= 1728 RETURN 1152, 768\n\n# 3. 精确 3:4 缩小\nIF w*4 == h*3 and w >= 1152 RETURN 768, 1024\n\n# 4. 精确 4:3 缩小\nIF w*3 == h*4 and w >= 1536 RETURN 1024, 768\n\n# 5. 其他情况保持原样\nRETURN w, h",
+    "⚖️ 取大值 (Max)": "IF a > b RETURN a\nRETURN b",
+    "⚖️ 取小值 (Min)": "IF a < b RETURN a\nRETURN b",
+    "✖️ 乘法 (Scale)": "RETURN w * b, h * b",
+    "➗ 除法 (Divide)": "RETURN w / b, h / b",
+    "1️⃣ 自定义测试": "IF w > 1024 RETURN 1024, 1024\nRETURN w, h"
+}
