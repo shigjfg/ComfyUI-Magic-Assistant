@@ -6,7 +6,7 @@ class MagicPromptBox:
         return {
             "required": {
                 # 主文本框 (支持多行、动态提示词)
-                "text": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": True}),
+                "text": ("STRING", {"default": "", "multiline": True, "dynamicPrompts": False}),
             },
             "optional": {
                 # 您的核心需求：前置文本接口
