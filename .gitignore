@@ -3,6 +3,9 @@ __pycache__/
 .git/
 .DS_Store
 
+# 0. 忽略用户私有数据文件夹
+userdata/
+
 # 1. 先无情地忽略 savedata 下的所有东西（为了安全）
 savedata/*
 
