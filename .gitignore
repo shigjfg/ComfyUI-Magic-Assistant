@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+savedata/
+.git/
+.DS_Store
