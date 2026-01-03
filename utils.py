@@ -3,13 +3,14 @@ import json
 import shutil
 from server import PromptServer
 from aiohttp import web
+import folder_paths  # 👈 新增引入：用于获取 ComfyUI 标准路径
 
 # --- 1. 路径定义 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESET_DIR = os.path.join(BASE_DIR, "savedata")
 USER_DIR = os.path.join(BASE_DIR, "userdata")
 
-# --- 2. 默认数据 (仅保留必要的兜底，算法全部移至 JSON) ---
+# --- 2. 默认数据 ---
 DEFAULT_LLM = {
     "Default OpenAI": {
         "name": "Default OpenAI",
@@ -19,7 +20,6 @@ DEFAULT_LLM = {
     }
 }
 
-# 这里的默认值留空，强制从 savedata/logic_rules.json 读取
 DEFAULT_LOGICS = {}
 
 DEFAULT_RESOLUTIONS = {
@@ -46,11 +46,9 @@ class MagicUtils:
         """双向读取逻辑: Savedata (预设) + Userdata (私有)"""
         data = {}
         
-        # 0. 加载代码兜底 (现在 logic 是空的了)
         if default_fallback and isinstance(default_fallback, dict):
             data.update(default_fallback)
 
-        # 1. 读取官方预设 (Savedata) -> 这里的逻辑算法现在是主力
         preset_path = os.path.join(PRESET_DIR, filename)
         if os.path.exists(preset_path):
             try:
@@ -61,7 +59,6 @@ class MagicUtils:
             except Exception as e:
                 print(f"⚠️ [MagicUtils] Load Preset Error ({filename}): {e}")
 
-        # 2. 读取用户配置 (Userdata) -> 覆盖同名键
         user_path = os.path.join(USER_DIR, filename)
         if os.path.exists(user_path):
             try:
@@ -80,10 +77,6 @@ class MagicUtils:
         cls.ensure_user_dir()
         file_path = os.path.join(USER_DIR, filename)
         
-        # 简单逻辑：直接将前端传来的数据覆盖写入用户文件
-        # 注意：如果您只想保存差异部分，逻辑会复杂很多。
-        # 目前的逻辑是：用户点保存 -> 哪怕全是默认值，也会在 userdata 里存一份副本。
-        # 这是一个妥协，为了代码简单稳健。
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
         print(f"🔮 [MagicUtils] Saved to privacy folder: {file_path}")
@@ -116,3 +109,66 @@ async def save_config(request):
     if "resolutions" in data: MagicUtils._save_user_data("resolutions.txt", data["resolutions"])
     if "logics" in data: MagicUtils._save_user_data("logic_rules.json", data["logics"])
     return web.json_response({"status": "success"})
+
+# --- 🌟 新增功能: 文件管理 API (删除/重命名) ---
+# 这些接口将支持 V4.0 图库的高级管理功能
+
+@PromptServer.instance.routes.post("/ma/delete_file")
+async def delete_file(request):
+    try:
+        data = await request.json()
+        filename = data.get("filename")
+        subfolder = data.get("subfolder", "")
+        
+        # 安全检查
+        if ".." in filename or "/" in filename or "\\" in filename:
+             return web.json_response({"status": "error", "message": "Invalid filename"})
+
+        # 使用 ComfyUI 标准路径获取 input 目录
+        input_dir = folder_paths.get_input_directory()
+        target_dir = os.path.join(input_dir, subfolder)
+        file_path = os.path.join(target_dir, filename)
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"🗑️ [MagicUtils] Deleted: {file_path}")
+            return web.json_response({"status": "success"})
+        else:
+            return web.json_response({"status": "error", "message": "File not found"})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
+
+@PromptServer.instance.routes.post("/ma/rename_file")
+async def rename_file(request):
+    try:
+        data = await request.json()
+        old_name = data.get("old_name")
+        new_name = data.get("new_name")
+        subfolder = data.get("subfolder", "")
+
+        if not old_name or not new_name:
+             return web.json_response({"status": "error", "message": "Missing names"})
+
+        # 安全检查
+        for name in [old_name, new_name]:
+            if ".." in name or "/" in name or "\\" in name:
+                return web.json_response({"status": "error", "message": "Invalid filename"})
+
+        input_dir = folder_paths.get_input_directory()
+        target_dir = os.path.join(input_dir, subfolder)
+        
+        old_path = os.path.join(target_dir, old_name)
+        new_path = os.path.join(target_dir, new_name)
+
+        if os.path.exists(old_path):
+            if os.path.exists(new_path):
+                 return web.json_response({"status": "error", "message": "New name already exists"})
+            
+            os.rename(old_path, new_path)
+            print(f"✏️ [MagicUtils] Renamed: {old_name} -> {new_name}")
+            return web.json_response({"status": "success"})
+        else:
+            return web.json_response({"status": "error", "message": "File not found"})
+            
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
