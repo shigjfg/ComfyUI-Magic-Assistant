@@ -13,14 +13,14 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 ### 1. 🎨 Magic Photopea Studio (Photopea 图像处理与加载图像) <span style="color:red; font-size:0.8em">NEW (v4.0)</span>
 > **The ultimate asset manager & image editor inside ComfyUI.** / **ComfyUI 内置的终极素材管理与修图工具。**
 
-* **ComfyUI Explorer**: A built-in gallery to manage all your input images with **Search**, **Sort**, and **Batch Delete**.
-* **Seamless Editing**: One-click to send images to Photopea for editing (Photoshop-like experience) and save them back to the node instantly.
-* **Smart Detection**: Automatically handles files in both the `input` root folder and the dedicated `magic_photopea` folder.
-* **Dual Mode**: Switch between **View Mode** (for selecting images) and **Edit Mode** (for renaming and deleting assets).
-* **图库管理**: 内置强大的素材管理器，支持对输入图片进行**搜索**、**排序**、**缩放预览**以及**批量删除**。
-* **无缝修图**: 一键打开 Photopea (类PS体验) 进行编辑，保存后自动同步回节点，无需下载上传。
-* **智能侦探**: 自动识别并管理 ComfyUI 根目录和插件专用目录下的所有图片素材。
-* **双模式交互**: 支持“浏览模式”（快速选图）和“管理模式”（重命名、多选删除）无缝切换。
+* **Input File Manager**: A visual gallery to manage **your uploaded images** and **saved history** in the `input` folder. No more digging through dropdown lists!
+* **Seamless Editing**: One-click to send any user image to Photopea for editing (Photoshop-like experience) and save it back instantly.
+* **Dual Path Support**: Automatically detects and manages files in both the root `input/` folder (uploads) and the `magic_photopea/` folder (edits).
+* **Batch Management**: Features **Multi-Select**, **Batch Delete**, and **Rename** to keep your input directory clean and organized.
+* **输入文件管理**: 一个可视化的文件管理器，专门用于管理**您自己上传的图片**以及**修图保存的历史记录**。彻底告别在下拉菜单里“盲找”文件的痛苦。
+* **无缝修图**: 一键将您导入的图片发送到 Photopea (类PS体验) 进行编辑，保存后自动同步，无需下载上传。
+* **双路径支持**: 智能识别并管理 `input/` 根目录（用户上传）和 `magic_photopea/` 目录（编辑存档）下的所有文件。
+* **批量管理**: 提供**多选删除**、**批量清理**和**重命名**功能，帮您把杂乱的 input 文件夹整理得井井有条。
 
 ### 2. 🤖 Magic Multi-Function AI Prompt Replace (AI 提示词替换)
 > **Your intelligent prompt engineer.** / **您的专属提示词工程师。**
@@ -92,11 +92,11 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## ⚠️ Notes (注意事项)
 
-* **Photopea Network**: Since Photopea is a web-based service, please ensure you have internet access. If you have ad-blockers, you might see a warning message in the editor window (can be closed).
-* **API Key**: For **AI Prompt Replace**, configure your API Key in `userdata/llm_settings.txt` after the first run.
+* **Photopea Network**: Since Photopea is a web-based service, please ensure you have internet access.
+* **User Files Only**: The "Gallery" manages files in your `ComfyUI/input/` directory. It does not contain built-in stock images.
 * **File Deletion**: The **Photopea Studio** allows you to delete files from your disk. Please use the "Delete All" feature with caution!
 * **Photopea 网络**: 由于 Photopea 是在线服务，请确保电脑已连接互联网。
-* **API Key**: 使用 **AI 提示词替换** 功能前，请先运行一次，然后在生成的 `userdata/llm_settings.txt` 中填入 Key。
+* **仅限用户文件**: “图库”仅显示您 `ComfyUI/input/` 目录下的文件，不包含任何内置素材。
 * **文件删除**: **Photopea Studio** 具有物理删除硬盘文件的权限，使用“全部删除”功能时请务必谨慎！
 
 ---
