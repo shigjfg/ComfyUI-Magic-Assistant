@@ -138,37 +138,34 @@ async def delete_file(request):
     except Exception as e:
         return web.json_response({"status": "error", "message": str(e)})
 
-@PromptServer.instance.routes.post("/ma/rename_file")
-async def rename_file(request):
+# --- 在 utils.py 的最末尾追加以下代码 ---
+
+@PromptServer.instance.routes.post("/ma/clear_clipspace")
+async def clear_clipspace(request):
     try:
-        data = await request.json()
-        old_name = data.get("old_name")
-        new_name = data.get("new_name")
-        subfolder = data.get("subfolder", "")
-
-        if not old_name or not new_name:
-             return web.json_response({"status": "error", "message": "Missing names"})
-
-        # 安全检查
-        for name in [old_name, new_name]:
-            if ".." in name or "/" in name or "\\" in name:
-                return web.json_response({"status": "error", "message": "Invalid filename"})
-
+        # 获取标准的 input 目录
         input_dir = folder_paths.get_input_directory()
-        target_dir = os.path.join(input_dir, subfolder)
+        clipspace_dir = os.path.join(input_dir, "clipspace")
         
-        old_path = os.path.join(target_dir, old_name)
-        new_path = os.path.join(target_dir, new_name)
-
-        if os.path.exists(old_path):
-            if os.path.exists(new_path):
-                 return web.json_response({"status": "error", "message": "New name already exists"})
-            
-            os.rename(old_path, new_path)
-            print(f"✏️ [MagicUtils] Renamed: {old_name} -> {new_name}")
-            return web.json_response({"status": "success"})
+        deleted_count = 0
+        
+        if os.path.exists(clipspace_dir):
+            for filename in os.listdir(clipspace_dir):
+                file_path = os.path.join(clipspace_dir, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path) # 删除文件
+                        deleted_count += 1
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path) # 删除子文件夹
+                        deleted_count += 1
+                except Exception as e:
+                    print(f"⚠️ Failed to delete {file_path}. Reason: {e}")
+                    
+            print(f"🧹 [MagicUtils] Cleared clipspace cache: {deleted_count} files removed.")
+            return web.json_response({"status": "success", "count": deleted_count})
         else:
-            return web.json_response({"status": "error", "message": "File not found"})
+            return web.json_response({"status": "success", "count": 0, "message": "No clipspace dir found"})
             
     except Exception as e:
         return web.json_response({"status": "error", "message": str(e)})

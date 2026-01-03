@@ -10,7 +10,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 🧩 Node Features (节点功能详解)
 
-### 1. 🎨 Magic Photopea Studio (Photopea 图像处理与加载图像) <span style="color:red; font-size:0.8em">NEW (v4.0)</span>
+### 1. 🎨 Magic Photopea Studio (Photopea 图像处理与加载图像) <span style="color:red; font-size:0.8em"></span>
 > **The ultimate asset manager & image editor inside ComfyUI.** / **ComfyUI 内置的终极素材管理与修图工具。**
 
 * **Input File Manager**: A visual gallery to manage **your uploaded images** and **saved history** in the `input` folder. No more digging through dropdown lists!
@@ -21,6 +21,13 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **无缝修图**: 一键将您导入的图片发送到 Photopea (类PS体验) 进行编辑，保存后自动同步，无需下载上传。
 * **双路径支持**: 智能识别并管理 `input/` 根目录（用户上传）和 `magic_photopea/` 目录（编辑存档）下的所有文件。
 * **批量管理**: 提供**多选删除**、**批量清理**和**重命名**功能，帮您把杂乱的 input 文件夹整理得井井有条。
+## 🆕 Updates
+* **Fixed**: Compatibility with official Mask Editor (right-click -> Save to node now works perfectly).
+* **Improved**: Gallery now hides temporary `clipspace` files for a cleaner view.
+* **New**: Added "🧹 Clear Cache" button to remove temporary mask files.
+* **修复**: 完美兼容官方遮罩编辑器（右键绘画保存即生效）。
+* **优化**: 图库列表自动过滤 clipspace 临时文件，更加清爽。
+* **新增**: “🧹 清空缓存”按钮，一键清理遮罩临时文件。
 
 ### 2. 🤖 Magic Multi-Function AI Prompt Replace (AI 提示词替换)
 > **Your intelligent prompt engineer.** / **您的专属提示词工程师。**

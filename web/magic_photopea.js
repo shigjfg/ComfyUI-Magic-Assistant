@@ -40,7 +40,8 @@ app.registerExtension({
                     showPhotopeaModal(this);
                 });
                 
-                const widget = this.widgets.find(w => w.name === "image_selection");
+                // 🌟 注意：这里查找的是 "image" 而不是 "image_selection"，是为了兼容官方遮罩编辑器
+                const widget = this.widgets.find(w => w.name === "image");
                 if (widget) {
                     const originalCallback = widget.callback;
                     widget.callback = (value) => {
@@ -60,9 +61,10 @@ app.registerExtension({
 function showGalleryModal(node) {
     if (document.getElementById(GALLERY_ID)) return;
 
-    const widget = node.widgets.find(w => w.name === "image_selection");
+    // 🌟 查找名为 "image" 的组件
+    const widget = node.widgets.find(w => w.name === "image");
     if (!widget || !widget.options.values) {
-        alert("没有找到图片列表！");
+        alert("没有找到图片列表！(Component 'image' missing)");
         return;
     }
 
@@ -70,8 +72,8 @@ function showGalleryModal(node) {
     let fileList = [...widget.options.values].filter(f => f !== "canvas_empty.png");
     let currentSettings = getSettings();
     let isEditMode = false;
-    let selectedFiles = new Set(); // 存储选中的文件名
-    let fileLocations = {}; // 缓存文件位置: { "abc.png": "magic_photopea" }
+    let selectedFiles = new Set();
+    let fileLocations = {}; 
 
     // --- DOM 结构 ---
     const modal = document.createElement("div");
@@ -81,34 +83,28 @@ function showGalleryModal(node) {
     const container = document.createElement("div");
     container.style.cssText = `width: 90%; height: 90%; background: #1e1e1e; border-radius: 12px; border: 1px solid #444; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.6);`;
 
-    // 顶部工具栏容器
     const header = document.createElement("div");
     header.style.cssText = "padding: 15px 20px; background: #252525; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; user-select: none; min-height: 60px;";
 
-    // 内容网格
     const grid = document.createElement("div");
     grid.style.cssText = `flex: 1; overflow-y: auto; padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-size, 140px), 1fr)); gap: 15px; align-content: start;`;
     grid.style.setProperty('--card-size', currentSettings.size + "px");
 
-    // --- 核心逻辑函数 ---
-
-    // 1. 探测文件位置 (删除/重命名需要知道文件在哪)
+    // --- API Interactions ---
     const detectFileLocation = async (filename) => {
         if (fileLocations[filename]) return fileLocations[filename];
+        if (filename.startsWith("clipspace/")) return "";
         try {
-            // 先试 magic_photopea
             const resp = await api.fetchApi(`/view?filename=${encodeURIComponent(filename)}&subfolder=magic_photopea&type=input`, { method: "HEAD" });
             if (resp.status === 200) {
                 fileLocations[filename] = "magic_photopea";
                 return "magic_photopea";
             }
         } catch {}
-        // 否则默认为根目录
         fileLocations[filename] = "";
         return "";
     };
 
-    // 2. 调用后端 API 删除文件
     const deleteFileAPI = async (filename) => {
         const subfolder = await detectFileLocation(filename);
         try {
@@ -118,26 +114,14 @@ function showGalleryModal(node) {
             });
             const data = await resp.json();
             return data.status === "success";
-        } catch (e) {
-            console.error("Delete failed:", e);
-            return false;
-        }
+        } catch (e) { return false; }
     };
 
-    // 3. 调用后端 API 重命名
     const renameFileAPI = async (oldName, newName) => {
         if (!newName || newName === oldName) return false;
-        // 简单校验文件名
-        if (newName.includes("/") || newName.includes("\\")) {
-            alert("文件名不能包含路径符号！");
-            return false;
-        }
-        
-        // 保持后缀名一致 (防止小白改错后缀)
+        if (newName.includes("/") || newName.includes("\\")) return false;
         const oldExt = oldName.split('.').pop();
-        if (!newName.endsWith('.' + oldExt)) {
-            newName += '.' + oldExt;
-        }
+        if (!newName.endsWith('.' + oldExt)) newName += '.' + oldExt;
 
         const subfolder = await detectFileLocation(oldName);
         try {
@@ -147,44 +131,46 @@ function showGalleryModal(node) {
             });
             const data = await resp.json();
             if (data.status === "success") {
-                // 更新 widget 列表
                 const idx = widget.options.values.indexOf(oldName);
                 if (idx !== -1) {
                     widget.options.values[idx] = newName;
                     if (widget.value === oldName) widget.value = newName;
                 }
                 return true;
-            } else {
-                alert("重命名失败: " + data.message);
-                return false;
             }
-        } catch (e) {
-            alert("请求错误: " + e);
             return false;
+        } catch (e) { return false; }
+    };
+
+    // 🌟 核心新增：调用后端清空 clipspace
+    const clearClipspaceAPI = async () => {
+        try {
+            const resp = await api.fetchApi("/ma/clear_clipspace", { method: "POST" });
+            const data = await resp.json();
+            return data;
+        } catch (e) {
+            console.error(e);
+            return { status: "error", message: e };
         }
     };
 
-    // 4. 渲染顶部 Header (根据模式切换)
+    // --- Header Rendering ---
     const renderHeader = () => {
         header.innerHTML = "";
         
         if (isEditMode) {
-            // --- 编辑模式 Header ---
-            header.style.background = "#3a2e2e"; // 微微泛红提示正在编辑
-
+            header.style.background = "#3a2e2e"; 
             const title = document.createElement("div");
             title.innerHTML = `<b>✏️ 编辑模式</b> <span style="font-size:12px;opacity:0.7">已选: <span id="sel-count">${selectedFiles.size}</span></span>`;
             title.style.cssText = "color: #ff9800; font-size: 16px; margin-right: auto;";
             
-            // 批量删除按钮
             const delSelBtn = document.createElement("button");
             delSelBtn.innerHTML = "🗑️ 删除选中";
             delSelBtn.className = "mp-btn-danger";
             delSelBtn.onclick = async () => {
                 if (selectedFiles.size === 0) return;
-                if (!confirm(`确定要删除选中的 ${selectedFiles.size} 张图片吗？此操作不可恢复！`)) return;
-                
-                delSelBtn.textContent = "⏳ 删除中...";
+                if (!confirm(`确定要删除选中的 ${selectedFiles.size} 张图片吗？`)) return;
+                delSelBtn.textContent = "⏳...";
                 for (const file of selectedFiles) {
                     const success = await deleteFileAPI(file);
                     if (success) {
@@ -193,47 +179,18 @@ function showGalleryModal(node) {
                     }
                 }
                 selectedFiles.clear();
-                renderAll(); // 刷新界面
-            };
-
-            // 全删按钮
-            const delAllBtn = document.createElement("button");
-            delAllBtn.innerHTML = "🔥 全部删除";
-            delAllBtn.className = "mp-btn-danger";
-            delAllBtn.onclick = async () => {
-                if (!confirm("⚠️ 高能预警 ⚠️\n\n确定要清空当前列表里的所有图片吗？\n硬盘上的文件将被永久删除！")) return;
-                
-                delAllBtn.textContent = "⏳...";
-                // 复制一份列表防止遍历时修改
-                const allToDelete = [...fileList];
-                for (const file of allToDelete) {
-                    const success = await deleteFileAPI(file);
-                    if (success) {
-                        fileList = fileList.filter(f => f !== file);
-                        widget.options.values = widget.options.values.filter(f => f !== file);
-                    }
-                }
-                selectedFiles.clear();
                 renderAll();
             };
 
-            // 完成按钮
             const doneBtn = document.createElement("button");
             doneBtn.innerHTML = "✅ 完成";
             doneBtn.className = "mp-btn-success";
-            doneBtn.onclick = () => {
-                isEditMode = false;
-                selectedFiles.clear(); // 退出时清空选择
-                renderAll();
-            };
+            doneBtn.onclick = () => { isEditMode = false; selectedFiles.clear(); renderAll(); };
 
             header.appendChild(title);
-            header.appendChild(delAllBtn);
             header.appendChild(delSelBtn);
             header.appendChild(doneBtn);
-
         } else {
-            // --- 默认浏览模式 Header ---
             header.style.background = "#252525";
 
             const searchInput = document.createElement("input");
@@ -243,30 +200,41 @@ function showGalleryModal(node) {
 
             const sortSelect = document.createElement("select");
             sortSelect.className = "mp-select";
-            sortSelect.innerHTML = `<option value="default">📅 默认</option><option value="oldest">📅 旧图</option><option value="name_asc">🔤 A-Z</option><option value="name_desc">🔤 Z-A</option>`;
+            sortSelect.innerHTML = `<option value="default">📅 默认</option><option value="oldest">📅 旧图</option><option value="name_asc">🔤 A-Z</option>`;
             sortSelect.value = currentSettings.sort;
-            sortSelect.onchange = (e) => {
-                currentSettings.sort = e.target.value;
-                saveSettings(currentSettings);
-                renderGrid(searchInput.value);
-            };
+            sortSelect.onchange = (e) => { currentSettings.sort = e.target.value; saveSettings(currentSettings); renderGrid(searchInput.value); };
 
-            // 缩放滑块
             const sliderContainer = document.createElement("div");
-            sliderContainer.style.cssText = "display:flex;align-items:center;gap:8px;font-size:12px;color:#888;";
+            sliderContainer.innerHTML = "🔍";
             const sizeSlider = document.createElement("input");
             sizeSlider.type = "range"; sizeSlider.min = "80"; sizeSlider.max = "400"; sizeSlider.step = "10";
             sizeSlider.value = currentSettings.size;
-            sizeSlider.style.width = "100px";
             sizeSlider.oninput = (e) => grid.style.setProperty('--card-size', e.target.value + "px");
             sizeSlider.onchange = (e) => { currentSettings.size = e.target.value; saveSettings(currentSettings); };
-            sliderContainer.innerHTML = "🔍"; sliderContainer.appendChild(sizeSlider);
+            sliderContainer.appendChild(sizeSlider);
 
-            // 编辑模式开关
             const editBtn = document.createElement("button");
             editBtn.innerHTML = "✏️ 编辑";
             editBtn.className = "mp-btn-primary";
             editBtn.onclick = () => { isEditMode = true; renderAll(); };
+
+            // 🌟 核心新增：清空缓存按钮
+            const clearCacheBtn = document.createElement("button");
+            clearCacheBtn.innerHTML = "🧹 清空蒙版缓存";
+            clearCacheBtn.className = "mp-btn-warning";
+            clearCacheBtn.title = "清空 clipspace 文件夹下的所有临时图片";
+            clearCacheBtn.onclick = async () => {
+                if (!confirm("⚠️ 确定要清空 clipspace 文件夹吗？\n\n这会删除所有由 ComfyUI 遮罩编辑器生成的历史临时图片。\n（不会影响你手动保存的图片）")) return;
+                
+                clearCacheBtn.textContent = "⏳...";
+                const res = await clearClipspaceAPI();
+                if (res.status === "success") {
+                    alert(`✅ 清理完成！共删除了 ${res.count} 个文件。`);
+                } else {
+                    alert(`❌ 清理失败: ${res.message}`);
+                }
+                clearCacheBtn.innerHTML = "🧹 清空缓存";
+            };
 
             const closeBtn = document.createElement("button");
             closeBtn.innerHTML = "✕";
@@ -277,33 +245,36 @@ function showGalleryModal(node) {
             header.appendChild(sortSelect);
             header.appendChild(sliderContainer);
             header.appendChild(editBtn);
+            header.appendChild(clearCacheBtn); // 添加按钮到 Header
             header.appendChild(closeBtn);
         }
     };
 
-    // 5. 渲染网格 Card
+    // --- Grid Rendering ---
     const renderGrid = (filterText = "") => {
         grid.innerHTML = "";
         const lowerFilter = filterText.toLowerCase();
-
-        // 排序逻辑
         let displayFiles = fileList.filter(f => f.toLowerCase().includes(lowerFilter));
-        const sortMode = currentSettings.sort;
-        if (sortMode === "name_asc") displayFiles.sort((a, b) => a.localeCompare(b));
-        else if (sortMode === "name_desc") displayFiles.sort((a, b) => b.localeCompare(a));
-        else if (sortMode === "oldest") displayFiles = [...displayFiles].reverse();
+        
+        if (currentSettings.sort === "name_asc") displayFiles.sort((a, b) => a.localeCompare(b));
+        else if (currentSettings.sort === "oldest") displayFiles = [...displayFiles].reverse();
 
         displayFiles.forEach(filename => {
             const card = document.createElement("div");
-            const isSelected = selectedFiles.has(filename);
-            
-            // 卡片样式
             card.className = "mp-card";
+            const isSelected = selectedFiles.has(filename);
+
             if (isEditMode) {
-                card.style.cursor = "pointer";
                 if (isSelected) card.classList.add("selected");
+                card.onclick = (e) => {
+                   if (e.target.tagName === "BUTTON" || e.target.tagName === "INPUT") return;
+                   if (selectedFiles.has(filename)) selectedFiles.delete(filename);
+                   else selectedFiles.add(filename);
+                   renderHeader();
+                   if (selectedFiles.has(filename)) card.classList.add("selected");
+                   else card.classList.remove("selected");
+                };
             } else {
-                // 浏览模式下点击即选
                 card.onclick = () => {
                     widget.value = filename;
                     if (widget.callback) widget.callback(filename);
@@ -311,65 +282,46 @@ function showGalleryModal(node) {
                 };
             }
 
-            // 编辑模式下的点击交互
-            if (isEditMode) {
-                card.onclick = (e) => {
-                    // 如果点的是删除按钮或输入框，不触发选择
-                    if (e.target.tagName === "BUTTON" || e.target.tagName === "INPUT") return;
-                    
-                    if (selectedFiles.has(filename)) selectedFiles.delete(filename);
-                    else selectedFiles.add(filename);
-                    
-                    // 局部更新 UI
-                    const countSpan = document.getElementById("sel-count");
-                    if (countSpan) countSpan.textContent = selectedFiles.size;
-                    
-                    if (selectedFiles.has(filename)) card.classList.add("selected");
-                    else card.classList.remove("selected");
-                };
-            }
-
-            // 图片容器
             const imgContainer = document.createElement("div");
             imgContainer.className = "mp-img-box";
             const img = document.createElement("img");
-            img.loading = "lazy"; // 性能优化
+            img.loading = "lazy";
             
-            // 路径侦探
             const safeName = encodeURIComponent(filename);
             const loadImg = (sub) => {
                 let url = `/view?filename=${safeName}&type=input`;
                 if (sub) url += `&subfolder=${sub}`;
                 img.src = api.apiURL(url);
             };
-            img.onload = () => { 
-                img.style.opacity = "1"; 
-                // 记住成功加载的路径
-                if(img.src.includes("magic_photopea")) fileLocations[filename] = "magic_photopea";
-            };
-            img.onerror = () => { 
-                if (!img.dataset.retried) { 
-                    img.dataset.retried = "true"; 
-                    loadImg(null); // 试根目录
-                } 
-            };
-            loadImg("magic_photopea");
+            
+            if (filename.startsWith("clipspace/")) {
+                 img.src = api.apiURL(`/view?filename=${safeName}&type=input`);
+            } else {
+                img.onload = () => { 
+                    img.style.opacity = "1"; 
+                    if(img.src.includes("magic_photopea")) fileLocations[filename] = "magic_photopea";
+                };
+                img.onerror = () => { 
+                    if (!img.dataset.retried) { 
+                        img.dataset.retried = "true"; 
+                        loadImg(null); 
+                    } 
+                };
+                loadImg("magic_photopea");
+            }
 
             imgContainer.appendChild(img);
             card.appendChild(imgContainer);
 
-            // 编辑模式：右上角删除小叉
+            // Edit Mode - Delete Button
             if (isEditMode) {
                 const delBtn = document.createElement("button");
                 delBtn.className = "mp-card-del";
                 delBtn.innerHTML = "×";
-                delBtn.title = "删除此图";
                 delBtn.onclick = async (e) => {
                     e.stopPropagation();
                     if (!confirm(`确定删除 ${filename} 吗？`)) return;
-                    
-                    const success = await deleteFileAPI(filename);
-                    if (success) {
+                    if (await deleteFileAPI(filename)) {
                         fileList = fileList.filter(f => f !== filename);
                         widget.options.values = widget.options.values.filter(f => f !== filename);
                         selectedFiles.delete(filename);
@@ -379,94 +331,62 @@ function showGalleryModal(node) {
                 card.appendChild(delBtn);
             }
 
-            // 文件名 (支持重命名)
+            // Edit Mode - Rename Input
             const label = document.createElement("div");
             label.className = "mp-label";
             label.textContent = filename;
             label.title = filename;
 
-            if (isEditMode) {
+            if (isEditMode && !filename.startsWith("clipspace/")) {
                 label.style.cursor = "text";
                 label.onclick = (e) => {
                     e.stopPropagation();
-                    // 变成输入框
                     const input = document.createElement("input");
-                    input.type = "text";
-                    input.value = filename;
-                    input.className = "mp-rename-input";
-                    
-                    // 自动保存逻辑
-                    const doRename = async () => {
+                    input.type = "text"; input.value = filename; input.className = "mp-rename-input";
+                    input.onblur = async () => {
                         const newName = input.value.trim();
                         if (newName && newName !== filename) {
-                            const ok = await renameFileAPI(filename, newName);
-                            if (ok) {
-                                // 更新本地数据列表
-                                const idx = fileList.indexOf(filename);
-                                if (idx !== -1) fileList[idx] = newName;
-                                if (selectedFiles.has(filename)) {
-                                    selectedFiles.delete(filename);
-                                    selectedFiles.add(newName);
-                                }
+                            if (await renameFileAPI(filename, newName)) {
+                                fileList[fileList.indexOf(filename)] = newName;
                                 renderAll();
-                            } else {
-                                label.textContent = filename; // 还原
                             }
-                        } else {
-                            label.textContent = filename; // 还原
                         }
+                        label.textContent = filename;
                     };
-
-                    input.onblur = doRename;
                     input.onkeydown = (ev) => { if(ev.key === 'Enter') input.blur(); };
-                    
-                    label.textContent = "";
-                    label.appendChild(input);
-                    input.focus();
+                    label.textContent = ""; label.appendChild(input); input.focus();
                 };
             }
-
             card.appendChild(label);
             grid.appendChild(card);
         });
     };
 
-    // 6. 总渲染函数
     const renderAll = () => {
         renderHeader();
-        // 查找当前的搜索词（如果是切换模式，保持搜索词不变）
         const input = header.querySelector("input[type=text]");
         renderGrid(input ? input.value : "");
     };
 
-    // --- 注入 CSS 样式 (一次性注入) ---
+    // CSS
     if (!document.getElementById("mp-styles")) {
         const style = document.createElement("style");
         style.id = "mp-styles";
         style.innerHTML = `
-            .mp-card { background: #2a2a2a; border-radius: 8px; overflow: hidden; border: 2px solid transparent; display: flex; flex-direction: column; position: relative; transition: all 0.2s; }
-            .mp-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+            .mp-card { background: #2a2a2a; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; }
             .mp-card.selected { border-color: #ff9800; background: #3e3025; }
-            .mp-card.selected::after { content: "✔"; position: absolute; top: 5px; left: 5px; background: #ff9800; color: #000; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; }
-            
-            .mp-img-box { width: 100%; aspect-ratio: 1/1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; background-image: radial-gradient(#333 1px, transparent 1px); background-size: 10px 10px; }
+            .mp-img-box { width: 100%; aspect-ratio: 1/1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
             .mp-img-box img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.3s; }
-            
             .mp-label { padding: 8px; font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; background: #252525; height: 30px; line-height: 14px; }
-            .mp-rename-input { width: 100%; background: #111; border: 1px solid #ff9800; color: #fff; font-size: 11px; padding: 2px; text-align: center; outline: none; }
-            
-            .mp-card-del { position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; background: rgba(200, 0, 0, 0.8); color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; font-size: 16px; }
-            .mp-card:hover .mp-card-del { opacity: 1; }
-            .mp-card-del:hover { background: red; }
-
-            .mp-btn-primary { padding: 6px 16px; background: #2196F3; color: white; border: none; border-radius: 6px; cursor: pointer; }
-            .mp-btn-danger { padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; }
-            .mp-btn-success { padding: 6px 16px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;}
-            .mp-btn-close { margin-left: auto; width: 32px; height: 32px; background: #444; color: #fff; border: none; border-radius: 50%; cursor: pointer; }
-            .mp-btn-close:hover { background: #d32f2f; }
-            
-            .mp-input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #444; background: #111; color: #fff; outline: none; }
-            .mp-select { padding: 8px; border-radius: 6px; background: #333; color: white; border: 1px solid #555; }
+            .mp-btn-primary { padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 6px; cursor: pointer; }
+            .mp-btn-danger { padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 6px; cursor: pointer; }
+            .mp-btn-success { padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; }
+            .mp-btn-warning { padding: 6px 12px; background: #ff9800; color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+            .mp-btn-close { margin-left: auto; width: 32px; background: #444; color: #fff; border: none; border-radius: 50%; cursor: pointer; }
+            .mp-input { flex:1; padding: 8px; background: #111; color: #fff; border: 1px solid #444; border-radius: 6px; }
+            .mp-select { padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 6px; }
+            .mp-rename-input { width: 100%; background: #111; color: #fff; border: 1px solid #ff9800; text-align: center; }
+            .mp-card-del { position: absolute; top: 2px; right: 2px; width: 24px; background: rgba(200, 0, 0, 0.8); color: white; border: none; border-radius: 4px; cursor: pointer; opacity: 1; }
         `;
         document.head.appendChild(style);
     }
@@ -479,7 +399,7 @@ function showGalleryModal(node) {
 }
 
 // ============================================================
-// 🎨 Part 2: Photopea Editor (编辑器逻辑 - 整合路径探测)
+// 🎨 Part 2: Photopea Editor
 // ============================================================
 function showPhotopeaModal(node) {
     let win = document.getElementById(WIN_ID);
@@ -526,7 +446,8 @@ function showPhotopeaModal(node) {
     // Auto-Load
     iframe.onload = async () => {
         let filename = "";
-        const widget = node.widgets.find(w => w.name === "image_selection");
+        // 🌟 查找名为 "image" 的组件
+        const widget = node.widgets.find(w => w.name === "image");
         if (widget) filename = widget.value;
 
         if ((!filename || filename === "canvas_empty.png") && node.imgs && node.imgs.length > 0) {
@@ -538,18 +459,22 @@ function showPhotopeaModal(node) {
         if (filename && filename !== "canvas_empty.png") {
             try {
                 let blob = null;
-                const safeName = encodeURIComponent(filename);
-
-                try {
-                    const resp1 = await api.fetchApi(`/view?filename=${safeName}&subfolder=magic_photopea&type=input`);
-                    if (resp1.status === 200) blob = await resp1.blob();
-                } catch(e) {}
-
-                if (!blob) {
+                if (filename.startsWith("clipspace/")) {
+                     const resp = await api.fetchApi(`/view?filename=${encodeURIComponent(filename)}&type=input`);
+                     if(resp.status === 200) blob = await resp.blob();
+                } else {
+                    const safeName = encodeURIComponent(filename);
                     try {
-                        const resp2 = await api.fetchApi(`/view?filename=${safeName}&type=input`);
-                        if (resp2.status === 200) blob = await resp2.blob();
+                        const resp1 = await api.fetchApi(`/view?filename=${safeName}&subfolder=magic_photopea&type=input`);
+                        if (resp1.status === 200) blob = await resp1.blob();
                     } catch(e) {}
+
+                    if (!blob) {
+                        try {
+                            const resp2 = await api.fetchApi(`/view?filename=${safeName}&type=input`);
+                            if (resp2.status === 200) blob = await resp2.blob();
+                        } catch(e) {}
+                    }
                 }
 
                 if (blob) {
@@ -617,6 +542,13 @@ function updateNodePreview(node, filename) {
     if (!filename || filename === "canvas_empty.png") return;
     const safeName = encodeURIComponent(filename);
     
+    if (filename.startsWith("clipspace/")) {
+        const img = new Image();
+        img.onload = () => { node.imgs = [img]; app.graph.setDirtyCanvas(true, true); };
+        img.src = api.apiURL(`/view?filename=${safeName}&type=input`);
+        return;
+    }
+
     const tryLoad = (subfolder) => {
         const img = new Image();
         img.onload = () => { node.imgs = [img]; app.graph.setDirtyCanvas(true, true); };
@@ -635,7 +567,8 @@ function updateNodePreview(node, filename) {
 }
 
 async function refreshNodeImageWidget(node, newFileName) {
-    const widget = node.widgets.find(w => w.name === "image_selection");
+    // 🌟 确保更新的是 image 组件
+    const widget = node.widgets.find(w => w.name === "image");
     if (!widget) return;
     if (!widget.options.values.includes(newFileName)) widget.options.values.unshift(newFileName);
     widget.value = newFileName;
