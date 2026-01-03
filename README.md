@@ -21,7 +21,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **无缝修图**: 一键将您导入的图片发送到 Photopea (类PS体验) 进行编辑，保存后自动同步，无需下载上传。
 * **双路径支持**: 智能识别并管理 `input/` 根目录（用户上传）和 `magic_photopea/` 目录（编辑存档）下的所有文件。
 * **批量管理**: 提供**多选删除**、**批量清理**和**重命名**功能，帮您把杂乱的 input 文件夹整理得井井有条。
-## 🆕 Updates
 * **Fixed**: Compatibility with official Mask Editor (right-click -> Save to node now works perfectly).
 * **Improved**: Gallery now hides temporary `clipspace` files for a cleaner view.
 * **New**: Added "🧹 Clear Cache" button to remove temporary mask files.
