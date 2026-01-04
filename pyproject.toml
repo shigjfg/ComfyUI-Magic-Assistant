@@ -1,0 +1,37 @@
+[project]
+name = "magic-assistant"
+description = "Say goodbye to clutter! 🚀 A suite of 'Integrated Nodes' to simplify your workflow. 🤖 AI Node: Versatile role-play & rules with handy one-click presets! 🧠 Programmable Logic: An exclusive node to edit logic directly—handle all checks in ONE node without complex wiring! Simple & High Freedom! 告别琐碎连线！🚀 本插件专注于“多功能集成节点”。🤖 AI节点：通过角色扮演和规则处理各种工作，自带好用预设，一键上手！🧠 独家逻辑计算节点：支持自定义编辑计算逻辑，一个节点直接搞定所有比较与运算甚至一键输出，拒绝繁复操作！简单易用，自由度极高！"
+version = "1.0.0"
+license = {file = "LICENSE"} 
+# classifiers = [
+#     # For OS-independent nodes (works on all operating systems)
+#     "Operating System :: OS Independent",
+#
+#     # OR for OS-specific nodes, specify the supported systems:
+#     "Operating System :: Microsoft :: Windows",  # Windows specific
+#     "Operating System :: POSIX :: Linux",  # Linux specific
+#     "Operating System :: MacOS",  # macOS specific
+#
+#     # GPU Accelerator support. Pick the ones that are supported by your extension.
+#     "Environment :: GPU :: NVIDIA CUDA",    # NVIDIA CUDA support
+#     "Environment :: GPU :: AMD ROCm",       # AMD ROCm support
+#     "Environment :: GPU :: Intel Arc",      # Intel Arc support
+#     "Environment :: NPU :: Huawei Ascend",  # Huawei Ascend support
+#     "Environment :: GPU :: Apple Metal",    # Apple Metal support
+# ]
+
+dependencies = ["openai", "aiohttp"]
+
+[project.urls]
+Repository = "https://github.com/shigjfg/ComfyUI-Magic-Assistant"
+#  Used by Comfy Registry https://registry.comfy.org
+Documentation = "https://github.com/shigjfg/ComfyUI-Magic-Assistant/wiki"
+"Bug Tracker" = "https://github.com/shigjfg/ComfyUI-Magic-Assistant/issues"
+
+[tool.comfy]
+PublisherId = "shijun"
+DisplayName = "ComfyUI-Magic-Assistant"
+Icon = ""
+includes = [] 
+# "requires-comfyui" = ">=1.0.0"  # ComfyUI version compatibility
+

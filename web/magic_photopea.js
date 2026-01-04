@@ -7,6 +7,8 @@ const GALLERY_ID = "magic-image-gallery";
 
 // --- 0. 全局设置记忆 ---
 const SETTINGS_KEY = "MagicPhotopea_GallerySettings";
+const PINNED_KEY = "MagicPhotopea_PinnedFiles"; // 🌟 新增：固定文件记忆
+
 const getSettings = () => {
     try {
         const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
@@ -15,6 +17,16 @@ const getSettings = () => {
 };
 const saveSettings = (settings) => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+};
+
+// 🌟 新增：获取和保存固定列表
+const getPinnedFiles = () => {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(PINNED_KEY)));
+    } catch { return new Set(); }
+};
+const savePinnedFiles = (set) => {
+    localStorage.setItem(PINNED_KEY, JSON.stringify([...set]));
 };
 
 // --- 1. 监听 Python 消息 ---
@@ -40,7 +52,6 @@ app.registerExtension({
                     showPhotopeaModal(this);
                 });
                 
-                // 🌟 注意：这里查找的是 "image" 而不是 "image_selection"，是为了兼容官方遮罩编辑器
                 const widget = this.widgets.find(w => w.name === "image");
                 if (widget) {
                     const originalCallback = widget.callback;
@@ -56,24 +67,23 @@ app.registerExtension({
 });
 
 // ============================================================
-// 🖼️ Part 1: Magic Gallery V4.0 (全能管理版)
+// 🖼️ Part 1: Magic Gallery V4.3 (Pin Feature Added)
 // ============================================================
 function showGalleryModal(node) {
     if (document.getElementById(GALLERY_ID)) return;
 
-    // 🌟 查找名为 "image" 的组件
     const widget = node.widgets.find(w => w.name === "image");
-    if (!widget || !widget.options.values) {
+    if (!widget) {
         alert("没有找到图片列表！(Component 'image' missing)");
         return;
     }
 
     // 状态管理
-    let fileList = [...widget.options.values].filter(f => f !== "canvas_empty.png");
+    let fileList = [];
     let currentSettings = getSettings();
     let isEditMode = false;
     let selectedFiles = new Set();
-    let fileLocations = {}; 
+    let pinnedFiles = getPinnedFiles(); // 🌟 加载固定列表
 
     // --- DOM 结构 ---
     const modal = document.createElement("div");
@@ -84,29 +94,31 @@ function showGalleryModal(node) {
     container.style.cssText = `width: 90%; height: 90%; background: #1e1e1e; border-radius: 12px; border: 1px solid #444; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.6);`;
 
     const header = document.createElement("div");
-    header.style.cssText = "padding: 15px 20px; background: #252525; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; user-select: none; min-height: 60px;";
+    header.style.cssText = "padding: 15px 20px; background: #252525; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; user-select: none; min-height: 60px; flex-wrap: wrap;";
 
     const grid = document.createElement("div");
     grid.style.cssText = `flex: 1; overflow-y: auto; padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-size, 140px), 1fr)); gap: 15px; align-content: start;`;
     grid.style.setProperty('--card-size', currentSettings.size + "px");
 
     // --- API Interactions ---
-    const detectFileLocation = async (filename) => {
-        if (fileLocations[filename]) return fileLocations[filename];
-        if (filename.startsWith("clipspace/")) return "";
+    const fetchFileList = async () => {
         try {
-            const resp = await api.fetchApi(`/view?filename=${encodeURIComponent(filename)}&subfolder=magic_photopea&type=input`, { method: "HEAD" });
-            if (resp.status === 200) {
-                fileLocations[filename] = "magic_photopea";
-                return "magic_photopea";
+            const resp = await api.fetchApi("/ma/get_file_list");
+            const data = await resp.json();
+            if (data.files) {
+                fileList = data.files;
+                widget.options.values = fileList; 
             }
-        } catch {}
-        fileLocations[filename] = "";
-        return "";
+            renderAll();
+        } catch (e) {
+            console.error("Fetch list failed:", e);
+            fileList = [...widget.options.values].filter(f => f !== "canvas_empty.png");
+            renderAll();
+        }
     };
 
     const deleteFileAPI = async (filename) => {
-        const subfolder = await detectFileLocation(filename);
+        const subfolder = ""; 
         try {
             const resp = await api.fetchApi("/ma/delete_file", {
                 method: "POST",
@@ -122,8 +134,7 @@ function showGalleryModal(node) {
         if (newName.includes("/") || newName.includes("\\")) return false;
         const oldExt = oldName.split('.').pop();
         if (!newName.endsWith('.' + oldExt)) newName += '.' + oldExt;
-
-        const subfolder = await detectFileLocation(oldName);
+        const subfolder = "";
         try {
             const resp = await api.fetchApi("/ma/rename_file", {
                 method: "POST",
@@ -132,9 +143,14 @@ function showGalleryModal(node) {
             const data = await resp.json();
             if (data.status === "success") {
                 const idx = widget.options.values.indexOf(oldName);
-                if (idx !== -1) {
-                    widget.options.values[idx] = newName;
-                    if (widget.value === oldName) widget.value = newName;
+                if (idx !== -1) widget.options.values[idx] = newName;
+                if (widget.value === oldName) widget.value = newName;
+                
+                // 🌟 如果文件被重命名，也要更新 pinnedFiles
+                if (pinnedFiles.has(oldName)) {
+                    pinnedFiles.delete(oldName);
+                    pinnedFiles.add(newName);
+                    savePinnedFiles(pinnedFiles);
                 }
                 return true;
             }
@@ -142,14 +158,12 @@ function showGalleryModal(node) {
         } catch (e) { return false; }
     };
 
-    // 🌟 核心新增：调用后端清空 clipspace
     const clearClipspaceAPI = async () => {
         try {
             const resp = await api.fetchApi("/ma/clear_clipspace", { method: "POST" });
             const data = await resp.json();
             return data;
         } catch (e) {
-            console.error(e);
             return { status: "error", message: e };
         }
     };
@@ -160,33 +174,53 @@ function showGalleryModal(node) {
         
         if (isEditMode) {
             header.style.background = "#3a2e2e"; 
-            const title = document.createElement("div");
-            title.innerHTML = `<b>✏️ 编辑模式</b> <span style="font-size:12px;opacity:0.7">已选: <span id="sel-count">${selectedFiles.size}</span></span>`;
-            title.style.cssText = "color: #ff9800; font-size: 16px; margin-right: auto;";
             
-            const delSelBtn = document.createElement("button");
-            delSelBtn.innerHTML = "🗑️ 删除选中";
-            delSelBtn.className = "mp-btn-danger";
-            delSelBtn.onclick = async () => {
-                if (selectedFiles.size === 0) return;
-                if (!confirm(`确定要删除选中的 ${selectedFiles.size} 张图片吗？`)) return;
-                delSelBtn.textContent = "⏳...";
-                for (const file of selectedFiles) {
-                    const success = await deleteFileAPI(file);
-                    if (success) {
-                        fileList = fileList.filter(f => f !== file);
-                        widget.options.values = widget.options.values.filter(f => f !== file);
-                    }
+            const selectAllBtn = document.createElement("button");
+            // 🌟 逻辑调整：全选时只计算“未固定”的文件
+            const selectableFiles = fileList.filter(f => !pinnedFiles.has(f));
+            const isAllSelected = selectedFiles.size > 0 && selectedFiles.size === selectableFiles.length;
+            
+            selectAllBtn.innerHTML = isAllSelected ? "❌ 取消全选" : "✅ 全选 (排除固定)";
+            selectAllBtn.className = "mp-btn-primary";
+            selectAllBtn.onclick = () => {
+                if (isAllSelected) {
+                    selectedFiles.clear();
+                } else {
+                    fileList.forEach(f => {
+                        // 🌟 重点：只有未固定的才会被选中
+                        if (!pinnedFiles.has(f)) selectedFiles.add(f);
+                    });
                 }
-                selectedFiles.clear();
                 renderAll();
             };
 
+            const title = document.createElement("div");
+            title.innerHTML = `<span style="font-size:14px; margin-left:10px;">待删: <b style="color:#d32f2f">${selectedFiles.size}</b> 张</span>`;
+            title.style.color = "#ccc";
+            
+            const delSelBtn = document.createElement("button");
+            delSelBtn.innerHTML = `🗑️ 删除选中 (${selectedFiles.size})`;
+            delSelBtn.className = "mp-btn-danger";
+            delSelBtn.style.marginLeft = "auto";
+            delSelBtn.onclick = async () => {
+                if (selectedFiles.size === 0) return;
+                if (!confirm(`⚠️ 高能预警\n\n确定要永久删除这 ${selectedFiles.size} 张图片吗？\n(固定的图片很安全，不会被删除)`)) return;
+                
+                delSelBtn.textContent = "正在删除...";
+                const toDelete = [...selectedFiles];
+                for (const file of toDelete) {
+                    await deleteFileAPI(file);
+                }
+                selectedFiles.clear();
+                await fetchFileList();
+            };
+
             const doneBtn = document.createElement("button");
-            doneBtn.innerHTML = "✅ 完成";
+            doneBtn.innerHTML = "退出编辑";
             doneBtn.className = "mp-btn-success";
             doneBtn.onclick = () => { isEditMode = false; selectedFiles.clear(); renderAll(); };
 
+            header.appendChild(selectAllBtn);
             header.appendChild(title);
             header.appendChild(delSelBtn);
             header.appendChild(doneBtn);
@@ -196,16 +230,19 @@ function showGalleryModal(node) {
             const searchInput = document.createElement("input");
             searchInput.type = "text"; searchInput.placeholder = "🔍 搜索...";
             searchInput.className = "mp-input";
+            searchInput.style.maxWidth = "200px";
             searchInput.oninput = (e) => renderGrid(e.target.value);
 
             const sortSelect = document.createElement("select");
             sortSelect.className = "mp-select";
-            sortSelect.innerHTML = `<option value="default">📅 默认</option><option value="oldest">📅 旧图</option><option value="name_asc">🔤 A-Z</option>`;
+            sortSelect.innerHTML = `<option value="default">📅 默认</option><option value="oldest">📅 旧图在前</option><option value="name_asc">🔤 A-Z</option>`;
             sortSelect.value = currentSettings.sort;
             sortSelect.onchange = (e) => { currentSettings.sort = e.target.value; saveSettings(currentSettings); renderGrid(searchInput.value); };
 
             const sliderContainer = document.createElement("div");
-            sliderContainer.innerHTML = "🔍";
+            sliderContainer.style.display = "flex";
+            sliderContainer.style.alignItems = "center";
+            sliderContainer.innerHTML = "<span style='font-size:12px;margin-right:5px'>缩放</span>";
             const sizeSlider = document.createElement("input");
             sizeSlider.type = "range"; sizeSlider.min = "80"; sizeSlider.max = "400"; sizeSlider.step = "10";
             sizeSlider.value = currentSettings.size;
@@ -214,24 +251,20 @@ function showGalleryModal(node) {
             sliderContainer.appendChild(sizeSlider);
 
             const editBtn = document.createElement("button");
-            editBtn.innerHTML = "✏️ 编辑";
+            editBtn.innerHTML = "✏️ 批量管理";
             editBtn.className = "mp-btn-primary";
             editBtn.onclick = () => { isEditMode = true; renderAll(); };
 
-            // 🌟 核心新增：清空缓存按钮
             const clearCacheBtn = document.createElement("button");
-            clearCacheBtn.innerHTML = "🧹 清空蒙版缓存";
+            clearCacheBtn.innerHTML = "🧹 清空缓存";
             clearCacheBtn.className = "mp-btn-warning";
-            clearCacheBtn.title = "清空 clipspace 文件夹下的所有临时图片";
             clearCacheBtn.onclick = async () => {
-                if (!confirm("⚠️ 确定要清空 clipspace 文件夹吗？\n\n这会删除所有由 ComfyUI 遮罩编辑器生成的历史临时图片。\n（不会影响你手动保存的图片）")) return;
-                
+                if (!confirm("确定要清空 clipspace 缓存吗？")) return;
                 clearCacheBtn.textContent = "⏳...";
                 const res = await clearClipspaceAPI();
                 if (res.status === "success") {
-                    alert(`✅ 清理完成！共删除了 ${res.count} 个文件。`);
-                } else {
-                    alert(`❌ 清理失败: ${res.message}`);
+                    alert(`✅ 清理完成！`);
+                    fetchFileList(); 
                 }
                 clearCacheBtn.innerHTML = "🧹 清空缓存";
             };
@@ -245,7 +278,7 @@ function showGalleryModal(node) {
             header.appendChild(sortSelect);
             header.appendChild(sliderContainer);
             header.appendChild(editBtn);
-            header.appendChild(clearCacheBtn); // 添加按钮到 Header
+            header.appendChild(clearCacheBtn);
             header.appendChild(closeBtn);
         }
     };
@@ -261,26 +294,31 @@ function showGalleryModal(node) {
 
         displayFiles.forEach(filename => {
             const card = document.createElement("div");
-            card.className = "mp-card";
+            card.className = "mp-card"; 
+            
             const isSelected = selectedFiles.has(filename);
+            const isPinned = pinnedFiles.has(filename); // 🌟 获取固定状态
 
-            if (isEditMode) {
-                if (isSelected) card.classList.add("selected");
-                card.onclick = (e) => {
-                   if (e.target.tagName === "BUTTON" || e.target.tagName === "INPUT") return;
-                   if (selectedFiles.has(filename)) selectedFiles.delete(filename);
-                   else selectedFiles.add(filename);
-                   renderHeader();
-                   if (selectedFiles.has(filename)) card.classList.add("selected");
-                   else card.classList.remove("selected");
-                };
-            } else {
-                card.onclick = () => {
+            if (isPinned) card.classList.add("pinned");
+            if (isSelected) card.classList.add("selected");
+
+            card.onclick = (e) => {
+                if (["INPUT", "BUTTON"].includes(e.target.tagName)) return;
+                if (isEditMode) {
+                    // 🌟 重点：如果被固定，无法被选中，也无法被取消固定（需要点按钮）
+                    if (isPinned) return; 
+
+                    if (selectedFiles.has(filename)) selectedFiles.delete(filename);
+                    else selectedFiles.add(filename);
+                    renderHeader(); 
+                    if (selectedFiles.has(filename)) card.classList.add("selected");
+                    else card.classList.remove("selected");
+                } else {
                     widget.value = filename;
                     if (widget.callback) widget.callback(filename);
                     modal.remove();
-                };
-            }
+                }
+            };
 
             const imgContainer = document.createElement("div");
             imgContainer.className = "mp-img-box";
@@ -288,73 +326,93 @@ function showGalleryModal(node) {
             img.loading = "lazy";
             
             const safeName = encodeURIComponent(filename);
-            const loadImg = (sub) => {
-                let url = `/view?filename=${safeName}&type=input`;
-                if (sub) url += `&subfolder=${sub}`;
-                img.src = api.apiURL(url);
-            };
-            
             if (filename.startsWith("clipspace/")) {
                  img.src = api.apiURL(`/view?filename=${safeName}&type=input`);
             } else {
-                img.onload = () => { 
-                    img.style.opacity = "1"; 
-                    if(img.src.includes("magic_photopea")) fileLocations[filename] = "magic_photopea";
-                };
-                img.onerror = () => { 
-                    if (!img.dataset.retried) { 
-                        img.dataset.retried = "true"; 
-                        loadImg(null); 
-                    } 
-                };
-                loadImg("magic_photopea");
+                img.onload = () => { img.style.opacity = "1"; };
+                img.src = api.apiURL(`/view?filename=${safeName}&type=input`);
             }
-
             imgContainer.appendChild(img);
             card.appendChild(imgContainer);
 
-            // Edit Mode - Delete Button
+            // 🌟 编辑模式下的按钮逻辑
             if (isEditMode) {
-                const delBtn = document.createElement("button");
-                delBtn.className = "mp-card-del";
-                delBtn.innerHTML = "×";
-                delBtn.onclick = async (e) => {
+                // 1. 固定按钮 (Pin Button)
+                const pinBtn = document.createElement("button");
+                pinBtn.className = isPinned ? "mp-card-pin active" : "mp-card-pin";
+                pinBtn.innerHTML = "📌";
+                pinBtn.title = isPinned ? "取消固定" : "固定此图";
+                pinBtn.onclick = (e) => {
                     e.stopPropagation();
-                    if (!confirm(`确定删除 ${filename} 吗？`)) return;
-                    if (await deleteFileAPI(filename)) {
-                        fileList = fileList.filter(f => f !== filename);
-                        widget.options.values = widget.options.values.filter(f => f !== filename);
+                    if (pinnedFiles.has(filename)) {
+                        pinnedFiles.delete(filename);
+                    } else {
+                        pinnedFiles.add(filename);
+                        // 如果固定时它正被选中，取消选中
                         selectedFiles.delete(filename);
-                        renderAll();
                     }
+                    savePinnedFiles(pinnedFiles); // 保存状态
+                    renderAll(); // 刷新界面
                 };
-                card.appendChild(delBtn);
+                card.appendChild(pinBtn);
+
+                // 2. 删除按钮 (Delete Button) - 仅在未固定时显示
+                if (!isPinned) {
+                    const delBtn = document.createElement("button");
+                    delBtn.className = "mp-card-del";
+                    delBtn.innerHTML = "×";
+                    delBtn.onclick = async (e) => {
+                        e.stopPropagation(); 
+                        if (!confirm(`确定删除 ${filename} 吗？`)) return;
+                        if (await deleteFileAPI(filename)) {
+                            fileList = fileList.filter(f => f !== filename);
+                            selectedFiles.delete(filename);
+                            renderAll(); 
+                        }
+                    };
+                    card.appendChild(delBtn);
+                }
             }
 
-            // Edit Mode - Rename Input
             const label = document.createElement("div");
             label.className = "mp-label";
             label.textContent = filename;
             label.title = filename;
 
-            if (isEditMode && !filename.startsWith("clipspace/")) {
+            if (isEditMode && !filename.startsWith("clipspace/") && !isPinned) {
                 label.style.cursor = "text";
+                label.style.textDecoration = "underline";
                 label.onclick = (e) => {
-                    e.stopPropagation();
+                    e.stopPropagation(); 
                     const input = document.createElement("input");
-                    input.type = "text"; input.value = filename; input.className = "mp-rename-input";
-                    input.onblur = async () => {
+                    input.type = "text"; 
+                    input.value = filename; 
+                    input.className = "mp-rename-input";
+                    
+                    const doRename = async () => {
                         const newName = input.value.trim();
                         if (newName && newName !== filename) {
-                            if (await renameFileAPI(filename, newName)) {
-                                fileList[fileList.indexOf(filename)] = newName;
+                            input.disabled = true;
+                            input.style.opacity = 0.5;
+                            const success = await renameFileAPI(filename, newName);
+                            if (success) {
+                                const idx = fileList.indexOf(filename);
+                                if (idx !== -1) fileList[idx] = newName;
                                 renderAll();
+                                return;
+                            } else {
+                                alert("重命名失败或文件名已存在");
                             }
                         }
                         label.textContent = filename;
                     };
+
+                    input.onblur = doRename;
                     input.onkeydown = (ev) => { if(ev.key === 'Enter') input.blur(); };
-                    label.textContent = ""; label.appendChild(input); input.focus();
+                    input.onclick = (ev) => ev.stopPropagation(); 
+                    label.textContent = ""; 
+                    label.appendChild(input); 
+                    input.focus();
                 };
             }
             card.appendChild(label);
@@ -368,34 +426,56 @@ function showGalleryModal(node) {
         renderGrid(input ? input.value : "");
     };
 
-    // CSS
     if (!document.getElementById("mp-styles")) {
         const style = document.createElement("style");
         style.id = "mp-styles";
         style.innerHTML = `
-            .mp-card { background: #2a2a2a; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; }
-            .mp-card.selected { border-color: #ff9800; background: #3e3025; }
-            .mp-img-box { width: 100%; aspect-ratio: 1/1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+            .mp-card { position: relative; background: #2a2a2a; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s; }
+            .mp-card:hover { border-color: #666; }
+            .mp-card.selected { border-color: #d32f2f; background: #3e3025; transform: scale(0.98); }
+            /* 🌟 固定状态样式 */
+            .mp-card.pinned { border-color: #4CAF50; opacity: 1; }
+            
+            .mp-img-box { width: 100%; aspect-ratio: 1/1; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; }
             .mp-img-box img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.3s; }
             .mp-label { padding: 8px; font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; background: #252525; height: 30px; line-height: 14px; }
-            .mp-btn-primary { padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 6px; cursor: pointer; }
-            .mp-btn-danger { padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 6px; cursor: pointer; }
-            .mp-btn-success { padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; }
-            .mp-btn-warning { padding: 6px 12px; background: #ff9800; color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
-            .mp-btn-close { margin-left: auto; width: 32px; background: #444; color: #fff; border: none; border-radius: 50%; cursor: pointer; }
-            .mp-input { flex:1; padding: 8px; background: #111; color: #fff; border: 1px solid #444; border-radius: 6px; }
-            .mp-select { padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 6px; }
-            .mp-rename-input { width: 100%; background: #111; color: #fff; border: 1px solid #ff9800; text-align: center; }
-            .mp-card-del { position: absolute; top: 2px; right: 2px; width: 24px; background: rgba(200, 0, 0, 0.8); color: white; border: none; border-radius: 4px; cursor: pointer; opacity: 1; }
+            
+            .mp-btn-primary { padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; }
+            .mp-btn-danger { padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; }
+            .mp-btn-success { padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+            .mp-btn-warning { padding: 6px 12px; background: #ff9800; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+            .mp-btn-close { margin-left: auto; width: 32px; height: 32px; background: #444; color: #fff; border: none; border-radius: 50%; cursor: pointer; font-size: 16px; }
+            .mp-btn-close:hover { background: #666; }
+            .mp-input { padding: 8px; background: #111; color: #fff; border: 1px solid #444; border-radius: 4px; outline: none; }
+            .mp-select { padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; outline: none; }
+            .mp-rename-input { width: 100%; background: #000; color: #ff9800; border: 1px solid #ff9800; text-align: center; border-radius: 2px; }
+            
+            /* 🌟 删除按钮 (移动到左上角) */
+            .mp-card-del { 
+                position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; 
+                background: red; color: white; border: 1px solid white; border-radius: 50%; 
+                cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; 
+                font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            }
+            .mp-card-del:hover { transform: scale(1.1); }
+
+            /* 🌟 固定按钮 (删除按钮下方) */
+            .mp-card-pin {
+                position: absolute; top: 34px; left: 4px; width: 24px; height: 24px;
+                background: rgba(0,0,0,0.6); color: #888; border: 1px solid #666; border-radius: 50%;
+                cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center;
+                font-size: 14px; transition: all 0.2s;
+            }
+            .mp-card-pin:hover { background: #fff; color: #000; }
+            .mp-card-pin.active { background: #4CAF50; color: white; border-color: #fff; box-shadow: 0 0 5px #4CAF50; }
         `;
         document.head.appendChild(style);
     }
-
-    renderAll();
     container.appendChild(header);
     container.appendChild(grid);
     modal.appendChild(container);
     document.body.appendChild(modal);
+    fetchFileList();
 }
 
 // ============================================================
@@ -413,7 +493,7 @@ function showPhotopeaModal(node) {
     // Header
     const header = document.createElement("div");
     header.style.cssText = "height: 36px; background: #2d2d2d; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid #333; user-select: none; flex-shrink: 0;";
-    header.innerHTML = `<div><b>🎨 Magic Photopea Studio</b> <span style="font-size:11px;color:#888;">(v4.0 Manager)</span></div>`;
+    header.innerHTML = `<div><b>🎨 Magic Photopea Studio</b> <span style="font-size:11px;color:#888;">(v4.3 Pin)</span></div>`;
     
     const btnGroup = document.createElement("div"); btnGroup.style.display = "flex"; btnGroup.style.gap = "8px";
     const btnStyle = "background:none; border:none; color:#bbb; font-size:14px; cursor:pointer; padding:4px 8px; border-radius:4px;";
@@ -446,7 +526,6 @@ function showPhotopeaModal(node) {
     // Auto-Load
     iframe.onload = async () => {
         let filename = "";
-        // 🌟 查找名为 "image" 的组件
         const widget = node.widgets.find(w => w.name === "image");
         if (widget) filename = widget.value;
 
@@ -459,23 +538,9 @@ function showPhotopeaModal(node) {
         if (filename && filename !== "canvas_empty.png") {
             try {
                 let blob = null;
-                if (filename.startsWith("clipspace/")) {
-                     const resp = await api.fetchApi(`/view?filename=${encodeURIComponent(filename)}&type=input`);
-                     if(resp.status === 200) blob = await resp.blob();
-                } else {
-                    const safeName = encodeURIComponent(filename);
-                    try {
-                        const resp1 = await api.fetchApi(`/view?filename=${safeName}&subfolder=magic_photopea&type=input`);
-                        if (resp1.status === 200) blob = await resp1.blob();
-                    } catch(e) {}
-
-                    if (!blob) {
-                        try {
-                            const resp2 = await api.fetchApi(`/view?filename=${safeName}&type=input`);
-                            if (resp2.status === 200) blob = await resp2.blob();
-                        } catch(e) {}
-                    }
-                }
+                const safeName = encodeURIComponent(filename);
+                const resp = await api.fetchApi(`/view?filename=${safeName}&type=input`);
+                if (resp.status === 200) blob = await resp.blob();
 
                 if (blob) {
                     const buffer = await blob.arrayBuffer();
@@ -508,7 +573,9 @@ function showPhotopeaModal(node) {
                 const blob = new Blob([e.data], { type: "image/png" });
                 const file = new File([blob], `Photopea_${Date.now()}.png`, { type: "image/png" });
                 const body = new FormData();
-                body.append("image", file); body.append("subfolder", "magic_photopea"); body.append("type", "input");
+                body.append("image", file); 
+                body.append("subfolder", ""); 
+                body.append("type", "input");
 
                 const resp = await api.fetchApi("/upload/image", { method: "POST", body });
                 const result = await resp.json();
@@ -541,36 +608,17 @@ function showPhotopeaModal(node) {
 function updateNodePreview(node, filename) {
     if (!filename || filename === "canvas_empty.png") return;
     const safeName = encodeURIComponent(filename);
-    
-    if (filename.startsWith("clipspace/")) {
-        const img = new Image();
-        img.onload = () => { node.imgs = [img]; app.graph.setDirtyCanvas(true, true); };
-        img.src = api.apiURL(`/view?filename=${safeName}&type=input`);
-        return;
-    }
-
-    const tryLoad = (subfolder) => {
-        const img = new Image();
-        img.onload = () => { node.imgs = [img]; app.graph.setDirtyCanvas(true, true); };
-        img.onerror = () => {
-            if (subfolder === "magic_photopea") {
-                const img2 = new Image();
-                img2.onload = () => { node.imgs = [img2]; app.graph.setDirtyCanvas(true, true); };
-                img2.src = api.apiURL(`/view?filename=${safeName}&type=input&t=${Date.now()}`);
-            }
-        };
-        let url = `/view?filename=${safeName}&type=input&t=${Date.now()}`;
-        if (subfolder) url += `&subfolder=${subfolder}`;
-        img.src = api.apiURL(url);
-    };
-    tryLoad("magic_photopea");
+    const img = new Image();
+    img.onload = () => { node.imgs = [img]; app.graph.setDirtyCanvas(true, true); };
+    img.src = api.apiURL(`/view?filename=${safeName}&type=input&t=${Date.now()}`);
 }
 
 async function refreshNodeImageWidget(node, newFileName) {
-    // 🌟 确保更新的是 image 组件
     const widget = node.widgets.find(w => w.name === "image");
     if (!widget) return;
-    if (!widget.options.values.includes(newFileName)) widget.options.values.unshift(newFileName);
+    if (!widget.options.values.includes(newFileName)) {
+        widget.options.values.unshift(newFileName);
+    }
     widget.value = newFileName;
     updateNodePreview(node, newFileName);
 }
