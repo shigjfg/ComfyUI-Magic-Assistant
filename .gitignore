@@ -16,3 +16,6 @@ savedata/*
 
 # 3. 再次确保 API 设置文件绝对被忽略（双重保险）
 savedata/llm_settings.txt
+
+# 4. 忽略
+node.zip

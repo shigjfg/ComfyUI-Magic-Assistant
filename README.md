@@ -11,7 +11,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 ## 🧩 Node Features (节点功能详解)
 
 ### 1. 🎨 Magic Photopea Studio (Photopea 图像处理与加载图像) <span style="color:red; font-size:0.8em"></span>
-> **The ultimate asset manager & image editor inside ComfyUI.** / **ComfyUI 内置的终极素材管理与修图工具。**
+> **The image manager & image editor inside ComfyUI.** / **ComfyUI 图片管理与修图工具。**
 
 * **Input File Manager**: A visual gallery to manage **your uploaded images** and **saved history** in the `input` folder. No more digging through dropdown lists!
 * **Seamless Editing**: One-click to send any user image to Photopea for editing (Photoshop-like experience) and save it back instantly.
