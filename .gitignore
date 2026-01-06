@@ -19,3 +19,6 @@ savedata/llm_settings.txt
 
 # 4. 忽略
 node.zip
+
+# 5. 测试文档（不上传到 GitHub）
+TEST_UPDATE_CHECKER.md

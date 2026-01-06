@@ -1,9 +1,12 @@
 import os
 import json
 import shutil
+import re
+import base64
 from server import PromptServer
 from aiohttp import web
 import folder_paths
+import aiohttp
 
 # --- 1. 恢复全局路径定义 (这是为了救活 __init__.py) ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -158,3 +161,133 @@ async def get_file_list(request):
         return web.json_response({"files": files})
     except Exception as e:
         return web.json_response({"files": [], "error": str(e)})
+
+# --- 更新检测 API ---
+@PromptServer.instance.routes.get("/ma/check_update")
+async def check_update(request):
+    """
+    检查更新：从 GitHub 获取最新版本号和 README 内容
+    支持测试模式：添加 ?test=true 参数可以返回模拟的更新数据
+    """
+    try:
+        # 检查是否为测试模式
+        test_mode = request.query.get('test', '').lower() == 'true'
+        
+        if test_mode:
+            # 测试模式：返回模拟的更新数据
+            current_version = "1.1.2"
+            # 模拟一个更新的版本
+            latest_version = "1.1.3"
+            has_update = True
+            
+            # 读取本地 README 文件作为测试数据
+            readme_path = os.path.join(BASE_DIR, "README.md")
+            readme_text = ""
+            if os.path.exists(readme_path):
+                try:
+                    with open(readme_path, 'r', encoding='utf-8') as f:
+                        readme_text = f.read()
+                except:
+                    pass
+            
+            # 从 README 中提取更新信息
+            update_info = ""
+            if readme_text:
+                version_section_match = re.search(r'##\s*[📝版本更新介绍|Version Update Introduction].*?(?=##|$)', readme_text, re.DOTALL | re.IGNORECASE)
+                if version_section_match:
+                    update_info = version_section_match.group(0)
+                else:
+                    update_match = re.search(r'V?\d+\.\d+\.\d+.*?(?=V?\d+\.\d+\.\d+|$)', readme_text, re.DOTALL)
+                    if update_match:
+                        update_info = update_match.group(0)
+            
+            return web.json_response({
+                "current_version": current_version,
+                "latest_version": latest_version,
+                "has_update": has_update,
+                "update_info": update_info,
+                "test_mode": True  # 标记这是测试模式
+            })
+        
+        # 正常模式：从 GitHub 获取
+        current_version = "1.1.2"  # Current version / 当前版本号
+        repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
+        
+        async with aiohttp.ClientSession() as session:
+            # 获取最新 release 版本
+            async with session.get(f"{repo_url}/releases/latest") as resp:
+                if resp.status == 200:
+                    release_data = await resp.json()
+                    latest_version = release_data.get("tag_name", "").lstrip("vV")
+                    latest_version = latest_version or release_data.get("name", "").lstrip("vV")
+                else:
+                    # 如果没有 release，尝试从 tags 获取
+                    async with session.get(f"{repo_url}/tags") as tags_resp:
+                        if tags_resp.status == 200:
+                            tags_data = await tags_resp.json()
+                            if tags_data and len(tags_data) > 0:
+                                latest_version = tags_data[0].get("name", "").lstrip("vV")
+                            else:
+                                latest_version = None
+                        else:
+                            latest_version = None
+            
+            # 获取 README 内容
+            async with session.get(f"{repo_url}/readme") as readme_resp:
+                if readme_resp.status == 200:
+                    readme_data = await readme_resp.json()
+                    readme_content = readme_data.get("content", "")
+                    # Base64 解码
+                    readme_text = base64.b64decode(readme_content).decode('utf-8')
+                else:
+                    readme_text = ""
+        
+        # 解析版本号比较
+        def version_compare(v1, v2):
+            """比较版本号，返回 True 如果 v1 < v2"""
+            if not v1 or not v2:
+                return False
+            try:
+                v1_parts = [int(x) for x in v1.split('.')]
+                v2_parts = [int(x) for x in v2.split('.')]
+                max_len = max(len(v1_parts), len(v2_parts))
+                v1_parts += [0] * (max_len - len(v1_parts))
+                v2_parts += [0] * (max_len - len(v2_parts))
+                for i in range(max_len):
+                    if v1_parts[i] < v2_parts[i]:
+                        return True
+                    elif v1_parts[i] > v2_parts[i]:
+                        return False
+                return False
+            except:
+                return False
+        
+        has_update = latest_version and version_compare(current_version, latest_version)
+        
+        # 从 README 中提取更新信息
+        update_info = ""
+        if readme_text and has_update:
+            # 查找版本更新介绍部分
+            version_section_match = re.search(r'##\s*[📝版本更新介绍|Version Update Introduction].*?(?=##|$)', readme_text, re.DOTALL | re.IGNORECASE)
+            if version_section_match:
+                update_info = version_section_match.group(0)
+            else:
+                # 如果没有找到，尝试查找最近的更新内容
+                update_match = re.search(r'V?\d+\.\d+\.\d+.*?(?=V?\d+\.\d+\.\d+|$)', readme_text, re.DOTALL)
+                if update_match:
+                    update_info = update_match.group(0)
+        
+        return web.json_response({
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "has_update": has_update,
+            "update_info": update_info
+        })
+    except Exception as e:
+        return web.json_response({
+            "current_version": "1.1.2",
+            "latest_version": None,
+            "has_update": False,
+            "update_info": "",
+            "error": str(e)
+        })

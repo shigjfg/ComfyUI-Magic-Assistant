@@ -8,28 +8,38 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ---
 
-## 📝 版本更新介绍
+## 📝 Version Update Introduction / 版本更新介绍
 
-> 最新更新：2026-01-06
+> Latest Update / 最新更新：2026-01-07
 
-> **V1.1.1 版本介绍** 2026-01-06
+> **V1.1.2 版本介绍 / Version Introduction** 2026-01-07
+
+> 1. **New Feature / 新增功能**: Built-in Update Checker / 内置更新检测器
+>    * Automatically checks for updates when ComfyUI starts / 启动时自动检测更新
+>    * Bilingual update notification popup (Chinese & English) / 中英文双语更新提示弹窗
+>    * Displays update information from GitHub README / 显示 GitHub README 中的更新信息
+>    * "Ignore this version" option to skip specific version notifications / "忽略此版本"选项，可跳过特定版本提醒
+>    * "GitHub Repository" button to open GitHub repository / "GitHub 地址"按钮，可打开 GitHub 仓库
+>    * Smart version ignoring: only ignores the selected version, will notify again for newer versions / 智能忽略：仅忽略所选版本，新版本仍会提醒
+
+> **V1.1.1 版本介绍 / Version Introduction** 2026-01-06
 >
-> 1. **优化**: 修复弹窗拖拽逻辑，支持全方向拖动，解决拖拽偏移问题
+> 1. **Optimization / 优化**: Fixed dialog drag logic, supports full-direction dragging, resolves drag offset issues / 修复弹窗拖拽逻辑，支持全方向拖动，解决拖拽偏移问题
 >
-> 2. **新增功能**: 文件夹开关按钮，一键启用/禁用文件夹下所有 lora
+> 2. **New Feature / 新增功能**: Folder toggle button to enable/disable all loras in a folder / 文件夹开关按钮，一键启用/禁用文件夹下所有 lora
 >
-> 3. **新增功能**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重
+> 3. **New Feature / 新增功能**: Auto-read preferred weight from .log files when adding loras / 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重
 >
-> 4. **新增功能**: 爬取 lora 信息窗口支持设置缓存，自动保存和加载用户习惯设置
+> 4. **New Feature / 新增功能**: Settings cache for crawl lora info window, auto-save and load user preferences / 爬取 lora 信息窗口支持设置缓存，自动保存和加载用户习惯设置
 >
-> 5. **优化**: 改进 lora 行拖拽逻辑，只在空白区域和排序按钮允许拖拽，避免误操作
+> 5. **Optimization / 优化**: Improved lora row drag logic, only allows dragging on blank area and sort button to avoid misoperation / 改进 lora 行拖拽逻辑，只在空白区域和排序按钮允许拖拽，避免误操作
 >
-> 6. **优化**: 所有弹窗支持可拖拽功能，提升用户体验
+> 6. **Optimization / 优化**: All dialogs support draggable functionality, improving user experience / 所有弹窗支持可拖拽功能，提升用户体验
 
 <details>
-<summary>点击查看往期更多更新内容</summary>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
-> **V1.1.0 版本介绍** 2026-01-06
+> **V1.1.0 版本介绍 / Version Introduction** 2026-01-06
 >
 > 1. **新增节点**: Magic Power SDXL LoRA Loader - 强力SDXL LoRA加载器
 >    * 可视化图库界面，告别下拉菜单的繁琐操作
@@ -67,13 +77,13 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ---
 
-## 🧩 Node Features (节点功能详解)
+## 🧩 Node Features / 节点功能详解
 
-### 1. 🎨 Magic Photopea Studio (Photopea 图像处理与加载图像) <span style="color:red; font-size:0.8em"></span>
+### 1. 🎨 Magic Photopea Node (Photopea 图像处理与加载图像)
 > **The image manager & image editor inside ComfyUI.** / **ComfyUI 图片管理与修图工具。**
 
 <details>
-<summary>点击展开详细功能介绍</summary>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 * **Input File Manager**: A visual gallery to manage **your uploaded images** and **saved history** in the `input` folder. No more digging through dropdown lists!
 * **Seamless Editing**: One-click to send any user image to Photopea for editing (Photoshop-like experience) and save it back instantly.
@@ -96,7 +106,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > **Your intelligent prompt engineer.** / **您的专属提示词工程师。**
 
 <details>
-<summary>点击展开详细功能介绍</summary>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 * **LLM Powered**: Seamlessly integrates with OpenAI-compatible APIs to rewrite or optimize your prompts.
 * **Role-Play & Rules**: Built-in system prompts allow the AI to act as a "Prompt Expert", "Translator", or any custom role you define.
@@ -107,11 +117,11 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 </details>
 
-### 3. 🧠 Magic Programmable Logic & Calc (可编程逻辑计算)
+### 3. 🧠 Magic Programmable Logic & Calc (Tutorial) (可编程逻辑计算 - 带教程版)
 > **The ultimate solution for logic & math.** / **逻辑与数学运算的终极方案。**
 
 <details>
-<summary>点击展开详细功能介绍</summary>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 * **Exclusive "Magic Script"**: Write pseudo-code directly in the node! (e.g., `IF w > 1024 RETURN 1024, h`).
 * **Auto Variables**: Automatically detects input image/latent width (`w`) and height (`h`).
@@ -126,7 +136,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > **Smart resize for SDXL & SD1.5.** / **专为 SDXL 和 SD1.5 设计的智能缩放。**
 
 <details>
-<summary>点击展开详细功能介绍</summary>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 * **Smart "Long Edge" Mode**: Set the target size (e.g., 1024), and it automatically calculates the other side to maintain the aspect ratio.
 * **Multiple Methods**: Supports all standard resizing methods (nearest, bilinear, bicubic, lanczos, etc.).
@@ -141,7 +151,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > **Workflow controller & debugger.** / **工作流的指挥官与调试器。**
 
 <details>
-<summary>点击展开详细功能介绍</summary>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 * **Group Management**: Quickly enable/disable/bypass multiple groups of nodes.
 * **One-Click Toggle**: Switch entire workflows on or off with a single boolean input.
@@ -150,11 +160,11 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 </details>
 
-### 6. 📝 Magic Prompt Box (魔法提示词框)
+### 6. 📝 Magic Multi-Function Prompt Box (多功能提示词框)
 > **Simple but effective text concatenation.** / **简单高效的文本组合。**
 
 <details>
-<summary>点击展开详细功能介绍</summary>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 * **Dynamic Input**: Features a `prepend_text` interface to automatically merge incoming text.
 * **Auto Formatting**: Automatically handles comma separation (`, `).
@@ -169,7 +179,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > **Visual LoRA manager with drag-and-drop sorting.** / **可视化 LoRA 管理器，支持拖拽排序。**
 
 <details>
-<summary>点击展开详细功能介绍</summary>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 * **Visual Management**: Beautiful gallery interface to browse and manage all your LoRAs. No more scrolling through long dropdown lists!
 * **Folder Organization**: Organize LoRAs into custom folders for better categorization and management.
@@ -196,25 +206,25 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ---
 
-## 📦 Installation (安装)
+## 📦 Installation / 安装
 
-1.  **Clone the repository** (克隆仓库):
+1.  **Clone the repository / 克隆仓库**:
     ```bash
     cd ComfyUI/custom_nodes/
-    git clone [https://github.com/shigjfg/ComfyUI-Magic-Assistant.git](https://github.com/shigjfg/ComfyUI-Magic-Assistant.git)
+    git clone https://github.com/shigjfg/ComfyUI-Magic-Assistant.git
     ```
 
-2.  **Install dependencies** (安装依赖):
+2.  **Install dependencies / 安装依赖**:
     ```bash
     cd ComfyUI-Magic-Assistant
     pip install -r requirements.txt
     ```
 
-3.  **Restart ComfyUI** (重启 ComfyUI).
+3.  **Restart ComfyUI / 重启 ComfyUI**.
 
 ---
 
-## ⚠️ Notes (注意事项)
+## ⚠️ Notes / 注意事项
 
 * **Photopea Network**: Since Photopea is a web-based service, please ensure you have internet access.
 * **User Files Only**: The "Gallery" manages files in your `ComfyUI/input/` directory. It does not contain built-in stock images.
@@ -225,7 +235,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ---
 
-## 📬 Contact & Support
+## 📬 Contact & Support / 联系与支持
 
 If you find this tool useful, please give it a Star 🌟!
 如果有帮助，请给个 Star 支持一下！
+
+**GitHub Repository / 仓库地址**: [https://github.com/shigjfg/ComfyUI-Magic-Assistant](https://github.com/shigjfg/ComfyUI-Magic-Assistant)
