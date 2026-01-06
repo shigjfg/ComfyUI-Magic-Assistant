@@ -1,7 +1,7 @@
 # ✨ Magic Assistant for ComfyUI
 
-**A powerful 6-in-1 suite designed to simplify your workflow.**
-**一个专注于“多功能集成”的强大 ComfyUI 助手插件。**
+**A powerful 7-in-1 suite designed to simplify your workflow.**
+**一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
 
 Our goal is to replace complex node chains with single, intelligent nodes.
 我们的目标是用单个智能节点替代繁琐的“面条式”连线。
@@ -75,6 +75,24 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **动态拼接**: 带有前置接口，自动将外部输入的文本合并到最前方。
 * **自动格式化**: 自动处理逗号分隔，无需手动添加连接符。
 * **直接输出**: 同时支持输出纯文本字符串和 CLIP 编码后的条件。
+
+### 7. 🚀 Magic Power SDXL LoRA Loader (强力SDXL LoRA加载器)
+> **Visual LoRA manager with drag-and-drop sorting.** / **可视化 LoRA 管理器，支持拖拽排序。**
+
+* **Visual Management**: Beautiful gallery interface to browse and manage all your LoRAs. No more scrolling through long dropdown lists!
+* **Folder Organization**: Organize LoRAs into custom folders for better categorization and management.
+* **Drag & Drop Sorting**: Intuitive drag-and-drop interface to reorder LoRAs and folders. Supports both upward and downward insertion based on mouse position.
+* **Preview Images**: Automatic preview image detection and display for each LoRA.
+* **Tag System**: Add custom tags to LoRAs for easy searching and filtering.
+* **Batch Operations**: Enable/disable multiple LoRAs at once, adjust weights, and manage your entire LoRA collection efficiently.
+* **Smart Preview Detection**: Automatically finds preview images in `magicloradate` subdirectory or same directory as LoRA files.
+* **可视化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
+* **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
+* **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
+* **预览图显示**: 自动检测并显示每个 LoRA 的预览图片。
+* **标签系统**: 为 LoRA 添加自定义标签，方便搜索和筛选。
+* **批量操作**: 一键启用/禁用多个 LoRA，调整权重，高效管理整个 LoRA 集合。
+* **智能预览检测**: 自动在 `magicloradate` 子目录或 LoRA 文件同目录查找预览图。
 
 ---
 

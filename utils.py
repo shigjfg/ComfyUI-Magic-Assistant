@@ -5,36 +5,43 @@ from server import PromptServer
 from aiohttp import web
 import folder_paths
 
-# --- 1. 路径定义 ---
+# --- 1. 恢复全局路径定义 (这是为了救活 __init__.py) ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESET_DIR = os.path.join(BASE_DIR, "savedata")
 USER_DIR = os.path.join(BASE_DIR, "userdata")
 
-# --- 2. 默认数据 ---
-DEFAULT_LLM = {
-    "Default OpenAI": {
-        "name": "Default OpenAI",
-        "base_url": "https://api.openai.com/v1",
-        "api_key": "",
-        "model": "gpt-3.5-turbo"
-    }
-}
-DEFAULT_LOGICS = {}
-DEFAULT_RESOLUTIONS = {
-    "presets": [512, 768, 832, 960, 1024, 1152, 1280, 1536, 2048],
-    "dimensions": ["SDXL_1024x1024", "SD1.5_512x512"]
-}
-
 class MagicUtils:
+    # --- 2. 类内部同时也保留定义 (这是为了让新节点也能用) ---
+    BASE_DIR = BASE_DIR
+    PRESET_DIR = PRESET_DIR
+    USER_DIR = USER_DIR
+    
+    # 默认数据
+    DEFAULT_LLM = {
+        "Default OpenAI": {
+            "name": "Default OpenAI",
+            "base_url": "https://api.openai.com/v1",
+            "api_key": "",
+            "model": "gpt-3.5-turbo"
+        }
+    }
+    DEFAULT_LOGICS = {}
+    DEFAULT_RESOLUTIONS = {
+        "presets": [512, 768, 832, 960, 1024, 1152, 1280, 1536, 2048],
+        "dimensions": ["SDXL_1024x1024", "SD1.5_512x512"]
+    }
+
     @classmethod
     def ensure_user_dir(cls):
-        if not os.path.exists(USER_DIR): os.makedirs(USER_DIR)
+        if not os.path.exists(cls.USER_DIR): 
+            os.makedirs(cls.USER_DIR, exist_ok=True)
 
     @classmethod
     def _load_dual_data(cls, filename, default_fallback=None):
         data = {}
         if default_fallback: data.update(default_fallback)
-        for d in [PRESET_DIR, USER_DIR]:
+        # 使用 cls.PRESET_DIR 和 cls.USER_DIR
+        for d in [cls.PRESET_DIR, cls.USER_DIR]:
             p = os.path.join(d, filename)
             if os.path.exists(p):
                 try:
@@ -45,17 +52,17 @@ class MagicUtils:
     @classmethod
     def _save_user_data(cls, filename, data):
         cls.ensure_user_dir()
-        with open(os.path.join(USER_DIR, filename), 'w', encoding='utf-8') as f:
+        with open(os.path.join(cls.USER_DIR, filename), 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
 
     @classmethod
-    def get_llm_config(cls): return cls._load_dual_data("llm_settings.txt", DEFAULT_LLM)
+    def get_llm_config(cls): return cls._load_dual_data("llm_settings.txt", cls.DEFAULT_LLM)
     @classmethod
     def get_rules_config(cls): return cls._load_dual_data("replace_rules.txt", {}) 
     @classmethod
-    def get_resolutions_config(cls): return cls._load_dual_data("resolutions.txt", DEFAULT_RESOLUTIONS)
+    def get_resolutions_config(cls): return cls._load_dual_data("resolutions.txt", cls.DEFAULT_RESOLUTIONS)
     @classmethod
-    def get_logic_config(cls): return cls._load_dual_data("logic_rules.json", DEFAULT_LOGICS)
+    def get_logic_config(cls): return cls._load_dual_data("logic_rules.json", cls.DEFAULT_LOGICS)
 
 # --- API 路由 ---
 @PromptServer.instance.routes.get("/ma/get_config")
@@ -131,28 +138,23 @@ async def clear_clipspace(request):
     except Exception as e:
         return web.json_response({"status": "error", "message": str(e)})
 
-# 🌟🌟🌟 修改：仅获取 input 根目录文件列表 🌟🌟🌟
 @PromptServer.instance.routes.get("/ma/get_file_list")
 async def get_file_list(request):
     try:
         input_dir = folder_paths.get_input_directory()
         files = []
         
-        # 仅扫描 input 根目录，不再处理子文件夹
         if os.path.exists(input_dir):
             for f in os.listdir(input_dir):
-                # 过滤掉文件夹和非图片文件
                 if os.path.isfile(os.path.join(input_dir, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff')):
                     files.append(f)
         
-        # 按修改时间倒序（最新的在前）
         def get_mtime(fname):
             p = os.path.join(input_dir, fname)
             if os.path.exists(p): return os.path.getmtime(p)
             return 0
 
         files.sort(key=get_mtime, reverse=True)
-        
         return web.json_response({"files": files})
     except Exception as e:
         return web.json_response({"files": [], "error": str(e)})

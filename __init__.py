@@ -4,7 +4,9 @@ from .nodes.magic_resize import MagicResolutionResize
 from .nodes.magic_logic import MagicLogicCompute
 from .nodes.magic_text import MagicPromptBox 
 from .nodes.magic_control import MagicUniversalSwitch
-from .nodes.magic_photopea import MagicPhotopeaNode  # <--- 新增这一行
+from .nodes.magic_photopea import MagicPhotopeaNode
+# 👇 新增这一行
+from .nodes.magic_power_lora import MagicPowerLoraLoader
 
 # --- 节点映射 ---
 NODE_CLASS_MAPPINGS = {
@@ -13,8 +15,9 @@ NODE_CLASS_MAPPINGS = {
     "MagicLogicCompute": MagicLogicCompute,
     "MagicPromptBox": MagicPromptBox,
     "MagicUniversalSwitch": MagicUniversalSwitch,
+    "MagicPhotopeaNode": MagicPhotopeaNode,
     # 👇 新增这一行
-    "MagicPhotopeaNode": MagicPhotopeaNode
+    "MagicPowerLoraLoader": MagicPowerLoraLoader
 }
 
 # --- 节点显示名称 ---
@@ -24,13 +27,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicLogicCompute": "🧠 可自己编辑算法的逻辑计算 (带教程版) Magic Programmable Logic & Calc (Tutorial)",
     "MagicPromptBox": "📝 多功能提示词框 Magic Multi-Function Prompt Box",
     "MagicUniversalSwitch": "🎛️ 万能禁用/忽略多框 Magic Multi-Group Switch",
-    "MagicPhotopeaNode": "🎨 Photopea图像处理 Photopea Processing & Load Image"
+    "MagicPhotopeaNode": "🎨 Photopea图像处理 Photopea Processing & Load Image",
+    # 👇 新增这一行
+    "MagicPowerLoraLoader": "🚀 强力SDXL Lora加载器 Magic Power SDXL LoRA Loader"
 }
 
 # --- 指定 Web 目录 ---
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.0.1 - Pin & Root Support)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.1.0 - Power Lora Added)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")
