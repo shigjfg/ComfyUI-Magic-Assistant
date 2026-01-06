@@ -597,6 +597,36 @@ app.registerExtension({
                         this.renderEmbeddedList();
                     };
                     
+                    // 文件夹开关按钮（一键开关文件夹下所有lora）
+                    const folderToggle = document.createElement("input");
+                    folderToggle.type = "checkbox";
+                    // 检查文件夹下是否有lora，以及是否全部启用
+                    const hasLoras = folder.loras && folder.loras.length > 0;
+                    const allEnabled = hasLoras && folder.loras.every(l => l.enabled !== false);
+                    folderToggle.checked = allEnabled;
+                    folderToggle.style.cssText = `
+                        width: 16px;
+                        height: 16px;
+                        cursor: pointer;
+                        margin-right: 4px;
+                        margin-left: 4px;
+                    `;
+                    folderToggle.onchange = (e) => {
+                        e.stopPropagation();
+                        const newState = folderToggle.checked;
+                        // 切换文件夹下所有lora的enabled状态
+                        if (folder.loras && folder.loras.length > 0) {
+                            folder.loras.forEach(lora => {
+                                lora.enabled = newState;
+                            });
+                            this.renderEmbeddedList();
+                            this.updateWidget();
+                        }
+                    };
+                    folderToggle.addEventListener("pointerdown", (e)=>e.stopPropagation());
+                    folderToggle.addEventListener("mousedown", (e)=>e.stopPropagation());
+                    folderToggle.addEventListener("click", (e)=>e.stopPropagation());
+                    
                     const title = document.createElement("span");
                     title.className = "mpl-folder-title";
                     title.textContent = folder.name;
@@ -609,6 +639,7 @@ app.registerExtension({
                     
                     header.appendChild(folderSortHandle);
                     header.appendChild(collapseIcon);
+                    header.appendChild(folderToggle);
                     header.appendChild(title);
 
                     const controls = document.createElement("div");
@@ -722,6 +753,112 @@ app.registerExtension({
             };
 
             // 🌟 Tag编辑弹窗
+            // 通用的弹窗拖拽功能
+            nodeType.prototype.makeDialogDraggable = function(dialog, titleBar) {
+                let isDragging = false;
+                let offsetX = 0;
+                let offsetY = 0;
+                
+                titleBar.style.cursor = "move";
+                titleBar.style.userSelect = "none";
+                
+                const dragStart = (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || 
+                        e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                        return;
+                    }
+                    
+                    // 获取弹窗的当前位置（相对于视口）
+                    const rect = dialog.getBoundingClientRect();
+                    
+                    // 获取鼠标点击位置
+                    let mouseX, mouseY;
+                    if (e.type === "mousedown") {
+                        mouseX = e.clientX;
+                        mouseY = e.clientY;
+                        isDragging = true;
+                    } else if (e.type === "touchstart") {
+                        mouseX = e.touches[0].clientX;
+                        mouseY = e.touches[0].clientY;
+                        isDragging = true;
+                    } else {
+                        return;
+                    }
+                    
+                    // 计算偏移量（鼠标位置相对于弹窗左上角的偏移）
+                    offsetX = mouseX - rect.left;
+                    offsetY = mouseY - rect.top;
+                    
+                    e.preventDefault();
+                };
+                
+                const drag = (e) => {
+                    if (!isDragging) return;
+                    
+                    e.preventDefault();
+                    
+                    // 获取当前鼠标位置
+                    let mouseX, mouseY;
+                    if (e.type === "mousemove") {
+                        mouseX = e.clientX;
+                        mouseY = e.clientY;
+                    } else if (e.type === "touchmove") {
+                        mouseX = e.touches[0].clientX;
+                        mouseY = e.touches[0].clientY;
+                    } else {
+                        return;
+                    }
+                    
+                    // 计算新位置（鼠标位置减去偏移量）
+                    let newX = mouseX - offsetX;
+                    let newY = mouseY - offsetY;
+                    
+                    // 限制拖拽范围，确保弹窗不会完全移出屏幕
+                    const minX = 0;
+                    const minY = 0;
+                    const maxX = window.innerWidth - dialog.offsetWidth;
+                    const maxY = window.innerHeight - dialog.offsetHeight;
+                    
+                    // 确保在屏幕范围内
+                    newX = Math.max(minX, Math.min(newX, maxX));
+                    newY = Math.max(minY, Math.min(newY, maxY));
+                    
+                    // 移除原有的定位方式（top/left/right/bottom），改用transform
+                    dialog.style.top = '';
+                    dialog.style.left = '';
+                    dialog.style.right = '';
+                    dialog.style.bottom = '';
+                    
+                    // 如果父元素是flex居中，需要移除flex定位
+                    const parent = dialog.parentElement;
+                    if (parent && parent.style.display === 'flex') {
+                        parent.style.display = 'block';
+                        parent.style.position = 'fixed';
+                        parent.style.top = '0';
+                        parent.style.left = '0';
+                        parent.style.width = '100%';
+                        parent.style.height = '100%';
+                    }
+                    
+                    // 确保dialog使用fixed定位
+                    dialog.style.position = 'fixed';
+                    
+                    // 应用transform
+                    dialog.style.transform = `translate(${newX}px, ${newY}px)`;
+                };
+                
+                const dragEnd = () => {
+                    isDragging = false;
+                };
+                
+                titleBar.addEventListener("mousedown", dragStart);
+                titleBar.addEventListener("touchstart", dragStart);
+                document.addEventListener("mousemove", drag);
+                document.addEventListener("touchmove", drag);
+                document.addEventListener("mouseup", dragEnd);
+                document.addEventListener("touchend", dragEnd);
+            };
+
             nodeType.prototype.showTagEditModal = function(lora) {
                 // 创建遮罩层
                 const overlay = document.createElement("div");
@@ -749,9 +886,10 @@ app.registerExtension({
                     max-width: 700px;
                     box-shadow: 0 8px 25px rgba(0,0,0,0.8);
                     z-index: 10002;
+                    position: relative;
                 `;
                 
-                // 标题
+                // 标题栏（可拖拽）
                 const title = document.createElement("div");
                 title.textContent = "编辑触发词";
                 title.style.cssText = `
@@ -761,6 +899,8 @@ app.registerExtension({
                     margin-bottom: 15px;
                     border-bottom: 1px solid #444;
                     padding-bottom: 10px;
+                    cursor: move;
+                    user-select: none;
                 `;
                 
                 // 输入框容器
@@ -927,6 +1067,9 @@ app.registerExtension({
                 overlay.appendChild(dialog);
                 document.body.appendChild(overlay);
                 
+                // 使弹窗可拖拽
+                this.makeDialogDraggable(dialog, title);
+                
                 // 自动聚焦到输入框
                 setTimeout(() => textarea.focus(), 100);
             };
@@ -1023,6 +1166,8 @@ app.registerExtension({
                     margin-bottom: 20px;
                     padding-bottom: 16px;
                     border-bottom: 2px solid #333;
+                    cursor: move;
+                    user-select: none;
                 `;
                 
                 const title = document.createElement("div");
@@ -1032,6 +1177,7 @@ app.registerExtension({
                     font-weight: 600;
                     color: #fff;
                     letter-spacing: 0.3px;
+                    flex: 1;
                 `;
                 
                 const deleteBtn = document.createElement("button");
@@ -1597,6 +1743,9 @@ app.registerExtension({
                 overlay.appendChild(dialog);
                 document.body.appendChild(overlay);
                 
+                // 使弹窗可拖拽
+                this.makeDialogDraggable(dialog, header);
+                
                 // 自动聚焦到当前tab的文本区域
                 setTimeout(() => {
                     const currentArea = contentAreas.find(a => a.dataset.tab === currentTab);
@@ -1608,6 +1757,41 @@ app.registerExtension({
             };
 
             nodeType.prototype.showFetchModal = function(lora, contentAreas, parentOverlay) {
+                // 设置存储的键名
+                const SETTINGS_KEY = "magic_power_lora_fetch_settings";
+                
+                // 加载保存的设置
+                const loadSettings = () => {
+                    try {
+                        const saved = localStorage.getItem(SETTINGS_KEY);
+                        if (saved) {
+                            return JSON.parse(saved);
+                        }
+                    } catch (e) {
+                        console.error("加载爬取设置时出错:", e);
+                    }
+                    // 默认设置
+                    return {
+                        download_txt: true,
+                        download_json: true,
+                        download_image: true,
+                        download_log: true,
+                        save_path: "same_dir"
+                    };
+                };
+                
+                // 保存设置
+                const saveSettings = (settings) => {
+                    try {
+                        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+                    } catch (e) {
+                        console.error("保存爬取设置时出错:", e);
+                    }
+                };
+                
+                // 加载设置
+                const savedSettings = loadSettings();
+                
                 // 创建遮罩层
                 const fetchOverlay = document.createElement("div");
                 fetchOverlay.style.cssText = `
@@ -1635,9 +1819,10 @@ app.registerExtension({
                     width: 90%;
                     box-shadow: 0 12px 40px rgba(0,0,0,0.9);
                     z-index: 10004;
+                    position: relative;
                 `;
                 
-                // 标题
+                // 标题栏（可拖拽）
                 const title = document.createElement("div");
                 title.textContent = "爬取 LoRA 信息";
                 title.style.cssText = `
@@ -1647,6 +1832,8 @@ app.registerExtension({
                     margin-bottom: 20px;
                     padding-bottom: 16px;
                     border-bottom: 2px solid #333;
+                    cursor: move;
+                    user-select: none;
                 `;
                 
                 // 下载选项
@@ -1667,7 +1854,7 @@ app.registerExtension({
                 downloadTxt.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
                 const txtCheckbox = document.createElement("input");
                 txtCheckbox.type = "checkbox";
-                txtCheckbox.checked = true;
+                txtCheckbox.checked = savedSettings.download_txt !== false; // 默认true
                 txtCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 downloadTxt.appendChild(txtCheckbox);
                 downloadTxt.appendChild(document.createTextNode("触发词文件 (.txt)"));
@@ -1676,7 +1863,7 @@ app.registerExtension({
                 downloadJson.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
                 const jsonCheckbox = document.createElement("input");
                 jsonCheckbox.type = "checkbox";
-                jsonCheckbox.checked = true;
+                jsonCheckbox.checked = savedSettings.download_json !== false; // 默认true
                 jsonCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 downloadJson.appendChild(jsonCheckbox);
                 downloadJson.appendChild(document.createTextNode("模型介绍信息 (.json)"));
@@ -1685,7 +1872,7 @@ app.registerExtension({
                 downloadImage.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
                 const imageCheckbox = document.createElement("input");
                 imageCheckbox.type = "checkbox";
-                imageCheckbox.checked = true;
+                imageCheckbox.checked = savedSettings.download_image !== false; // 默认true
                 imageCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 downloadImage.appendChild(imageCheckbox);
                 downloadImage.appendChild(document.createTextNode("预览图像"));
@@ -1694,7 +1881,7 @@ app.registerExtension({
                 downloadLog.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; color: #eee;";
                 const logCheckbox = document.createElement("input");
                 logCheckbox.type = "checkbox";
-                logCheckbox.checked = true;
+                logCheckbox.checked = savedSettings.download_log !== false; // 默认true
                 logCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 downloadLog.appendChild(logCheckbox);
                 downloadLog.appendChild(document.createTextNode("默认权重下载 (.log)"));
@@ -1724,7 +1911,7 @@ app.registerExtension({
                 sameDirRadio.type = "radio";
                 sameDirRadio.name = "save_path";
                 sameDirRadio.value = "same_dir";
-                sameDirRadio.checked = true;
+                sameDirRadio.checked = savedSettings.save_path !== "subfolder"; // 默认same_dir
                 sameDirRadio.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 pathSameDir.appendChild(sameDirRadio);
                 pathSameDir.appendChild(document.createTextNode("保存到 LoRA 同目录下"));
@@ -1735,12 +1922,33 @@ app.registerExtension({
                 subfolderRadio.type = "radio";
                 subfolderRadio.name = "save_path";
                 subfolderRadio.value = "subfolder";
+                subfolderRadio.checked = savedSettings.save_path === "subfolder";
                 subfolderRadio.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 pathSubfolder.appendChild(subfolderRadio);
                 pathSubfolder.appendChild(document.createTextNode("保存到 magicloradate 子文件夹"));
                 
                 pathContainer.appendChild(pathSameDir);
                 pathContainer.appendChild(pathSubfolder);
+                
+                // 自动保存设置的函数
+                const autoSaveSettings = () => {
+                    const currentSettings = {
+                        download_txt: txtCheckbox.checked,
+                        download_json: jsonCheckbox.checked,
+                        download_image: imageCheckbox.checked,
+                        download_log: logCheckbox.checked,
+                        save_path: sameDirRadio.checked ? "same_dir" : "subfolder"
+                    };
+                    saveSettings(currentSettings);
+                };
+                
+                // 为所有选项添加change事件监听，自动保存
+                txtCheckbox.addEventListener("change", autoSaveSettings);
+                jsonCheckbox.addEventListener("change", autoSaveSettings);
+                imageCheckbox.addEventListener("change", autoSaveSettings);
+                logCheckbox.addEventListener("change", autoSaveSettings);
+                sameDirRadio.addEventListener("change", autoSaveSettings);
+                subfolderRadio.addEventListener("change", autoSaveSettings);
                 
                 // 按钮容器
                 const buttonContainer = document.createElement("div");
@@ -1803,6 +2011,9 @@ app.registerExtension({
                             download_log: logCheckbox.checked
                         };
                         const savePathMode = sameDirRadio.checked ? "same_dir" : "subfolder";
+                        
+                        // 保存当前设置（确保在爬取前保存）
+                        autoSaveSettings();
                         
                         const response = await api.fetchApi('/ma/lora/fetch_metadata', {
                             method: 'POST',
@@ -1911,6 +2122,9 @@ app.registerExtension({
                 fetchDialog.appendChild(buttonContainer);
                 fetchOverlay.appendChild(fetchDialog);
                 document.body.appendChild(fetchOverlay);
+                
+                // 使弹窗可拖拽
+                this.makeDialogDraggable(fetchDialog, title);
             };
 
             nodeType.prototype.refreshLoraImageCache = function(loraName) {
@@ -2018,18 +2232,26 @@ app.registerExtension({
                 const row = document.createElement("div");
                 row.className = "mpl-lora-row";
                 row.style.opacity = lora.enabled ? "1" : "0.5";
-                // 保留row的draggable用于移动到文件夹，但排序拖拽由排序条处理
-                row.draggable = true;
-                row.ondragstart = (e) => {
-                    // 如果是从排序条开始的拖拽，不处理（由排序条自己处理）
-                    if (e.target.classList.contains('mpl-sort-handle')) {
-                        e.preventDefault();
-                        return;
-                    }
+                // 移除row的draggable，改为在空白区域和排序按钮上才允许拖拽
+                row.draggable = false;
+                
+                // 创建一个可拖拽的空白区域（在name和noteInput之间）
+                const dragArea = document.createElement("div");
+                dragArea.className = "mpl-drag-area";
+                dragArea.style.cssText = `
+                    flex: 1;
+                    min-width: 20px;
+                    cursor: move;
+                    user-select: none;
+                `;
+                dragArea.draggable = true;
+                dragArea.ondragstart = (e) => {
                     e.dataTransfer.setData("text/plain", JSON.stringify({ type, fIdx, lIdx }));
                     row.style.opacity = "0.3";
                 };
-                row.ondragend = () => { row.style.opacity = lora.enabled ? "1" : "0.5"; };
+                dragArea.ondragend = () => { 
+                    row.style.opacity = lora.enabled ? "1" : "0.5"; 
+                };
                 
                 // 添加拖拽排序功能：拖拽到目标lora上方时插入
                 row.ondragover = (e) => {
@@ -2376,6 +2598,16 @@ app.registerExtension({
                 const displayName = lora.name.split(/[/\\]/).pop() || lora.name;
                 name.textContent = displayName;
                 name.title = lora.name; // 鼠标悬停时显示完整路径
+                // name区域也可以拖拽
+                name.draggable = true;
+                name.style.cursor = "move";
+                name.ondragstart = (e) => {
+                    e.dataTransfer.setData("text/plain", JSON.stringify({ type, fIdx, lIdx }));
+                    row.style.opacity = "0.3";
+                };
+                name.ondragend = () => { 
+                    row.style.opacity = lora.enabled ? "1" : "0.5"; 
+                };
 
                 // 备注输入框
                 if (!lora.note) lora.note = "";
@@ -2527,7 +2759,27 @@ app.registerExtension({
                 del.textContent = "×";
                 del.addEventListener("pointerdown", (e)=>e.stopPropagation());
                 
-                row.append(sortHandle, check, name, noteInput, weightContainer, tagBtn, editBtn, del);
+                // 阻止在交互元素上拖拽
+                const preventDrag = (e) => {
+                    e.stopPropagation();
+                    if (e.target === check || e.target === noteInput || 
+                        e.target === weightContainer || e.target.closest('.mpl-weight-container') ||
+                        e.target === tagBtn || e.target === editBtn || e.target === del ||
+                        e.target === decreaseBtn || e.target === increaseBtn || e.target === weightDisplay) {
+                        e.preventDefault();
+                        return false;
+                    }
+                };
+                
+                // 为交互元素添加阻止拖拽的事件
+                check.addEventListener("dragstart", preventDrag);
+                noteInput.addEventListener("dragstart", preventDrag);
+                weightContainer.addEventListener("dragstart", preventDrag);
+                tagBtn.addEventListener("dragstart", preventDrag);
+                editBtn.addEventListener("dragstart", preventDrag);
+                del.addEventListener("dragstart", preventDrag);
+                
+                row.append(sortHandle, check, name, dragArea, noteInput, weightContainer, tagBtn, editBtn, del);
                 return row;
             };
 
@@ -2632,7 +2884,10 @@ app.registerExtension({
                     let showAllMode = false; // 全部模式：显示所有lora，不按路径分类
                     
                     const dialog = document.createElement("div");
-                    dialog.style.cssText = "position:fixed;top:calc(50% - 400px);left:calc(50% - 400px);width:800px;height:800px;background:#25292d;border:1px solid #4a515a;z-index:9999;display:flex;flex-direction:column;border-radius:8px;box-shadow:0 8px 25px rgba(0,0,0,0.6);font-family: sans-serif;";
+                    // 初始居中定位，拖拽后会改为transform定位
+                    const centerX = window.innerWidth / 2 - 400;
+                    const centerY = window.innerHeight / 2 - 400;
+                    dialog.style.cssText = `position:fixed;top:${centerY}px;left:${centerX}px;width:800px;height:800px;background:#25292d;border:1px solid #4a515a;z-index:9999;display:flex;flex-direction:column;border-radius:8px;box-shadow:0 8px 25px rgba(0,0,0,0.6);font-family: sans-serif;`;
                     
                     dialog.addEventListener("wheel", (e) => { e.stopPropagation(); }, { passive: false });
                     const stopEvent = (e) => { e.stopPropagation(); };
@@ -2644,11 +2899,11 @@ app.registerExtension({
 
                     // 标题栏
                     const header = document.createElement("div");
-                    header.style.cssText = "padding:10px 15px;border-bottom:1px solid #333;display:flex;gap:10px;align-items:center;background:#1a1a1a;border-radius:8px 8px 0 0;";
+                    header.style.cssText = "padding:10px 15px;border-bottom:1px solid #333;display:flex;gap:10px;align-items:center;background:#1a1a1a;border-radius:8px 8px 0 0;cursor:move;user-select:none;";
                     
                     const title = document.createElement("div");
                     title.textContent = "添加 Lora";
-                    title.style.cssText = "color:#e0e0e0;font-weight:bold;font-size:14px;white-space:nowrap;";
+                    title.style.cssText = "color:#e0e0e0;font-weight:bold;font-size:14px;white-space:nowrap;flex:1;";
                     
                     header.appendChild(title);
                     dialog.appendChild(header);
@@ -2764,8 +3019,8 @@ app.registerExtension({
                     
                     // 搜索框（缩小）
                     const search = document.createElement("input");
-                    search.placeholder = "🔍 搜索...";
-                    search.style.cssText = "width:200px;padding:6px 10px;background:#121212;color:#fff;border:1px solid #444;border-radius:4px;outline:none;font-size:13px;";
+                    search.placeholder = "🔍 搜索当前目录...（如需全部搜索请打开“全部”开关）";
+                    search.style.cssText = "width:350px;padding:6px 10px;background:#121212;color:#fff;border:1px solid #444;border-radius:4px;outline:none;font-size:13px;";
                     search.addEventListener("keydown", (e) => { e.stopPropagation(); });
                     search.addEventListener("pointerdown", (e) => { e.stopPropagation(); });
                     
@@ -3207,6 +3462,71 @@ app.registerExtension({
                     
                     // 添加按钮
                     addBtn.onclick = async () => {
+                        // 辅助函数：从.log文件中解析preferred weight
+                        const parsePreferredWeight = (logContent) => {
+                            if (!logContent || !logContent.trim()) return null;
+                            try {
+                                // 首先尝试作为JSON解析
+                                try {
+                                    const jsonData = JSON.parse(logContent);
+                                    // 查找 preferred weight 字段（支持多种可能的字段名）
+                                    const preferredWeight = jsonData["preferred weight"] || 
+                                                          jsonData["preferredWeight"] || 
+                                                          jsonData["preferred_weight"] ||
+                                                          jsonData["weight"];
+                                    
+                                    if (preferredWeight !== undefined && !isNaN(parseFloat(preferredWeight))) {
+                                        const weightValue = parseFloat(preferredWeight);
+                                        // 确保权重值在合理范围内 (-10 到 10)
+                                        if (weightValue >= -10 && weightValue <= 10) {
+                                            return weightValue;
+                                        }
+                                    }
+                                } catch (jsonError) {
+                                    // 如果不是JSON格式，尝试使用正则表达式匹配
+                                    const weightPattern = /preferred\s+weight[:\s=]+([+-]?\d*\.?\d+)/i;
+                                    const match = logContent.match(weightPattern);
+                                    if (match && match[1]) {
+                                        const weight = parseFloat(match[1]);
+                                        if (!isNaN(weight)) {
+                                            // 限制权重范围在-10到10之间
+                                            return Math.max(-10, Math.min(10, weight));
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("解析preferred weight时出错:", e);
+                            }
+                            return null;
+                        };
+                        
+                        // 并行读取所有选中lora的.log文件，获取preferred weight
+                        const weightPromises = Array.from(selectedFiles).map(async (fileName) => {
+                            try {
+                                const response = await api.fetchApi('/ma/lora/get_lora_file', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ lora_filename: fileName, file_type: 'log' })
+                                });
+                                const result = await response.json();
+                                if (result.status === 'success' && result.content) {
+                                    const preferredWeight = parsePreferredWeight(result.content);
+                                    return { fileName, preferredWeight };
+                                }
+                            } catch (e) {
+                                console.error(`读取${fileName}的log文件时出错:`, e);
+                            }
+                            return { fileName, preferredWeight: null };
+                        });
+                        
+                        const weightResults = await Promise.all(weightPromises);
+                        
+                        // 创建weight映射，方便查找
+                        const weightMap = new Map();
+                        weightResults.forEach(({ fileName, preferredWeight }) => {
+                            weightMap.set(fileName, preferredWeight);
+                        });
+                        
                         // 如果启用了自动添加触发词，需要先读取所有选中lora的.txt文件
                         if (autoAddTag) {
                             // 并行读取所有选中lora的.txt文件
@@ -3235,22 +3555,24 @@ app.registerExtension({
                                 tagMap.set(fileName, tags);
                             });
                             
-                            // 添加lora，使用读取到的tags
+                            // 添加lora，使用读取到的tags和preferred weight
                             selectedFiles.forEach(fileName => {
+                                const preferredWeight = weightMap.get(fileName);
                                 this.loraData.loras.push({ 
                                     name: fileName, 
-                                    weight: 1.0, 
+                                    weight: preferredWeight !== null ? preferredWeight : 1.0, 
                                     enabled: true, 
                                     tags: tagMap.get(fileName) || "", 
                                     note: "" 
                                 });
                             });
                         } else {
-                            // 不启用自动添加，直接添加lora
+                            // 不启用自动添加，直接添加lora，但使用preferred weight
                             selectedFiles.forEach(fileName => {
+                                const preferredWeight = weightMap.get(fileName);
                                 this.loraData.loras.push({ 
                                     name: fileName, 
-                                    weight: 1.0, 
+                                    weight: preferredWeight !== null ? preferredWeight : 1.0, 
                                     enabled: true, 
                                     tags: "", 
                                     note: "" 
@@ -3280,6 +3602,9 @@ app.registerExtension({
                     // 初始渲染
                     renderContent();
                     document.body.appendChild(dialog);
+                    
+                    // 使弹窗可拖拽
+                    this.makeDialogDraggable(dialog, header);
                 } catch(e) { alert("Error: "+e); }
             };
 
@@ -3335,6 +3660,8 @@ app.registerExtension({
                     justify-content: space-between;
                     background: #1a1a1a;
                     border-radius: 8px 8px 0 0;
+                    cursor: move;
+                    user-select: none;
                 `;
                 
                 const title = document.createElement("div");
@@ -3343,6 +3670,7 @@ app.registerExtension({
                     font-size: 16px;
                     font-weight: bold;
                     color: #eee;
+                    flex: 1;
                 `;
                 
                 const headerButtons = document.createElement("div");
@@ -3583,6 +3911,9 @@ app.registerExtension({
                 dialog.appendChild(content);
                 overlay.appendChild(dialog);
                 document.body.appendChild(overlay);
+                
+                // 使弹窗可拖拽
+                this.makeDialogDraggable(dialog, header);
                 
                 // 加载预设列表
                 await loadPresets();
