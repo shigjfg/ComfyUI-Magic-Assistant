@@ -13,6 +13,23 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PRESET_DIR = os.path.join(BASE_DIR, "savedata")
 USER_DIR = os.path.join(BASE_DIR, "userdata")
 
+# --- 从 pyproject.toml 读取版本号 ---
+def get_current_version():
+    """从 pyproject.toml 读取当前版本号"""
+    try:
+        pyproject_path = os.path.join(BASE_DIR, "pyproject.toml")
+        if os.path.exists(pyproject_path):
+            with open(pyproject_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # 使用正则表达式提取版本号
+                match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
+                if match:
+                    return match.group(1)
+    except Exception as e:
+        print(f"Warning: Failed to read version from pyproject.toml: {e}")
+    # 如果读取失败，返回默认值
+    return "1.1.2"
+
 class MagicUtils:
     # --- 2. 类内部同时也保留定义 (这是为了让新节点也能用) ---
     BASE_DIR = BASE_DIR
@@ -175,7 +192,7 @@ async def check_update(request):
         
         if test_mode:
             # 测试模式：返回模拟的更新数据
-            current_version = "1.1.3"
+            current_version = get_current_version()
             # 模拟一个更新的版本
             latest_version = "1.1.4"
             has_update = True
@@ -210,7 +227,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.1.3"  # Current version / 当前版本号
+        current_version = get_current_version()  # 从 pyproject.toml 动态读取当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:
@@ -285,7 +302,7 @@ async def check_update(request):
         })
     except Exception as e:
         return web.json_response({
-            "current_version": "1.1.3",
+            "current_version": get_current_version(),
             "latest_version": None,
             "has_update": False,
             "update_info": "",
