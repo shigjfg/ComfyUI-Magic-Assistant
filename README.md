@@ -1,6 +1,6 @@
 # ✨ Magic Assistant for ComfyUI
 
-**A powerful 7-in-1 suite designed to simplify your workflow.**
+**A powerful 8-in-1 suite designed to simplify your workflow.**
 **一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
 
 Our goal is to replace complex node chains with single, intelligent nodes.
@@ -12,7 +12,23 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > Latest Update / 最新更新：2026-01-07
 
-> **V1.1.2 版本介绍 / Version Introduction** 2026-01-07
+> **V1.1.3 版本介绍 / Version Introduction** 2026-01-07
+
+> 1. **New Node / 新增节点**: Magic Resolution Output - 分辨率输出器
+>    * Outputs width (INT), height (INT), and latent (LATENT) / 输出宽(INT)、高(INT)和潜在空间(LATENT)
+>    * Preset resolution dropdown, shares dimensions data with Magic Multi-Function Image Resize / 预设分辨率下拉菜单，与多功能图像缩放节点共享分辨率数据
+>    * One-click swap button to exchange width and height values / 一键交换按钮，快速交换宽高值
+>    * Batch size management for latent output / 潜在空间输出支持批次管理
+>    * Preset management window for custom resolutions / 预设管理窗口，支持自定义分辨率
+>    * Simplified logic: preset directly fills input fields, swap button exchanges values, output uses current input values / 简化逻辑：预设直接填充输入框，交换按钮交换值，输出使用当前输入值
+>    * 输出宽(INT)、高(INT)和潜在空间(LATENT)
+>    * 预设分辨率下拉菜单，与多功能图像缩放节点共享分辨率数据
+>    * 一键交换按钮，快速交换宽高值
+>    * 潜在空间输出支持批次管理
+>    * 预设管理窗口，支持自定义分辨率
+>    * 简化逻辑：预设直接填充输入框，交换按钮交换值，输出使用当前输入值
+
+> **V1.1.2 版本介绍 / Version Introduction** 2026-01-06
 
 > 1. **New Feature / 新增功能**: Built-in Update Checker / 内置更新检测器
 >    * Automatically checks for updates when ComfyUI starts / 启动时自动检测更新
@@ -204,6 +220,27 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 </details>
 
+### 8. 📐 Magic Resolution Output (分辨率输出器)
+> **Simple resolution output with presets and batch support.** / **简单的分辨率输出，支持预设和批次管理。**
+
+<details>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
+
+* **Triple Output**: Outputs width (INT), height (INT), and latent (LATENT) simultaneously / 同时输出宽(INT)、高(INT)和潜在空间(LATENT)
+* **Preset System**: Dropdown menu with predefined resolutions, shares dimensions data with Magic Multi-Function Image Resize / 预设分辨率下拉菜单，与多功能图像缩放节点共享分辨率数据
+* **One-Click Swap**: Simple button to exchange width and height values instantly / 一键交换按钮，快速交换宽高值
+* **Batch Management**: Supports batch size control for latent output / 潜在空间输出支持批次管理
+* **Preset Management**: Custom preset management window to add/delete resolutions / 预设管理窗口，支持添加/删除自定义分辨率
+* **Simplified Logic**: Preset directly fills input fields, swap button exchanges values, output uses current input values / 简化逻辑：预设直接填充输入框，交换按钮交换值，输出使用当前输入值
+* **三重输出**: 同时输出宽(INT)、高(INT)和潜在空间(LATENT)
+* **预设系统**: 预设分辨率下拉菜单，与多功能图像缩放节点共享分辨率数据
+* **一键交换**: 简单的交换按钮，快速交换宽高值
+* **批次管理**: 潜在空间输出支持批次管理
+* **预设管理**: 自定义预设管理窗口，支持添加/删除分辨率
+* **简化逻辑**: 预设直接填充输入框，交换按钮交换值，输出使用当前输入值
+
+</details>
+
 ---
 
 ## 📦 Installation / 安装
@@ -239,5 +276,3 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 If you find this tool useful, please give it a Star 🌟!
 如果有帮助，请给个 Star 支持一下！
-
-**GitHub Repository / 仓库地址**: [https://github.com/shigjfg/ComfyUI-Magic-Assistant](https://github.com/shigjfg/ComfyUI-Magic-Assistant)

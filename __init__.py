@@ -7,6 +7,7 @@ from .nodes.magic_control import MagicUniversalSwitch
 from .nodes.magic_photopea import MagicPhotopeaNode
 # 👇 新增这一行
 from .nodes.magic_power_lora import MagicPowerLoraLoader
+from .nodes.magic_resolution import MagicResolution
 
 # --- 节点映射 ---
 NODE_CLASS_MAPPINGS = {
@@ -16,8 +17,8 @@ NODE_CLASS_MAPPINGS = {
     "MagicPromptBox": MagicPromptBox,
     "MagicUniversalSwitch": MagicUniversalSwitch,
     "MagicPhotopeaNode": MagicPhotopeaNode,
-    # 👇 新增这一行
-    "MagicPowerLoraLoader": MagicPowerLoraLoader
+    "MagicPowerLoraLoader": MagicPowerLoraLoader,
+    "MagicResolution": MagicResolution
 }
 
 # --- 节点显示名称 ---
@@ -29,13 +30,14 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicUniversalSwitch": "🎛️ 万能禁用/忽略多框 Magic Multi-Group Switch",
     "MagicPhotopeaNode": "🎨 Photopea图像处理 Photopea Processing & Load Image",
     # 👇 新增这一行
-    "MagicPowerLoraLoader": "🚀 强力SDXL Lora加载器 Magic Power SDXL LoRA Loader"
+    "MagicPowerLoraLoader": "🚀 强力SDXL Lora加载器 Magic Power SDXL LoRA Loader",
+    "MagicResolution": "📐 分辨率输出器 Magic Resolution Output"
 }
 
 # --- 指定 Web 目录 ---
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.1.2 - Update Checker Added)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.1.3 - Resolution Node Added)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")

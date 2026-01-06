@@ -65,6 +65,111 @@ function preventConflict(element) {
     element.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
 }
 
+function makeDialogDraggable(dialog, titleBar) {
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+    
+    titleBar.style.cursor = "move";
+    titleBar.style.userSelect = "none";
+    
+    const dragStart = (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || 
+            e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+            return;
+        }
+        
+        // 获取弹窗的当前位置（相对于视口）
+        const rect = dialog.getBoundingClientRect();
+        
+        // 获取鼠标点击位置
+        let mouseX, mouseY;
+        if (e.type === "mousedown") {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            isDragging = true;
+        } else if (e.type === "touchstart") {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+            isDragging = true;
+        } else {
+            return;
+        }
+        
+        // 计算偏移量（鼠标位置相对于弹窗左上角的偏移）
+        offsetX = mouseX - rect.left;
+        offsetY = mouseY - rect.top;
+        
+        e.preventDefault();
+    };
+    
+    const drag = (e) => {
+        if (!isDragging) return;
+        
+        e.preventDefault();
+        
+        // 获取当前鼠标位置
+        let mouseX, mouseY;
+        if (e.type === "mousemove") {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        } else if (e.type === "touchmove") {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        } else {
+            return;
+        }
+        
+        // 计算新位置（鼠标位置减去偏移量）
+        let newX = mouseX - offsetX;
+        let newY = mouseY - offsetY;
+        
+        // 限制拖拽范围，确保弹窗不会完全移出屏幕
+        const minX = 0;
+        const minY = 0;
+        const maxX = window.innerWidth - dialog.offsetWidth;
+        const maxY = window.innerHeight - dialog.offsetHeight;
+        
+        // 确保在屏幕范围内
+        newX = Math.max(minX, Math.min(newX, maxX));
+        newY = Math.max(minY, Math.min(newY, maxY));
+        
+        // 移除原有的定位方式（top/left/right/bottom），改用transform
+        dialog.style.top = '';
+        dialog.style.left = '';
+        dialog.style.right = '';
+        dialog.style.bottom = '';
+        
+        // 如果父元素是flex居中，需要移除flex定位
+        const parent = dialog.parentElement;
+        if (parent && parent.style.display === 'flex') {
+            parent.style.display = 'block';
+            parent.style.position = 'fixed';
+            parent.style.top = '0';
+            parent.style.left = '0';
+            parent.style.width = '100%';
+            parent.style.height = '100%';
+        }
+        
+        // 确保dialog使用fixed定位
+        dialog.style.position = 'fixed';
+        
+        // 应用transform
+        dialog.style.transform = `translate(${newX}px, ${newY}px)`;
+    };
+    
+    const dragEnd = () => {
+        isDragging = false;
+    };
+    
+    titleBar.addEventListener("mousedown", dragStart);
+    titleBar.addEventListener("touchstart", dragStart);
+    document.addEventListener("mousemove", drag);
+    document.addEventListener("touchmove", drag);
+    document.addEventListener("mouseup", dragEnd);
+    document.addEventListener("touchend", dragEnd);
+}
+
 // --- 逻辑编辑器弹窗 ---
 function showLogicModal(node) {
     const dialog = document.createElement("div");
@@ -77,17 +182,19 @@ function showLogicModal(node) {
     `;
 
     const header = document.createElement("div");
-    header.style.cssText = "padding: 10px; background: #333; display: flex; justify-content: space-between; border-bottom: 1px solid #444; cursor: move; user-select: none;";
+    header.style.cssText = "padding: 10px; background: #333; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; cursor: move; user-select: none;";
     header.innerHTML = `<b>🧠 逻辑编辑器 (Magic Script)</b>`;
-    let isDragging = false, startX, startY;
-    header.onmousedown = (e) => { if(e.target.tagName!=="BUTTON"){isDragging=true;startX=e.clientX;startY=e.clientY;} };
-    document.addEventListener("mousemove", (e)=>{if(isDragging){dialog.style.left=(parseFloat(dialog.style.left||window.innerWidth/2)+(e.clientX-startX))+"px";dialog.style.top=(parseFloat(dialog.style.top||window.innerHeight/2)+(e.clientY-startY))+"px";startX=e.clientX;startY=e.clientY;}});
-    document.addEventListener("mouseup", ()=>{isDragging=false;});
 
-    const closeBtn = document.createElement("button"); closeBtn.textContent="✕";
-    closeBtn.style.cssText="background:none;border:none;color:#fff;cursor:pointer;";
-    preventConflict(closeBtn); closeBtn.onclick=()=>document.body.removeChild(dialog);
-    header.appendChild(closeBtn); dialog.appendChild(header);
+    const closeBtn = document.createElement("button"); 
+    closeBtn.textContent="✕";
+    closeBtn.style.cssText="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;padding:0 10px;";
+    preventConflict(closeBtn); 
+    closeBtn.onclick=()=>document.body.removeChild(dialog);
+    header.appendChild(closeBtn); 
+    dialog.appendChild(header);
+    
+    // 使用正确的拖拽函数
+    makeDialogDraggable(dialog, header);
 
     const body = document.createElement("div");
     body.style.cssText = "flex: 1; display: flex; overflow: hidden;";
