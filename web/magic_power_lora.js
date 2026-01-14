@@ -3020,7 +3020,7 @@ app.registerExtension({
                     // 搜索框（缩小）
                     const search = document.createElement("input");
                     search.placeholder = "🔍 搜索当前目录...（如需全部搜索请打开“全部”开关）";
-                    search.style.cssText = "width:350px;padding:6px 10px;background:#121212;color:#fff;border:1px solid #444;border-radius:4px;outline:none;font-size:13px;";
+                    search.style.cssText = "width:400px;padding:6px 10px;background:#121212;color:#fff;border:1px solid #444;border-radius:4px;outline:none;font-size:13px;";
                     search.addEventListener("keydown", (e) => { e.stopPropagation(); });
                     search.addEventListener("pointerdown", (e) => { e.stopPropagation(); });
                     

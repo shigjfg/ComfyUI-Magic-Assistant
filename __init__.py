@@ -30,7 +30,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicUniversalSwitch": "🎛️ 万能禁用/忽略多框 Magic Multi-Group Switch",
     "MagicPhotopeaNode": "🎨 Photopea图像处理 Photopea Processing & Load Image",
     # 👇 新增这一行
-    "MagicPowerLoraLoader": "🚀 强力SDXL Lora加载器 Magic Power SDXL LoRA Loader",
+    "MagicPowerLoraLoader": "🚀 强力lora加载器 Magic Power LoRA Loader",
     "MagicResolution": "📐 分辨率输出器 Magic Resolution Output"
 }
 
@@ -38,6 +38,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.1.3 - Resolution Node Added)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.1.4 - LoRA Loader Model Support Updated)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")

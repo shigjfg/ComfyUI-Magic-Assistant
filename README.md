@@ -10,7 +10,29 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：2026-01-07
+> Latest Update / 最新更新：2026-01-14
+
+> **V1.1.4 版本介绍 / Version Introduction** 2026-01-14
+
+> 1. **Update / 更新**: Magic Power LoRA Loader - 强力lora加载器模型支持扩展 / Extended Model Support
+>    * Renamed from "Magic Power SDXL LoRA Loader" to "Magic Power LoRA Loader" / 原"强力SDXL Lora加载器"改名为"强力Lora加载器"
+>    * Now supports LoRA loading for multiple large models including ZImage, Qwen, Flux, and more / 现已支持 ZImage、Qwen、Flux 等多种大模型的 LoRA 加载
+>    * Note: Nunchaku quantized models are not yet fully supported / 注意：尚未支持所有由 Nunchaku 量化的模型
+>    * 原"强力SDXL Lora加载器"改名为"强力Lora加载器"
+>    * 现已支持 ZImage、Qwen、Flux 等多种大模型的 LoRA 加载
+>    * 注意：尚未支持所有由 Nunchaku 量化的模型
+
+> 2. **New Feature / 新增功能**: Language Switcher Floating Ball - 语言切换悬浮球 / Bilingual UI Support
+>    * Added a floating language switcher without modifying any original node code or functionality / 在不改任何原节点代码和功能的情况下新增了双语切换悬浮球
+>    * Bilingual translation for all known UI texts and button labels (Chinese & English) / 已将所有已知的会影响使用的文本和按钮文本进行了中英文翻译
+>    * Real-time language switching for some node windows and UIs / 部分节点的窗口和 UI 可以实时切换语言
+>    * If language doesn't change after switching, please reopen the node's function window (e.g., Settings Center) / 如果切换后发现语言没有改变，请重新打开节点的功能窗口（如配置中心）
+>    * Note: This is a test feature and may be improved in future versions / 注意：当前语言功能为测试版本，后续版本可能会进行优化改进
+>    * 在不改任何原节点代码和功能的情况下新增了双语切换悬浮球
+>    * 已将所有已知的会影响使用的文本和按钮文本进行了中英文翻译（部分特殊文本可能无法翻译）
+>    * 部分节点的窗口和 UI 可以实时切换语言
+>    * 如果切换后发现语言没有改变，请重新打开节点的功能窗口（如配置中心）
+>    * 注意：当前语言功能为测试版本，后续版本可能会进行优化改进
 
 > **V1.1.3 版本介绍 / Version Introduction** 2026-01-07
 
@@ -38,6 +60,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * "GitHub Repository" button to open GitHub repository / "GitHub 地址"按钮，可打开 GitHub 仓库
 >    * Smart version ignoring: only ignores the selected version, will notify again for newer versions / 智能忽略：仅忽略所选版本，新版本仍会提醒
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.1.1 版本介绍 / Version Introduction** 2026-01-06
 >
 > 1. **Optimization / 优化**: Fixed dialog drag logic, supports full-direction dragging, resolves drag offset issues / 修复弹窗拖拽逻辑，支持全方向拖动，解决拖拽偏移问题
@@ -52,12 +77,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >
 > 6. **Optimization / 优化**: All dialogs support draggable functionality, improving user experience / 所有弹窗支持可拖拽功能，提升用户体验
 
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
-
 > **V1.1.0 版本介绍 / Version Introduction** 2026-01-06
 >
-> 1. **新增节点**: Magic Power SDXL LoRA Loader - 强力SDXL LoRA加载器
+> 1. **新增节点**: Magic Power LoRA Loader - 强力lora加载器
 >    * 可视化图库界面，告别下拉菜单的繁琐操作
 >    * 支持文件夹分类管理，更好的组织 LoRA 集合
 >    * 拖拽排序功能，支持向上/向下插入，轻松调整顺序
@@ -191,7 +213,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 </details>
 
-### 7. 🚀 Magic Power SDXL LoRA Loader (强力SDXL LoRA加载器)
+### 7. 🚀 Magic Power LoRA Loader (强力lora加载器)
 > **Visual LoRA manager with drag-and-drop sorting.** / **可视化 LoRA 管理器，支持拖拽排序。**
 
 <details>

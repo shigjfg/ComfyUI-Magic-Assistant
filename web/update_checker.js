@@ -253,7 +253,7 @@ function showUpdateModal(updateData) {
     
     // 关闭按钮
     const cancelBtn = document.createElement("button");
-    cancelBtn.textContent = "Close / 关闭";
+    cancelBtn.textContent = "自行在manager中手动更新 / Update manually in Manager";
     cancelBtn.style.cssText = `
         padding: 8px 16px;
         background: #666;
@@ -351,7 +351,7 @@ async function checkForUpdates(testMode = false) {
         } else if (testMode) {
             // 测试模式下，即使没有更新也显示一个提示
             console.log("🔮 Update Checker Test: No update available (this is expected in test mode)");
-            alert("测试模式：当前模拟版本 1.1.3 应该会触发更新提示。如果没看到弹窗，请检查控制台。");
+            alert("测试模式：当前模拟版本 1.1.4 应该会触发更新提示。如果没看到弹窗，请检查控制台。");
         }
     } catch (error) {
         console.error("Failed to check for updates:", error);
