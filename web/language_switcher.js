@@ -15,6 +15,7 @@ const DEFAULT_LANGUAGE = "zh"; // "zh" 中文, "en" 英文
 const loraLoaderTranslations = {
     // 底部按钮
     "➕ 添加 Lora": { zh: "➕ 添加 Lora", en: "➕ Add Lora" },
+    "⚙️设置": { zh: "⚙️设置", en: "⚙️Settings" },
     "📁+": { zh: "📁+", en: "📁+" },
     "📂预设": { zh: "📂预设", en: "📂Preset" },
     
@@ -129,7 +130,18 @@ const loraLoaderTranslations = {
     "预览图像保存失败": { zh: "预览图像保存失败", en: "Failed to save preview image" },
     "默认权重已保存:": { zh: "默认权重已保存:", en: "Default weight saved: " },
     "默认权重保存失败:": { zh: "默认权重保存失败:", en: "Failed to save default weight: " },
-    "未找到匹配的权重信息": { zh: "未找到匹配的权重信息", en: "No matching weight information found" }
+    "未找到匹配的权重信息": { zh: "未找到匹配的权重信息", en: "No matching weight information found" },
+    
+    // 设置弹窗
+    "设置": { zh: "设置", en: "Settings" },
+    "INT8 LoRA 模式": { zh: "INT8 LoRA 模式", en: "INT8 LoRA Mode" },
+    "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。": { zh: "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。", en: "Select INT8 quantized model LoRA loading method. If the model is not INT8 quantized, it is recommended to use the default mode." },
+    "默认模式（标准 LoRA）": { zh: "默认模式（标准 LoRA）", en: "Default Mode (Standard LoRA)" },
+    "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型": { zh: "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型", en: "Use ComfyUI standard LoRA loading method, suitable for all model types" },
+    "INT8 静态模式（Stochastic）": { zh: "INT8 静态模式（Stochastic）", en: "INT8 Static Mode (Stochastic)" },
+    "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高": { zh: "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高", en: "Use stochastic rounding INT8 LoRA adapter, suitable for single or few LoRAs with higher precision" },
+    "INT8 动态模式（Dynamic）": { zh: "INT8 动态模式（Dynamic）", en: "INT8 Dynamic Mode (Dynamic)" },
+    "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景": { zh: "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景", en: "Dynamically compose multiple LoRAs at runtime, suitable for scenarios requiring frequent switching or combining multiple LoRAs" }
 };
 
 // 节点翻译映射表 - Magic Logic Compute

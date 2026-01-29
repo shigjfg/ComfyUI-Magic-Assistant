@@ -10,7 +10,27 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：2026-01-14
+> Latest Update / 最新更新：2026-01-29
+
+> **V1.1.5 版本介绍 / Version Introduction** 2026-01-29
+
+> 1. **New Feature / 新增功能**: Magic Power LoRA Loader - INT8 Mode Support / INT8 模式支持
+>    * Added INT8 quantized model LoRA loading support compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8) / 新增 INT8 量化模型 LoRA 加载支持，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)
+>    * Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)) / 支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）
+>    * Two loading modes: Static (Stochastic) and Dynamic / 两种加载模式：静态模式（Stochastic）和动态模式（Dynamic）
+>    * Static mode uses stochastic rounding for higher precision, suitable for single or few LoRAs / 静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA
+>    * Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios / 动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景
+>    * Settings button added to configure INT8 mode / 新增设置按钮，可配置 INT8 模式
+>    * Automatic fallback to standard mode if INT8 loading fails / 如果 INT8 加载失败，自动回退到标准模式
+>    * All INT8 LoRA functionality integrated into the node, no external dependencies required / 所有 INT8 LoRA 功能已整合到节点中，无需外部依赖
+>    * 新增 INT8 量化模型 LoRA 加载支持，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)
+>    * 支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）
+>    * 两种加载模式：静态模式（Stochastic）和动态模式（Dynamic）
+>    * 静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA
+>    * 动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景
+>    * 新增设置按钮，可配置 INT8 模式
+>    * 如果 INT8 加载失败，自动回退到标准模式
+>    * 所有 INT8 LoRA 功能已整合到节点中，无需外部依赖
 
 > **V1.1.4 版本介绍 / Version Introduction** 2026-01-14
 
@@ -229,6 +249,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **Folder Toggle**: One-click toggle button to enable/disable all LoRAs in a folder.
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
+* **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
 * **可视化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
 * **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
 * **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
@@ -239,6 +260,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **文件夹开关**: 文件夹开关按钮，一键启用/禁用文件夹下所有 lora。
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
+* **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
 
 </details>
 

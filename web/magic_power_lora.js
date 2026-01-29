@@ -45,6 +45,20 @@ app.registerExtension({
                 stackWidget.hidden = true;
                 stackWidget.computeSize = () => [0, 0]; 
 
+                // INT8 模式设置（隐藏的 widget）
+                let int8ModeWidget = this.widgets.find(w => w.name === "int8_mode");
+                if (!int8ModeWidget) {
+                    int8ModeWidget = this.addWidget("text", "int8_mode", "none", () => {}, {});
+                }
+                int8ModeWidget.hidden = true;
+                int8ModeWidget.computeSize = () => [0, 0];
+                this._int8ModeWidget = int8ModeWidget;
+
+                // 初始化 INT8 模式（从属性中读取）
+                if (!this.int8Mode) {
+                    this.int8Mode = this.properties["int8_mode"] || "none";
+                }
+
                 this._stackWidget = stackWidget;
                 this.size = [400, 600];
 
@@ -119,6 +133,7 @@ app.registerExtension({
                 };
                 footer.append(
                     createBtn("➕ 添加 Lora", "mpl-btn-add", () => this.showAddLoraModal()),
+                    createBtn("⚙️设置", "mpl-btn-icon", () => this.showSettingsModal()),
                     createBtn("📁+", "mpl-btn-icon", () => this.addFolder()),
                     createBtn("📂预设", "mpl-btn-icon", () => this.loadPresetModal())
                 );
@@ -289,7 +304,18 @@ app.registerExtension({
                     }
                     this._stackWidget.value = JSON.stringify(stack);
                 }
+                
+                // 更新 INT8 模式 widget
+                if (!this._int8ModeWidget) {
+                    this._int8ModeWidget = this.widgets?.find(w => w.name === "int8_mode");
+                }
+                if (this._int8ModeWidget) {
+                    const int8Mode = this.int8Mode || this.properties["int8_mode"] || "none";
+                    this._int8ModeWidget.value = int8Mode;
+                }
+                
                 this.properties["lora_data_state"] = JSON.stringify(this.loraData);
+                this.properties["int8_mode"] = this.int8Mode || "none";
             };
 
             const onConfigure = nodeType.prototype.onConfigure;
@@ -303,7 +329,21 @@ app.registerExtension({
                         stackWidget.hidden = true;
                         stackWidget.computeSize = () => [0, 0];
                     }
+                    const int8ModeWidget = this.widgets.find(w => w.name === "int8_mode");
+                    if (int8ModeWidget) {
+                        int8ModeWidget.hidden = true;
+                        int8ModeWidget.computeSize = () => [0, 0];
+                    }
                 }
+                
+                // 恢复 INT8 模式设置
+                if (this.properties["int8_mode"]) {
+                    this.int8Mode = this.properties["int8_mode"];
+                } else {
+                    this.int8Mode = "none";
+                    this.properties["int8_mode"] = "none";
+                }
+                
                 if (this.properties["lora_data_state"]) {
                     try { 
                         this.loraData = JSON.parse(this.properties["lora_data_state"]);
@@ -344,6 +384,12 @@ app.registerExtension({
                             })) 
                         };
                     } catch(e) {}
+                }
+                
+                // 从 widgets_values 恢复 INT8 模式（如果存在）
+                if (this.widgets_values && this.widgets_values.length > 3 && this.widgets_values[3]) {
+                    this.int8Mode = this.widgets_values[3];
+                    this.properties["int8_mode"] = this.int8Mode;
                 }
                 setTimeout(() => { this.createDOMInterface(); this.renderEmbeddedList(); }, 100);
                 return r;
@@ -3617,6 +3663,278 @@ app.registerExtension({
                     });
                     alert("Saved!");
                 } catch(e) { alert(e); }
+            };
+
+            nodeType.prototype.showSettingsModal = function() {
+                // 获取当前 INT8 模式设置
+                const currentMode = this.int8Mode || this.properties["int8_mode"] || "none";
+                
+                // 创建遮罩层
+                const overlay = document.createElement("div");
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.5);
+                    z-index: 10001;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
+                
+                // 创建弹窗
+                const dialog = document.createElement("div");
+                dialog.style.cssText = `
+                    background: #2a2a2a;
+                    border: 1px solid #555;
+                    border-radius: 8px;
+                    padding: 20px;
+                    min-width: 500px;
+                    max-width: 700px;
+                    box-shadow: 0 8px 25px rgba(0,0,0,0.8);
+                    z-index: 10002;
+                    position: relative;
+                `;
+                
+                // 标题栏（可拖拽）
+                const title = document.createElement("div");
+                title.textContent = "设置";
+                title.style.cssText = `
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: #eee;
+                    margin-bottom: 15px;
+                    border-bottom: 1px solid #444;
+                    padding-bottom: 10px;
+                    cursor: move;
+                    user-select: none;
+                `;
+                
+                // 内容区域
+                const content = document.createElement("div");
+                content.style.cssText = "margin-bottom: 15px;";
+                
+                // 设置项容器
+                const settingsContainer = document.createElement("div");
+                settingsContainer.style.cssText = "display: flex; flex-direction: column; gap: 20px;";
+                
+                // INT8 模式设置区域
+                const int8Section = document.createElement("div");
+                int8Section.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+                
+                const int8Title = document.createElement("div");
+                int8Title.textContent = "INT8 LoRA 模式";
+                int8Title.style.cssText = `
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #fff;
+                    margin-bottom: 8px;
+                `;
+                
+                const int8Desc = document.createElement("div");
+                int8Desc.textContent = "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。";
+                int8Desc.style.cssText = `
+                    font-size: 12px;
+                    color: #aaa;
+                    margin-bottom: 12px;
+                    line-height: 1.5;
+                `;
+                
+                // 模式选择容器
+                const modeContainer = document.createElement("div");
+                modeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+                
+                // 默认模式（无 INT8）
+                const modeNone = document.createElement("label");
+                modeNone.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                const radioNone = document.createElement("input");
+                radioNone.type = "radio";
+                radioNone.name = "int8_mode";
+                radioNone.value = "none";
+                radioNone.checked = currentMode === "none";
+                radioNone.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                const labelNone = document.createElement("div");
+                labelNone.style.cssText = "flex: 1;";
+                const labelNoneTitle = document.createElement("div");
+                labelNoneTitle.textContent = "默认模式（标准 LoRA）";
+                labelNoneTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                const labelNoneDesc = document.createElement("div");
+                labelNoneDesc.textContent = "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型";
+                labelNoneDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelNone.appendChild(labelNoneTitle);
+                labelNone.appendChild(labelNoneDesc);
+                modeNone.appendChild(radioNone);
+                modeNone.appendChild(labelNone);
+                
+                // 静态模式（Stochastic）
+                const modeStochastic = document.createElement("label");
+                modeStochastic.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                const radioStochastic = document.createElement("input");
+                radioStochastic.type = "radio";
+                radioStochastic.name = "int8_mode";
+                radioStochastic.value = "stochastic";
+                radioStochastic.checked = currentMode === "stochastic";
+                radioStochastic.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                const labelStochastic = document.createElement("div");
+                labelStochastic.style.cssText = "flex: 1;";
+                const labelStochasticTitle = document.createElement("div");
+                labelStochasticTitle.textContent = "INT8 静态模式（Stochastic）";
+                labelStochasticTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                const labelStochasticDesc = document.createElement("div");
+                labelStochasticDesc.textContent = "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高";
+                labelStochasticDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelStochastic.appendChild(labelStochasticTitle);
+                labelStochastic.appendChild(labelStochasticDesc);
+                modeStochastic.appendChild(radioStochastic);
+                modeStochastic.appendChild(labelStochastic);
+                
+                // 动态模式（Dynamic）
+                const modeDynamic = document.createElement("label");
+                modeDynamic.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                const radioDynamic = document.createElement("input");
+                radioDynamic.type = "radio";
+                radioDynamic.name = "int8_mode";
+                radioDynamic.value = "dynamic";
+                radioDynamic.checked = currentMode === "dynamic";
+                radioDynamic.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                const labelDynamic = document.createElement("div");
+                labelDynamic.style.cssText = "flex: 1;";
+                const labelDynamicTitle = document.createElement("div");
+                labelDynamicTitle.textContent = "INT8 动态模式（Dynamic）";
+                labelDynamicTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                const labelDynamicDesc = document.createElement("div");
+                labelDynamicDesc.textContent = "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景";
+                labelDynamicDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelDynamic.appendChild(labelDynamicTitle);
+                labelDynamic.appendChild(labelDynamicDesc);
+                modeDynamic.appendChild(radioDynamic);
+                modeDynamic.appendChild(labelDynamic);
+                
+                // 添加选中状态的视觉反馈
+                const updateSelection = () => {
+                    [modeNone, modeStochastic, modeDynamic].forEach(mode => {
+                        const radio = mode.querySelector('input[type="radio"]');
+                        if (radio.checked) {
+                            mode.style.borderColor = "#2196F3";
+                            mode.style.background = "#2a3a4a";
+                        } else {
+                            mode.style.borderColor = "transparent";
+                            mode.style.background = "#333";
+                        }
+                    });
+                };
+                
+                [radioNone, radioStochastic, radioDynamic].forEach(radio => {
+                    radio.addEventListener("change", updateSelection);
+                });
+                updateSelection();
+                
+                modeContainer.appendChild(modeNone);
+                modeContainer.appendChild(modeStochastic);
+                modeContainer.appendChild(modeDynamic);
+                
+                int8Section.appendChild(int8Title);
+                int8Section.appendChild(int8Desc);
+                int8Section.appendChild(modeContainer);
+                
+                settingsContainer.appendChild(int8Section);
+                content.appendChild(settingsContainer);
+                
+                // 按钮容器
+                const buttonContainer = document.createElement("div");
+                buttonContainer.style.cssText = `
+                    display: flex;
+                    gap: 10px;
+                    justify-content: flex-end;
+                    margin-top: 15px;
+                `;
+                
+                // 确定按钮
+                const confirmBtn = document.createElement("button");
+                confirmBtn.textContent = "确定";
+                confirmBtn.style.cssText = `
+                    padding: 8px 16px;
+                    background: #2196F3;
+                    border: none;
+                    color: white;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 13px;
+                `;
+                confirmBtn.onclick = () => {
+                    // 保存 INT8 模式设置
+                    const selectedMode = document.querySelector('input[name="int8_mode"]:checked')?.value || "none";
+                    this.int8Mode = selectedMode;
+                    this.properties["int8_mode"] = selectedMode;
+                    
+                    // 更新隐藏的 widget
+                    if (this._int8ModeWidget) {
+                        this._int8ModeWidget.value = selectedMode;
+                    }
+                    
+                    // 触发更新
+                    this.updateWidget();
+                    
+                    document.body.removeChild(overlay);
+                };
+                confirmBtn.onmouseenter = () => confirmBtn.style.background = "#42A5F5";
+                confirmBtn.onmouseleave = () => confirmBtn.style.background = "#2196F3";
+                
+                // 取消按钮
+                const cancelBtn = document.createElement("button");
+                cancelBtn.textContent = "取消";
+                cancelBtn.style.cssText = `
+                    padding: 8px 16px;
+                    background: #666;
+                    border: none;
+                    color: white;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 13px;
+                `;
+                cancelBtn.onclick = () => {
+                    document.body.removeChild(overlay);
+                };
+                cancelBtn.onmouseenter = () => cancelBtn.style.background = "#777";
+                cancelBtn.onmouseleave = () => cancelBtn.style.background = "#666";
+                
+                // 阻止事件冒泡
+                const stopProp = (e) => { e.stopPropagation(); };
+                dialog.addEventListener("pointerdown", stopProp);
+                dialog.addEventListener("pointermove", stopProp);
+                dialog.addEventListener("pointerup", stopProp);
+                dialog.addEventListener("mousedown", stopProp);
+                dialog.addEventListener("wheel", stopProp, { passive: false });
+                
+                // 点击遮罩层关闭
+                overlay.onclick = (e) => {
+                    if (e.target === overlay) {
+                        document.body.removeChild(overlay);
+                    }
+                };
+                
+                // ESC键关闭
+                const handleEsc = (e) => {
+                    if (e.key === "Escape") {
+                        document.body.removeChild(overlay);
+                        document.removeEventListener("keydown", handleEsc);
+                    }
+                };
+                document.addEventListener("keydown", handleEsc);
+                
+                // 组装弹窗
+                buttonContainer.appendChild(cancelBtn);
+                buttonContainer.appendChild(confirmBtn);
+                dialog.appendChild(title);
+                dialog.appendChild(content);
+                dialog.appendChild(buttonContainer);
+                overlay.appendChild(dialog);
+                document.body.appendChild(overlay);
+                
+                // 使弹窗可拖拽
+                this.makeDialogDraggable(dialog, title);
             };
 
             nodeType.prototype.loadPresetModal = async function() {
