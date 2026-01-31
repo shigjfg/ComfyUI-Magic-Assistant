@@ -10,9 +10,21 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：2026-01-29
+> Latest Update / 最新更新：2026-01-31
 
-> **V1.1.6 版本介绍 / Version Introduction** 2026-01-29
+> **V1.1.7 版本介绍 / Version Introduction** 2026-01-31
+
+> 1. **Bug Fix / 错误修复**: Magic Power LoRA Loader - LoRA Loading Fix / LoRA 加载修复
+>    * Fixed duplicate LoRA loading issue when selecting INT8 or SDNQ modes / 修复了选择 INT8 或 SDNQ 模式时 LoRA 重复加载的问题
+>    * Improved mode selection logic to ensure only one loading method is executed / 改进了模式选择逻辑，确保只执行一种加载方法
+>    * Enhanced SDNQ mode fallback mechanism for better error handling / 增强了 SDNQ 模式的回退机制，提供更好的错误处理
+>    * LoRA mode selection only applies to individual nodes, different Magic Power LoRA Loader nodes can use different modes as needed / LoRA 模式选择只作用于单一节点，不同的强力lora加载节点可以按照需求使用不同模式
+>    * 修复了选择 INT8 或 SDNQ 模式时 LoRA 重复加载的问题
+>    * 改进了模式选择逻辑，确保只执行一种加载方法
+>    * 增强了 SDNQ 模式的回退机制，提供更好的错误处理
+>    * LoRA 模式选择只作用于单一节点，不同的强力lora加载节点可以按照需求使用不同模式
+
+> **V1.1.6 版本介绍 / Version Introduction** 2026-01-31
 
 > 1. **Update / 更新**: Magic Multi-Group Switch - 万能禁用/忽略多框节点优化 / Node Group Control Optimization
 >    * Changed update button to click-to-refresh functionality / 修改更新按钮为点击刷新功能
@@ -53,6 +65,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 如果 INT8 加载失败，自动回退到标准模式
 >    * 所有 INT8 LoRA 功能已整合到节点中，无需外部依赖
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.1.4 版本介绍 / Version Introduction** 2026-01-14
 
 > 1. **Update / 更新**: Magic Power LoRA Loader - 强力lora加载器模型支持扩展 / Extended Model Support
@@ -74,9 +89,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 部分节点的窗口和 UI 可以实时切换语言
 >    * 如果切换后发现语言没有改变，请重新打开节点的功能窗口（如配置中心）
 >    * 注意：当前语言功能为测试版本，后续版本可能会进行优化改进
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.1.3 版本介绍 / Version Introduction** 2026-01-07
 

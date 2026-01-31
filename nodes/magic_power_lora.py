@@ -556,14 +556,17 @@ class MagicPowerLoraLoader:
 
         elif sdnq_mode == "sdnq" and is_sdnq:
             # SDNQ 模式 - 整合的 SDNQ LoRA 加载逻辑（用于 DiffusionPipeline）
+            sdnq_success = False
             try:
                 from diffusers import DiffusionPipeline
             except ImportError:
                 print(f"❌ [MagicPowerLora] SDNQ 模式需要 diffusers 库，但未安装。回退到标准模式。")
-                # 回退到标准模式，继续执行下面的标准模式代码
-                sdnq_mode = "none"
+                sdnq_success = False
             
-            if sdnq_mode == "sdnq" and isinstance(out_model, DiffusionPipeline):
+            if not sdnq_success:
+                # diffusers 未安装，回退到标准模式
+                pass
+            elif isinstance(out_model, DiffusionPipeline):
                 # 处理多个 LoRA，使用 adapter 系统
                 lora_adapters = []
                 lora_weights = []
@@ -605,6 +608,7 @@ class MagicPowerLoraLoader:
                         lora_weights.append(weight)
                         
                         print(f"   ✅ Applied (SDNQ): {lora_name} (strength: {weight})")
+                        sdnq_success = True
                         
                     except Exception as e:
                         print(f"   ❌ Failed (SDNQ): {lora_name} -> {e}")
@@ -630,16 +634,53 @@ class MagicPowerLoraLoader:
                     try:
                         out_model.set_adapters(lora_adapters, adapter_weights=lora_weights)
                         print(f"   ✅ [SDNQ] {len(lora_adapters)} LoRA(s) applied to pipeline")
+                        sdnq_success = True
                     except Exception as e:
                         print(f"   ⚠️ [SDNQ] Failed to set adapters: {e}")
                         # 回退到标准模式
                         print(f"   🔄 [SDNQ] Falling back to standard mode...")
-                        sdnq_mode = "none"
+                        sdnq_success = False
                 else:
                     print(f"   ℹ️ [SDNQ] No LoRAs to load")
+                    sdnq_success = False
+            
+            # 如果 SDNQ 模式失败，需要回退到标准模式
+            if not sdnq_success:
+                # 在 elif 分支内无法跳转到 else，所以直接执行标准模式逻辑
+                for item in items_to_process:
+                    lora_name = item.get("name")
+                    weight = float(item.get("weight", 1.0))
+                    if not lora_name: continue
+
+                    lora_path = folder_paths.get_full_path("loras", lora_name)
+                    if lora_path is None:
+                        print(f"⚠️ [MagicPowerLora] Lora not found: {lora_name}")
+                        continue
+
+                    try:
+                        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                        out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
+                        print(f"   ✅ Applied (Fallback from SDNQ): {lora_name}")
+                    except Exception as e:
+                        print(f"   ❌ Failed (Fallback from SDNQ): {lora_name} -> {e}")
+
+                    if "tags" in item and item["tags"]:
+                        active_tags.append(str(item["tags"]))
+
+                    # 为每个lora尝试加载预览图
+                    img_path = self.get_preview_path(lora_name)
+                    if img_path:
+                        try:
+                            i = Image.open(img_path).convert("RGB")
+                            i = np.array(i).astype(np.float32) / 255.0
+                            preview_tensor = torch.from_numpy(i)[None,]
+                            preview_images.append(preview_tensor)
+                        except Exception as e:
+                            print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
         
-        if sdnq_mode != "sdnq":
+        else:
             # 标准模式（默认）或回退模式
+            # 只有在没有选择 INT8 或 SDNQ 模式时才执行
             for item in items_to_process:
                 lora_name = item.get("name")
                 weight = float(item.get("weight", 1.0))
