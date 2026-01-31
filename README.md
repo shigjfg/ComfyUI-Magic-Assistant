@@ -12,6 +12,24 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > Latest Update / 最新更新：2026-01-29
 
+> **V1.1.6 版本介绍 / Version Introduction** 2026-01-29
+
+> 1. **Update / 更新**: Magic Multi-Group Switch - 万能禁用/忽略多框节点优化 / Node Group Control Optimization
+>    * Changed update button to click-to-refresh functionality / 修改更新按钮为点击刷新功能
+>    * Added real-time node group update option in property panel / 在属性面板也可以开启实时更新节点组功能
+>    * Improved user experience for managing node groups / 优化节点组管理体验
+>    * 修改更新按钮为点击刷新功能
+>    * 在属性面板也可以开启实时更新节点组功能
+>    * 优化节点组管理体验
+
+> 2. **New Feature / 新增功能**: Magic Power LoRA Loader - SDNQ Model Support / SDNQ 模型支持
+>    * Added LoRA loading support for SDNQ quantized models / 新增对 SDNQ 量化模型的 LoRA 加载支持
+>    * Compatible with [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited) repository / 兼容 [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited) 仓库
+>    * Supports SDNQ quantized models from [HuggingFace SDNQ Collection](https://huggingface.co/collections/Disty0/sdnq) / 支持来自 [HuggingFace SDNQ 集合](https://huggingface.co/collections/Disty0/sdnq) 的 SDNQ 量化模型
+>    * 新增对 SDNQ 量化模型的 LoRA 加载支持
+>    * 兼容 [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited) 仓库
+>    * 支持来自 [HuggingFace SDNQ 集合](https://huggingface.co/collections/Disty0/sdnq) 的 SDNQ 量化模型
+
 > **V1.1.5 版本介绍 / Version Introduction** 2026-01-29
 
 > 1. **New Feature / 新增功能**: Magic Power LoRA Loader - INT8 Mode Support / INT8 模式支持
@@ -54,6 +72,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 如果切换后发现语言没有改变，请重新打开节点的功能窗口（如配置中心）
 >    * 注意：当前语言功能为测试版本，后续版本可能会进行优化改进
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.1.3 版本介绍 / Version Introduction** 2026-01-07
 
 > 1. **New Node / 新增节点**: Magic Resolution Output - 分辨率输出器
@@ -79,9 +100,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * "Ignore this version" option to skip specific version notifications / "忽略此版本"选项，可跳过特定版本提醒
 >    * "GitHub Repository" button to open GitHub repository / "GitHub 地址"按钮，可打开 GitHub 仓库
 >    * Smart version ignoring: only ignores the selected version, will notify again for newer versions / 智能忽略：仅忽略所选版本，新版本仍会提醒
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.1.1 版本介绍 / Version Introduction** 2026-01-06
 >
@@ -213,8 +231,12 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 * **Group Management**: Quickly enable/disable/bypass multiple groups of nodes.
 * **One-Click Toggle**: Switch entire workflows on or off with a single boolean input.
+* **Click-to-Refresh**: Update button changed to click-to-refresh functionality for better control.
+* **Real-time Updates**: Option to enable real-time node group updates in property panel.
 * **群组管理**: 快速启用、禁用或绕过指定节点组。
 * **一键开关**: 通过简单的布尔值输入，控制整条工作流的通断。
+* **点击刷新**: 更新按钮改为点击刷新功能，提供更好的控制体验。
+* **实时更新**: 在属性面板可以开启实时更新节点组功能。
 
 </details>
 
@@ -250,6 +272,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
 * **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
+* **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models compatible with [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited). Supports SDNQ quantized models from [HuggingFace SDNQ Collection](https://huggingface.co/collections/Disty0/sdnq).
 * **可视化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
 * **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
 * **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
@@ -261,6 +284,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
 * **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
+* **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持，兼容 [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited)。支持来自 [HuggingFace SDNQ 集合](https://huggingface.co/collections/Disty0/sdnq) 的 SDNQ 量化模型。
 
 </details>
 

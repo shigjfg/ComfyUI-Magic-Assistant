@@ -236,6 +236,7 @@ class MagicPowerLoraLoader:
             },
             "hidden": {
                 "int8_mode": ("STRING", {"default": "none"}),
+                "sdnq_mode": ("STRING", {"default": "none"}),
             }
         }
 
@@ -261,6 +262,30 @@ class MagicPowerLoraLoader:
                 if hasattr(module, 'weight') and hasattr(module.weight, 'dtype'):
                     if module.weight.dtype == torch.int8:
                         return True
+            return False
+        except Exception:
+            return False
+
+    # 检测模型是否为 SDNQ 模型（DiffusionPipeline）
+    @staticmethod
+    def is_sdnq_model(model):
+        """检测模型是否为 SDNQ 模型（diffusers DiffusionPipeline）"""
+        try:
+            # 尝试导入 diffusers
+            from diffusers import DiffusionPipeline
+            
+            # 检查是否为 DiffusionPipeline 实例
+            if isinstance(model, DiffusionPipeline):
+                return True
+            
+            # 检查是否有 DiffusionPipeline 的特征属性
+            if hasattr(model, 'unet') or hasattr(model, 'transformer'):
+                if hasattr(model, 'text_encoder') or hasattr(model, 'vae'):
+                    return True
+            
+            return False
+        except ImportError:
+            # diffusers 未安装，不是 SDNQ 模型
             return False
         except Exception:
             return False
@@ -297,10 +322,11 @@ class MagicPowerLoraLoader:
         except Exception:
             return None
 
-    def apply_loras(self, model, clip, lora_stack, int8_mode="none"):
+    def apply_loras(self, model, clip, lora_stack, int8_mode="none", sdnq_mode="none"):
         """
         应用 LoRA
         int8_mode: "none" (默认), "stochastic" (静态), "dynamic" (动态)
+        sdnq_mode: "none" (默认), "sdnq" (SDNQ 模式，用于 DiffusionPipeline)
         """
         out_model = model
         out_clip = clip
@@ -326,8 +352,21 @@ class MagicPowerLoraLoader:
         elif isinstance(stack_data, list):
             items_to_process = [l for l in stack_data if l.get("enabled", True)]
 
-        # 检测是否为 INT8 模型
+        # 检测模型类型
         is_int8 = self.is_int8_model(out_model)
+        is_sdnq = self.is_sdnq_model(out_model)
+        
+        # 如果启用 SDNQ 模式，优先使用 SDNQ 加载
+        if sdnq_mode == "sdnq" and is_sdnq:
+            # SDNQ 模式处理
+            pass  # 将在下面的代码中实现
+        elif sdnq_mode == "sdnq" and not is_sdnq:
+            print(f"⚠️ [MagicPowerLora] SDNQ 模式已启用，但模型似乎不是 SDNQ 模型（DiffusionPipeline），将回退到标准模式")
+            sdnq_mode = "none"
+        
+        # 如果未启用 SDNQ 模式但模型是 SDNQ，给出提示
+        if sdnq_mode == "none" and is_sdnq:
+            print(f"💡 [MagicPowerLora] 检测到 SDNQ 模型（DiffusionPipeline），建议在设置中启用 SDNQ 模式")
         
         # 如果启用 INT8 模式但模型不是 INT8，给出警告
         if int8_mode != "none" and not is_int8:
@@ -337,7 +376,8 @@ class MagicPowerLoraLoader:
         if int8_mode == "none" and is_int8:
             print(f"💡 [MagicPowerLora] 检测到 INT8 模型，建议在设置中启用 INT8 模式以获得更好的兼容性")
 
-        print(f"🚀 [MagicPowerLora] Processing {len(items_to_process)} Loras... (Mode: {int8_mode})")
+        mode_str = f"{int8_mode}" if int8_mode != "none" else (f"{sdnq_mode}" if sdnq_mode != "none" else "standard")
+        print(f"🚀 [MagicPowerLora] Processing {len(items_to_process)} Loras... (Mode: {mode_str})")
 
         # 根据模式选择加载方式
         if int8_mode == "stochastic" and INT8_AVAILABLE:
@@ -514,8 +554,92 @@ class MagicPowerLoraLoader:
                     except Exception as e:
                         print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
 
-        else:
-            # 标准模式（默认）
+        elif sdnq_mode == "sdnq" and is_sdnq:
+            # SDNQ 模式 - 整合的 SDNQ LoRA 加载逻辑（用于 DiffusionPipeline）
+            try:
+                from diffusers import DiffusionPipeline
+            except ImportError:
+                print(f"❌ [MagicPowerLora] SDNQ 模式需要 diffusers 库，但未安装。回退到标准模式。")
+                # 回退到标准模式，继续执行下面的标准模式代码
+                sdnq_mode = "none"
+            
+            if sdnq_mode == "sdnq" and isinstance(out_model, DiffusionPipeline):
+                # 处理多个 LoRA，使用 adapter 系统
+                lora_adapters = []
+                lora_weights = []
+                
+                for idx, item in enumerate(items_to_process):
+                    lora_name = item.get("name")
+                    weight = float(item.get("weight", 1.0))
+                    if not lora_name: 
+                        continue
+                    
+                    lora_path = folder_paths.get_full_path("loras", lora_name)
+                    if lora_path is None:
+                        print(f"⚠️ [MagicPowerLora] Lora not found: {lora_name}")
+                        continue
+                    
+                    try:
+                        # 检查是本地文件还是 HuggingFace repo
+                        is_local_file = os.path.exists(lora_path) and os.path.isfile(lora_path)
+                        adapter_name = f"lora_{idx + 1}"
+                        
+                        if is_local_file:
+                            # 本地 .safetensors 文件
+                            lora_dir = os.path.dirname(lora_path)
+                            lora_file = os.path.basename(lora_path)
+                            
+                            out_model.load_lora_weights(
+                                lora_dir,
+                                weight_name=lora_file,
+                                adapter_name=adapter_name
+                            )
+                        else:
+                            # HuggingFace repo ID
+                            out_model.load_lora_weights(
+                                lora_path,
+                                adapter_name=adapter_name
+                            )
+                        
+                        lora_adapters.append(adapter_name)
+                        lora_weights.append(weight)
+                        
+                        print(f"   ✅ Applied (SDNQ): {lora_name} (strength: {weight})")
+                        
+                    except Exception as e:
+                        print(f"   ❌ Failed (SDNQ): {lora_name} -> {e}")
+                        # 继续处理其他 LoRA，不中断
+                        continue
+                    
+                    if "tags" in item and item["tags"]:
+                        active_tags.append(str(item["tags"]))
+                    
+                    # 为每个lora尝试加载预览图
+                    img_path = self.get_preview_path(lora_name)
+                    if img_path:
+                        try:
+                            i = Image.open(img_path).convert("RGB")
+                            i = np.array(i).astype(np.float32) / 255.0
+                            preview_tensor = torch.from_numpy(i)[None,]
+                            preview_images.append(preview_tensor)
+                        except Exception as e:
+                            print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
+                
+                # 一次性应用所有 adapters
+                if lora_adapters:
+                    try:
+                        out_model.set_adapters(lora_adapters, adapter_weights=lora_weights)
+                        print(f"   ✅ [SDNQ] {len(lora_adapters)} LoRA(s) applied to pipeline")
+                    except Exception as e:
+                        print(f"   ⚠️ [SDNQ] Failed to set adapters: {e}")
+                        # 回退到标准模式
+                        print(f"   🔄 [SDNQ] Falling back to standard mode...")
+                        sdnq_mode = "none"
+                else:
+                    print(f"   ℹ️ [SDNQ] No LoRAs to load")
+        
+        if sdnq_mode != "sdnq":
+            # 标准模式（默认）或回退模式
             for item in items_to_process:
                 lora_name = item.get("name")
                 weight = float(item.get("weight", 1.0))

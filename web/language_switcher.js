@@ -134,14 +134,23 @@ const loraLoaderTranslations = {
     
     // 设置弹窗
     "设置": { zh: "设置", en: "Settings" },
+    "LoRA 加载模式": { zh: "LoRA 加载模式", en: "LoRA Loading Mode" },
     "INT8 LoRA 模式": { zh: "INT8 LoRA 模式", en: "INT8 LoRA Mode" },
+    "选择 INT8 量化模型的 LoRA 加载方式": { zh: "选择 INT8 量化模型的 LoRA 加载方式", en: "Select INT8 quantized model LoRA loading method" },
     "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。": { zh: "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。", en: "Select INT8 quantized model LoRA loading method. If the model is not INT8 quantized, it is recommended to use the default mode." },
     "默认模式（标准 LoRA）": { zh: "默认模式（标准 LoRA）", en: "Default Mode (Standard LoRA)" },
     "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型": { zh: "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型", en: "Use ComfyUI standard LoRA loading method, suitable for all model types" },
     "INT8 静态模式（Stochastic）": { zh: "INT8 静态模式（Stochastic）", en: "INT8 Static Mode (Stochastic)" },
     "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高": { zh: "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高", en: "Use stochastic rounding INT8 LoRA adapter, suitable for single or few LoRAs with higher precision" },
     "INT8 动态模式（Dynamic）": { zh: "INT8 动态模式（Dynamic）", en: "INT8 Dynamic Mode (Dynamic)" },
-    "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景": { zh: "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景", en: "Dynamically compose multiple LoRAs at runtime, suitable for scenarios requiring frequent switching or combining multiple LoRAs" }
+    "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景": { zh: "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景", en: "Dynamically compose multiple LoRAs at runtime, suitable for scenarios requiring frequent switching or combining multiple LoRAs" },
+    
+    // SDNQ 模式设置
+    "SDNQ LoRA 模式": { zh: "SDNQ LoRA 模式", en: "SDNQ LoRA Mode" },
+    "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式": { zh: "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式", en: "Select SDNQ quantized model (DiffusionPipeline) LoRA loading method" },
+    "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式。如果模型不是 SDNQ 模型，建议使用默认模式。": { zh: "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式。如果模型不是 SDNQ 模型，建议使用默认模式。", en: "Select SDNQ quantized model (DiffusionPipeline) LoRA loading method. If the model is not SDNQ, it is recommended to use the default mode." },
+    "SDNQ 模式": { zh: "SDNQ 模式", en: "SDNQ Mode" },
+    "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）": { zh: "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）", en: "Use diffusers PEFT adapter system to load LoRAs, supports parallel application of multiple LoRAs, suitable for SDNQ quantized models (DiffusionPipeline)" }
 };
 
 // 节点翻译映射表 - Magic Logic Compute

@@ -14,16 +14,26 @@ app.registerExtension({
                 if (!this.properties) this.properties = {};
                 if (this.properties["show_nav"] === undefined) this.properties["show_nav"] = true;
                 if (!this.properties["match_query"]) this.properties["match_query"] = "";
+                if (this.properties["auto_refresh"] === undefined) this.properties["auto_refresh"] = false;
+                if (!this.properties["fixed_groups"]) this.properties["fixed_groups"] = [];
 
-                this.fixedGroupTitles = new Set();
+                // 从 properties 恢复固定状态
+                this.fixedGroupTitles = new Set(this.properties["fixed_groups"] || []);
 
-                const refreshBtn = this.widgets.find(w => w.name === "refresh");
-                if(refreshBtn) {
-                    refreshBtn.callback = () => { this.refreshGroupWidgets(app); };
-                }
+                // 添加刷新按钮（使用 button widget，点击即刷新）
+                this.addWidget("button", "♻️ 刷新列表 (Refresh)", null, () => {
+                    this.refreshGroupWidgets(app);
+                });
+
+                // 实时刷新定时器
+                this._autoRefreshTimer = null;
+                this._lastGroupsHash = null;
 
                 setTimeout(() => {
-                    if (app.graph) this.refreshGroupWidgets(app);
+                    if (app.graph) {
+                        this.refreshGroupWidgets(app);
+                        this.startAutoRefresh(app);
+                    }
                 }, 500);
 
                 return r;
@@ -33,8 +43,109 @@ app.registerExtension({
             nodeType.prototype.onPropertyChanged = function(name, value) {
                 if (name === "match_query" || name === "show_nav") {
                     setTimeout(() => { this.refreshGroupWidgets(app); }, 50);
+                } else if (name === "auto_refresh") {
+                    if (value) {
+                        this.startAutoRefresh(app);
+                    } else {
+                        this.stopAutoRefresh();
+                    }
                 }
                 return true;
+            };
+
+            // 🔄 启动实时刷新
+            nodeType.prototype.startAutoRefresh = function(app) {
+                this.stopAutoRefresh(); // 先停止旧的定时器
+                
+                if (!this.properties["auto_refresh"]) {
+                    return;
+                }
+
+                // 计算当前组的哈希值（用于检测变化）
+                const updateGroupsHash = () => {
+                    if (!app.graph || !app.graph._groups) return "";
+                    const groups = app.graph._groups || [];
+                    // 不仅检查组的基本信息，还检查组内节点的状态
+                    const hashData = groups.map(g => {
+                        const nodes = this.getGroupNodes(g, app);
+                        const nodeStates = nodes.map(n => ({
+                            id: n.id,
+                            mode: n.mode || 0
+                        }));
+                        return {
+                            title: g.title,
+                            pos: g.pos,
+                            size: g.size,
+                            nodes: nodeStates
+                        };
+                    });
+                    return JSON.stringify(hashData);
+                };
+
+                this._lastGroupsHash = updateGroupsHash();
+
+                // 每 500ms 检查一次组的变化
+                this._autoRefreshTimer = setInterval(() => {
+                    if (!app.graph || !this.properties["auto_refresh"]) {
+                        this.stopAutoRefresh();
+                        return;
+                    }
+
+                    const currentHash = updateGroupsHash();
+                    if (currentHash !== this._lastGroupsHash) {
+                        this._lastGroupsHash = currentHash;
+                        this.refreshGroupWidgets(app);
+                    }
+                }, 500);
+            };
+
+            // 🛑 停止实时刷新
+            nodeType.prototype.stopAutoRefresh = function() {
+                if (this._autoRefreshTimer) {
+                    clearInterval(this._autoRefreshTimer);
+                    this._autoRefreshTimer = null;
+                }
+            };
+
+            // 🧹 清理定时器（节点删除时）
+            const onRemoved = nodeType.prototype.onRemoved;
+            nodeType.prototype.onRemoved = function() {
+                this.stopAutoRefresh();
+                if (onRemoved) onRemoved.apply(this, arguments);
+            };
+
+            // 🔄 节点配置恢复时，恢复实时刷新状态和固定状态
+            const onConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onConfigure = function() {
+                const r = onConfigure ? onConfigure.apply(this, arguments) : undefined;
+                
+                // 恢复固定状态
+                if (this.properties && this.properties["fixed_groups"]) {
+                    this.fixedGroupTitles = new Set(this.properties["fixed_groups"]);
+                } else {
+                    this.fixedGroupTitles = new Set();
+                    this.properties["fixed_groups"] = [];
+                }
+                
+                // 恢复实时刷新状态
+                if (this.properties && this.properties["auto_refresh"]) {
+                    setTimeout(() => {
+                        if (app.graph) {
+                            this.startAutoRefresh(app);
+                        }
+                    }, 100);
+                } else {
+                    this.stopAutoRefresh();
+                }
+                
+                // 刷新列表以显示恢复的固定状态
+                setTimeout(() => {
+                    if (app.graph) {
+                        this.refreshGroupWidgets(app);
+                    }
+                }, 200);
+                
+                return r;
             };
 
             // 🔄 刷新列表
@@ -50,6 +161,13 @@ app.registerExtension({
                 }
 
                 const groups = app.graph._groups || [];
+                
+                // 清理已删除组的固定状态（保持数据一致性）
+                const existingGroupTitles = new Set(groups.map(g => g.title).filter(t => t));
+                const fixedGroupsToKeep = Array.from(this.fixedGroupTitles).filter(title => existingGroupTitles.has(title));
+                this.fixedGroupTitles = new Set(fixedGroupsToKeep);
+                this.properties["fixed_groups"] = fixedGroupsToKeep;
+                
                 const nameCounts = {};
 
                 groups.forEach(g => {
@@ -201,6 +319,8 @@ app.registerExtension({
                                 } else {
                                     node.fixedGroupTitles.delete(this._targetGroup.title);
                                 }
+                                // 保存固定状态到 properties（用于工作流保存）
+                                node.properties["fixed_groups"] = Array.from(node.fixedGroupTitles);
                                 app.graph.setDirtyCanvas(true, true); 
                                 return true;
                             }

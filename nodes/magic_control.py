@@ -12,9 +12,6 @@ class MagicUniversalSwitch:
                 
                 # 最大同时开启数量
                 "max_active": ("INT", {"default": 1, "min": 1, "max": 99, "step": 1}),
-                
-                # 刷新按钮
-                "refresh": ("BOOLEAN", {"default": True, "label_on": "♻️ 刷新列表 (Refresh)", "label_off": "♻️ 刷新列表 (Refresh)"}),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
