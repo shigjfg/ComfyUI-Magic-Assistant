@@ -17,9 +17,12 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > 1. **Update / 更新**: Magic Multi-Group Switch - 万能禁用/忽略多框节点优化 / Node Group Control Optimization
 >    * Changed update button to click-to-refresh functionality / 修改更新按钮为点击刷新功能
 >    * Added real-time node group update option in property panel / 在属性面板也可以开启实时更新节点组功能
+>    * Added automatic saving of node group pinning information / 新增自动保存节点组固定信息功能
+>    * Node group pinning persists after reopening workflows / 节点组固定信息会在重开工作流后保持，无需重新固定
 >    * Improved user experience for managing node groups / 优化节点组管理体验
 >    * 修改更新按钮为点击刷新功能
 >    * 在属性面板也可以开启实时更新节点组功能
+>    * 新增自动保存节点组固定信息功能，重开工作流后无需重新固定
 >    * 优化节点组管理体验
 
 > 2. **New Feature / 新增功能**: Magic Power LoRA Loader - SDNQ Model Support / SDNQ 模型支持
@@ -233,10 +236,12 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **One-Click Toggle**: Switch entire workflows on or off with a single boolean input.
 * **Click-to-Refresh**: Update button changed to click-to-refresh functionality for better control.
 * **Real-time Updates**: Option to enable real-time node group updates in property panel.
+* **Auto-Save Pinning**: Node group pinning information is automatically saved and persists after reopening workflows.
 * **群组管理**: 快速启用、禁用或绕过指定节点组。
 * **一键开关**: 通过简单的布尔值输入，控制整条工作流的通断。
 * **点击刷新**: 更新按钮改为点击刷新功能，提供更好的控制体验。
 * **实时更新**: 在属性面板可以开启实时更新节点组功能。
+* **自动保存固定**: 节点组固定信息会自动保存，重开工作流后无需重新固定。
 
 </details>
 
