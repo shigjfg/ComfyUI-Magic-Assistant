@@ -12,7 +12,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > Latest Update / 最新更新：2026-02-08
 
-> **V1.1.8 版本介绍 / Version Introduction** 2026-02-08
+> **V1.1.9 版本介绍 / Version Introduction** 2026-02-08
 
 > 1. **New Feature / 新增功能**: Magic SDNQ Loader & Sampler - SDNQ 独立模型加载节点与采样器
 >    * 独立的 SDNQ 模型加载节点和采样器节点，采样方式与 LoRA 加载方式贴近 ComfyUI 官方
