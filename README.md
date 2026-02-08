@@ -19,10 +19,12 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * SDNQ 模型自带 model、clip、vae，可灵活搭配其他节点
 >    * 强力 LoRA 加载器新增 SDNQ 模式，在设置中切换即可支持 SDNQ 模型
 >    * 按照 SDNQ 技术源仓库教程配置环境后即可使用
+>    * SDNQ 的详细功能和工作流请参阅 [节点介绍](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器)
 >    * Standalone SDNQ model loader and sampler nodes, sampling and LoRA loading similar to official ComfyUI
 >    * SDNQ models include model, clip, vae; can be combined with other nodes
 >    * Magic Power LoRA Loader adds SDNQ mode; switch in settings to support SDNQ models
 >    * Follow SDNQ technical source repo tutorial for environment setup
+>    * For detailed SDNQ features and workflow, see [Node Introduction](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器)
 
 > 2. **Update / 更新**: Magic Power LoRA Loader - 节点最小尺寸限制
 >    * 设置节点最小宽高为 470×300，防止加载时权重修改按钮不可见或 UI 溢出
@@ -350,17 +352,14 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 #### SDNQ 相关仓库说明 / SDNQ Repository Reference
 
-* **ComfyUI SDNQ 实现仓库**（本插件 SDNQ 功能基于此）：[comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) —— 首个实现 ComfyUI 使用 SDNQ 的节点，持续更新中
-* **SDNQ 技术源仓库**（环境配置参考）：[sdnq](https://github.com/Disty0/sdnq) —— SDNQ 量化技术的原始实现
-
-* **ComfyUI SDNQ implementation** (this plugin is based on): [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) — First ComfyUI SDNQ node implementation, actively maintained
-* **SDNQ technical source** (for environment setup): [sdnq](https://github.com/Disty0/sdnq) — Original SDNQ quantization implementation
+* **ComfyUI SDNQ 主分支仓库**（本插件 SDNQ 功能基于此）：[comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) —— 首个实现 ComfyUI 使用 SDNQ 的节点，持续更新中。副分支 comfyui-sdnq-splited 为 fork 已停止更新；sdnq 为 SDNQ 技术源仓库，三者勿混淆。
+* **ComfyUI SDNQ main branch** (this plugin is based on): [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) — First ComfyUI SDNQ node implementation, actively maintained. Fork comfyui-sdnq-splited is no longer updated; sdnq is the technical source. Do not confuse the three.
 
 #### 为什么选择本插件的 SDNQ 方案？/ Why This Approach?
 
-本插件基于 [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) 主分支的代码实现 SDNQ 功能。采用**独立的模型加载节点 + 采样器节点**设计，采样方式与 LoRA 加载方式贴近 ComfyUI 官方，更符合 ComfyUI 用户的使用习惯。SDNQ 模型本身自带 model、clip、vae，天然适合拆分为独立加载节点和采样器节点。同时，**强力 LoRA 加载器**已适配 SDNQ 模型，只需在设置中将 LoRA 加载模式切换为 SDNQ 即可。本插件的 SDNQ 支持**所有已适配的模型**，不限于单一架构。按照 [SDNQ 技术源仓库](https://github.com/Disty0/sdnq) 的教程配置好环境后，即可用本插件节点更简单便捷地使用 SDNQ 模型。
+本插件基于 [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) 主分支的代码实现 SDNQ 功能。采用**独立的模型加载节点 + 采样器节点**设计，采样方式与 LoRA 加载方式贴近 ComfyUI 官方，更符合 ComfyUI 用户的使用习惯。SDNQ 模型本身自带 model、clip、vae，天然适合拆分为独立加载节点和采样器节点。同时，**强力 LoRA 加载器**已适配 SDNQ 模型，只需在设置中将 LoRA 加载模式切换为 SDNQ 即可。本插件的 SDNQ 支持**所有已适配的模型**，不限于单一架构。按照下方安装说明配置好 SDNQ 环境后，即可用本插件节点更简单便捷地使用 SDNQ 模型。
 
-This plugin implements SDNQ based on the [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) main branch code. It uses **standalone model loader + sampler nodes**, with sampling and LoRA loading similar to official ComfyUI. SDNQ models include model, clip, and vae, so they fit naturally into separate loader and sampler nodes. **Magic Power LoRA Loader** supports SDNQ; switch to SDNQ mode in settings. This plugin's SDNQ supports **all adapted models**, not limited to a single architecture. After configuring the environment per the [SDNQ technical source](https://github.com/Disty0/sdnq) tutorial, you can use SDNQ models easily.
+This plugin implements SDNQ based on the [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) main branch code. It uses **standalone model loader + sampler nodes**, with sampling and LoRA loading similar to official ComfyUI. SDNQ models include model, clip, and vae, so they fit naturally into separate loader and sampler nodes. **Magic Power LoRA Loader** supports SDNQ; switch to SDNQ mode in settings. This plugin's SDNQ supports **all adapted models**, not limited to a single architecture. After configuring the environment per the installation guide below, you can use SDNQ models easily.
 
 #### 使用本插件运行 SDNQ 的优势 / Advantages
 
