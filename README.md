@@ -1,6 +1,6 @@
 # ✨ Magic Assistant for ComfyUI
 
-**A powerful 8-in-1 suite designed to simplify your workflow.**
+**A powerful 10-in-1 suite designed to simplify your workflow.**
 **一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
 
 Our goal is to replace complex node chains with single, intelligent nodes.
@@ -10,7 +10,23 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：2026-01-31
+> Latest Update / 最新更新：2026-02-08
+
+> **V1.1.8 版本介绍 / Version Introduction** 2026-02-08
+
+> 1. **New Feature / 新增功能**: Magic SDNQ Loader & Sampler - SDNQ 独立模型加载节点与采样器
+>    * 独立的 SDNQ 模型加载节点和采样器节点，采样方式与 LoRA 加载方式贴近 ComfyUI 官方
+>    * SDNQ 模型自带 model、clip、vae，可灵活搭配其他 Flux 节点
+>    * 强力 LoRA 加载器新增 SDNQ 模式，在设置中切换即可支持 SDNQ 模型
+>    * 按照源仓库教程配置环境后即可使用
+>    * Standalone SDNQ model loader and sampler nodes, sampling and LoRA loading similar to official ComfyUI
+>    * SDNQ models include model, clip, vae; can be combined with other Flux nodes
+>    * Magic Power LoRA Loader adds SDNQ mode; switch in settings to support SDNQ models
+>    * Follow source repo tutorial for environment setup
+
+> 2. **Update / 更新**: Magic Power LoRA Loader - 节点最小尺寸限制
+>    * 设置节点最小宽高为 470×300，防止加载时权重修改按钮不可见或 UI 溢出
+>    * Set minimum node size to 470×300 to prevent weight control being hidden or UI overflow
 
 > **V1.1.7 版本介绍 / Version Introduction** 2026-01-31
 
@@ -45,6 +61,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 兼容 [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited) 仓库
 >    * 支持来自 [HuggingFace SDNQ 集合](https://huggingface.co/collections/Disty0/sdnq) 的 SDNQ 量化模型
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.1.5 版本介绍 / Version Introduction** 2026-01-29
 
 > 1. **New Feature / 新增功能**: Magic Power LoRA Loader - INT8 Mode Support / INT8 模式支持
@@ -64,9 +83,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 新增设置按钮，可配置 INT8 模式
 >    * 如果 INT8 加载失败，自动回退到标准模式
 >    * 所有 INT8 LoRA 功能已整合到节点中，无需外部依赖
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.1.4 版本介绍 / Version Introduction** 2026-01-14
 
@@ -289,7 +305,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
 * **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
-* **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models compatible with [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited). Supports SDNQ quantized models from [HuggingFace SDNQ Collection](https://huggingface.co/collections/Disty0/sdnq).
+* **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器).
 * **可视化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
 * **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
 * **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
@@ -301,7 +317,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
 * **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
-* **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持，兼容 [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited)。支持来自 [HuggingFace SDNQ 集合](https://huggingface.co/collections/Disty0/sdnq) 的 SDNQ 量化模型。
+* **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器) 配合使用。
 
 </details>
 
@@ -326,6 +342,61 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 </details>
 
+### 9. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ Sampler (SDNQ 模型加载器与采样器)
+> **Standalone SDNQ model loading and sampling, ComfyUI-style workflow.** / **独立的 SDNQ 模型加载与采样，贴近 ComfyUI 官方工作流。**
+
+<details>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
+
+#### SDNQ 相关仓库 / SDNQ Repositories
+
+* **主仓库 / Main repo**: [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq)
+* **分支仓库 / Fork repo**: [comfyui-sdnq-splited](https://github.com/ussoewwin/comfyui-sdnq-splited)
+
+#### 为什么选择本插件的 SDNQ 方案？/ Why This Approach?
+
+SDNQ 的其他分支仓库（如 [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq)）更新较慢（约 12 月），难以跟上原仓库进度。本插件采用**独立的模型加载节点 + 采样器节点**设计，采样方式与 LoRA 加载方式贴近 ComfyUI 官方，更符合 ComfyUI 用户的使用习惯。SDNQ 模型本身自带 model、clip、vae，天然适合拆分为独立加载节点和采样器节点。同时，**强力 LoRA 加载器**已适配 SDNQ 模型，只需在设置中将 LoRA 加载模式切换为 SDNQ 即可。按照 [SDNQ 源仓库](https://github.com/Disty0/sdnq) 的教程配置好环境后，即可用本插件节点更简单便捷地使用 SDNQ 大部分模型。
+
+Other SDNQ forks (e.g. [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq)) are updated slowly and lag behind the upstream. This plugin uses **standalone model loader + sampler nodes**, with sampling and LoRA loading similar to official ComfyUI. SDNQ models include model, clip, and vae, so they fit naturally into separate loader and sampler nodes. **Magic Power LoRA Loader** supports SDNQ; switch to SDNQ mode in settings. After configuring the environment per the [SDNQ source repo](https://github.com/Disty0/sdnq) tutorial, you can use most SDNQ models easily.
+
+#### 使用本插件运行 SDNQ 的优势 / Advantages
+
+* **模型与采样器独立**：无 LoRA 数量限制，可自由搭配其他 Flux 节点进行复杂操作
+* **支持丰富工作流**：局部重绘、图生图、文生图、深度图控制、姿态图控制等
+* **采样逻辑接近官方**：仿照官方 KSampler 的生成逻辑
+* **实时进度与预览**：可实时显示采样进度和预览图，与官方 K 采样器几乎一致
+* **Standalone model & sampler**: No LoRA limit; freely combine with other Flux nodes
+* **Rich workflows**: Inpainting, img2img, txt2img, depth control, pose control, etc.
+* **Official-like sampling**: Logic follows official KSampler
+* **Real-time progress & preview**: Displays sampling progress and preview like official KSampler
+
+#### ⚠️ 注意事项 / Notes
+
+* **当前仅支持图像**：因配置限制，暂未适配视频模型，仅支持图像生成和图像编辑模型。视频模型适配将在后续版本考虑。
+* **Image models only**: Video model support is not yet implemented; currently supports image generation and image editing models only.
+
+#### 简易文生图工作流参考 / Simple Text-to-Image Workflow
+
+可直接下载图片导入 ComfyUI 使用。You can download and import into ComfyUI.
+
+<img width="3398" height="2395" alt="SDNQ Text-to-Image Workflow" src="https://github.com/user-attachments/assets/7fa5b931-adde-4765-ab8c-2270c218bf9f" />
+
+**效果预览 / Result Preview**
+
+<img width="1437" height="898" alt="SDNQ Text-to-Image Result" src="https://github.com/user-attachments/assets/94e1d2f3-fc18-4527-9b15-a48a17b0bc55" />
+
+#### 简易图片编辑工作流参考 / Simple Image Editing Workflow
+
+可直接下载图片导入 ComfyUI 使用。You can download and import into ComfyUI.
+
+<img width="3870" height="2709" alt="SDNQ Image Editing Workflow" src="https://github.com/user-attachments/assets/173acf73-d075-4abd-b229-28bd23c60c97" />
+
+**效果预览 / Result Preview**
+
+<img width="2154" height="1078" alt="SDNQ Image Editing Result" src="https://github.com/user-attachments/assets/7cadf12c-3aac-45af-805a-ac40aefbdd21" />
+
+</details>
+
 ---
 
 ## 📦 Installation / 安装
@@ -343,6 +414,12 @@ Our goal is to replace complex node chains with single, intelligent nodes.
     ```
 
 3.  **Restart ComfyUI / 重启 ComfyUI**.
+
+**使用 SDNQ 节点 / Using SDNQ Nodes**
+
+若使用 Magic SDNQ Loader 与 Magic SDNQ Sampler，请按照 [SDNQ 源仓库](https://github.com/Disty0/sdnq) 的教程配置环境，并安装 `requirements-sdnq.txt` 中的依赖。
+
+To use Magic SDNQ Loader and Magic SDNQ Sampler, follow the [SDNQ source repo](https://github.com/Disty0/sdnq) tutorial for environment setup and install dependencies from `requirements-sdnq.txt`.
 
 ---
 

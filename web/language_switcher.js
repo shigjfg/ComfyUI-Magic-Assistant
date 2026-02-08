@@ -150,7 +150,29 @@ const loraLoaderTranslations = {
     "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式": { zh: "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式", en: "Select SDNQ quantized model (DiffusionPipeline) LoRA loading method" },
     "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式。如果模型不是 SDNQ 模型，建议使用默认模式。": { zh: "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式。如果模型不是 SDNQ 模型，建议使用默认模式。", en: "Select SDNQ quantized model (DiffusionPipeline) LoRA loading method. If the model is not SDNQ, it is recommended to use the default mode." },
     "SDNQ 模式": { zh: "SDNQ 模式", en: "SDNQ Mode" },
-    "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）": { zh: "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）", en: "Use diffusers PEFT adapter system to load LoRAs, supports parallel application of multiple LoRAs, suitable for SDNQ quantized models (DiffusionPipeline)" }
+    "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）": { zh: "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）", en: "Use diffusers PEFT adapter system to load LoRAs, supports parallel application of multiple LoRAs, suitable for SDNQ quantized models (DiffusionPipeline)" },
+
+    // SDNQ 缓存提示（弹窗）
+    "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。": { zh: "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。", en: "If you Bypass a middle loader or change LoRA selection in a chain, please Clear Queue before running to avoid using cached output." }
+};
+
+// 节点翻译映射表 - Magic SDNQ Loader & Sampler
+const sdnqTranslations = {
+    // SDNQ Loader
+    "--Custom Model--": { zh: "--自定义模型--", en: "--Custom Model--" },
+    "gpu=全显存(24GB+), balanced=CPU卸载(12-16GB), lowvram=顺序卸载(8GB)": { zh: "gpu=全显存(24GB+), balanced=CPU卸载(12-16GB), lowvram=顺序卸载(8GB)", en: "gpu=full VRAM (24GB+), balanced=CPU offload (12-16GB), lowvram=sequential offload (8GB)" },
+    "模型未缓存时自动从 HuggingFace 下载": { zh: "模型未缓存时自动从 HuggingFace 下载", en: "Auto-download from HuggingFace when model not cached" },
+    "启用 xFormers 注意力优化。未安装时会自动回退到 SDPA，不会报错": { zh: "启用 xFormers 注意力优化。未安装时会自动回退到 SDPA，不会报错", en: "Enable xFormers attention. Falls back to SDPA if not installed" },
+    "大图时 VAE 分块处理省显存": { zh: "大图时 VAE 分块处理省显存", en: "VAE tiling for large images to save VRAM" },
+    // SDNQ Sampler
+    "来自 Magic SDNQ Loader 或 LoRA Loader": { zh: "来自 Magic SDNQ Loader 或 LoRA Loader", en: "From Magic SDNQ Loader or LoRA Loader" },
+    "正面条件": { zh: "正面条件", en: "Positive conditioning" },
+    "负面条件": { zh: "负面条件", en: "Negative conditioning" },
+    "空 latent": { zh: "空 latent", en: "Empty latent" },
+    "FLUX/SD3/Qwen 用 FlowMatch; SDXL/SD1.5 用 DPMSolver/Euler": { zh: "FLUX/SD3/Qwen 用 FlowMatch; SDXL/SD1.5 用 DPMSolver/Euler", en: "FLUX/SD3/Qwen: FlowMatch; SDXL/SD1.5: DPMSolver/Euler" },
+    "降噪": { zh: "降噪", en: "Denoise" },
+    "预览方式": { zh: "预览方式", en: "Preview" },
+    "auto=自动, latent2rgb=快, taesd=慢但更清晰, none=不预览": { zh: "auto=自动, latent2rgb=快, taesd=慢但更清晰, none=不预览", en: "auto=auto, latent2rgb=fast, taesd=slower but clearer, none=no preview" }
 };
 
 // 节点翻译映射表 - Magic Logic Compute
@@ -428,7 +450,9 @@ const allTranslations = {
     "MagicPhotopeaNode": photopeaTranslations,
     "MagicResolutionResize": resizeTranslations,
     "MagicResolution": resizeTranslations,
-    "MagicPromptReplace": promptReplaceTranslations
+    "MagicPromptReplace": promptReplaceTranslations,
+    "MagicSDNQLoader": sdnqTranslations,
+    "MagicSDNQSampler": sdnqTranslations
 };
 
 // 翻译缓存（避免重复查找）
@@ -1168,6 +1192,16 @@ const nodeTranslations = {
     "MagicResolution": {
         zh: "📐 分辨率输出器 Magic Resolution Output",
         en: "📐 Magic Resolution Output"
+    },
+    // 节点9: Magic SDNQ Loader
+    "MagicSDNQLoader": {
+        zh: "📦 SDNQ模型加载器 Magic SDNQ Model Loader",
+        en: "📦 Magic SDNQ Model Loader"
+    },
+    // 节点10: Magic SDNQ Sampler
+    "MagicSDNQSampler": {
+        zh: "🎲 SDNQ采样器 Magic SDNQ Sampler",
+        en: "🎲 Magic SDNQ Sampler"
     }
 };
 
@@ -1339,6 +1373,9 @@ function interceptAppendChild() {
                                               parentText.includes('LLM服务') || parentText.includes('LLM Service') ||
                                               parentText.includes('Magic Prompt') || parentText.includes('Magic Assistant')) {
                                         detectedNodeType = "MagicPromptReplace";
+                                    } else if (parentText.includes('SDNQ') || parentText.includes('降噪') || parentText.includes('预览方式') ||
+                                              parentText.includes('SDNQ Model') || parentText.includes('SDNQ Sampler')) {
+                                        detectedNodeType = parentText.includes('Sampler') || parentText.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
                                     }
                                     
                                     Array.from(label.childNodes).forEach(node => {
@@ -1451,6 +1488,9 @@ function interceptAppendChild() {
                                       parentText.includes('LLM服务') || parentText.includes('LLM Service') ||
                                       parentText.includes('Magic Prompt') || parentText.includes('Magic Assistant')) {
                                 detectedNodeType = "MagicPromptReplace";
+                            } else if (parentText.includes('SDNQ') || parentText.includes('降噪') || parentText.includes('预览方式') ||
+                                      parentText.includes('SDNQ Model') || parentText.includes('SDNQ Sampler')) {
+                                detectedNodeType = parentText.includes('Sampler') || parentText.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
                             }
                             
                             // 跳过URL和路径
@@ -1548,6 +1588,8 @@ function setupTranslationInterceptor() {
                                 const text = target.textContent || '';
                                 if (text.includes('逻辑') || text.includes('Logic') || text.includes('编辑器') || text.includes('Editor')) {
                                     nodeType = "MagicLogicCompute";
+                                } else if (text.includes('SDNQ') || text.includes('降噪') || text.includes('预览方式') || text.includes('正面条件') || text.includes('负面条件')) {
+                                    nodeType = text.includes('Sampler') || text.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
                                 }
                                 
                                 if (target.textContent) {
@@ -1653,7 +1695,9 @@ function isLoraNodeElement(element) {
             '打开图库', 'Open Gallery', '打开编辑器', 'Open Editor', '图库', 'Gallery',
             '批量管理', 'Batch Manage', '清空缓存', 'Clear Cache', '固定', 'Pin', '取消固定', 'Unpin',
             '删除选中', 'Delete Selected', '退出编辑', 'Exit Edit Mode', '保存并发送', 'Save and Send',
-            'Photopea', 'Magic Photopea', 'Magic Gallery'
+            'Photopea', 'Magic Photopea', 'Magic Gallery',
+            // SDNQ 相关
+            'SDNQ', 'SDNQ模型', 'SDNQ采样', '降噪', '预览方式', 'Magic SDNQ', '正面条件', '负面条件'
         ];
         return keywords.some(keyword => text.includes(keyword));
     };
@@ -1707,6 +1751,8 @@ function translateElementRecursive(element, lang, nodeType = null) {
             if (text.includes('逻辑') || text.includes('Logic') || text.includes('编辑器') || text.includes('Editor') || 
                 text.includes('脚本') || text.includes('Script') || text.includes('Magic Script')) {
                 nodeType = "MagicLogicCompute";
+            } else if (text.includes('SDNQ') || text.includes('降噪') || text.includes('预览方式') || text.includes('正面条件') || text.includes('负面条件')) {
+                nodeType = text.includes('Sampler') || text.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
             } else {
                 // 默认是LoRA节点
                 nodeType = "MagicPowerLoraLoader";
@@ -2443,7 +2489,10 @@ function updateAllUITexts(lang) {
                         parent.textContent.includes('Fetch') ||
                         parent.textContent.includes('爬取') ||
                         parent.textContent.includes('下载') ||
-                        parent.textContent.includes('Download')
+                        parent.textContent.includes('Download') ||
+                        parent.textContent.includes('SDNQ') ||
+                        parent.textContent.includes('降噪') ||
+                        parent.textContent.includes('预览方式')
                     )) {
                         isRelevant = true;
                         break;
@@ -2461,6 +2510,8 @@ function updateAllUITexts(lang) {
             const parentText = label.textContent || '';
             if (parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor')) {
                 detectedNodeType = "MagicLogicCompute";
+            } else if (parentText.includes('SDNQ') || parentText.includes('降噪') || parentText.includes('预览方式') || parentText.includes('正面条件') || parentText.includes('负面条件')) {
+                detectedNodeType = parentText.includes('Sampler') || parentText.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
             }
             
             // 翻译label内的文本节点

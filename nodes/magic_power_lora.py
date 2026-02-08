@@ -266,26 +266,30 @@ class MagicPowerLoraLoader:
         except Exception:
             return False
 
-    # 检测模型是否为 SDNQ 模型（DiffusionPipeline）
+    # 检测模型是否为 SDNQ 模型（DiffusionPipeline 或 Magic SDNQ Loader 的 wrapper）
     @staticmethod
     def is_sdnq_model(model):
-        """检测模型是否为 SDNQ 模型（diffusers DiffusionPipeline）"""
+        """检测模型是否为 SDNQ 模型（diffusers DiffusionPipeline 或 Magic SDNQ Loader 的 pipeline wrapper）"""
         try:
-            # 尝试导入 diffusers
             from diffusers import DiffusionPipeline
-            
-            # 检查是否为 DiffusionPipeline 实例
+
+            # 直接是 DiffusionPipeline
             if isinstance(model, DiffusionPipeline):
                 return True
-            
-            # 检查是否有 DiffusionPipeline 的特征属性
+
+            # Magic SDNQ Loader 的 SDNQModelWrapper（有 get_pipeline 返回 pipeline）
+            if hasattr(model, 'get_pipeline'):
+                pipeline = model.get_pipeline()
+                if isinstance(pipeline, DiffusionPipeline):
+                    return True
+
+            # 有 DiffusionPipeline 特征属性
             if hasattr(model, 'unet') or hasattr(model, 'transformer'):
                 if hasattr(model, 'text_encoder') or hasattr(model, 'vae'):
                     return True
-            
+
             return False
         except ImportError:
-            # diffusers 未安装，不是 SDNQ 模型
             return False
         except Exception:
             return False
@@ -377,7 +381,22 @@ class MagicPowerLoraLoader:
             print(f"💡 [MagicPowerLora] 检测到 INT8 模型，建议在设置中启用 INT8 模式以获得更好的兼容性")
 
         mode_str = f"{int8_mode}" if int8_mode != "none" else (f"{sdnq_mode}" if sdnq_mode != "none" else "standard")
-        print(f"🚀 [MagicPowerLora] Processing {len(items_to_process)} Loras... (Mode: {mode_str})")
+        # SDNQ 链式：本节点 0 个时提示透传；本节点 >0 个时正常
+        upstream_count = 0
+        if sdnq_mode == "sdnq" and is_sdnq and len(items_to_process) == 0:
+            try:
+                pipe = out_model.get_pipeline() if hasattr(out_model, 'get_pipeline') else out_model
+                if getattr(pipe, 'get_list_adapters', None):
+                    existing = pipe.get_list_adapters()
+                    upstream_count = len(existing.get("transformer", existing.get("unet", [])) or [])
+            except Exception:
+                pass
+        if len(items_to_process) == 0 and upstream_count > 0:
+            print(f"🚀 [MagicPowerLora] Processing 0 Loras (链式：保留上游 {upstream_count} 个)... (Mode: {mode_str})")
+        elif len(items_to_process) == 0:
+            print(f"🚀 [MagicPowerLora] Processing 0 Loras... (Mode: {mode_str})")
+        else:
+            print(f"🚀 [MagicPowerLora] Processing {len(items_to_process)} Loras... (Mode: {mode_str})")
 
         # 根据模式选择加载方式
         if int8_mode == "stochastic" and INT8_AVAILABLE:
@@ -556,127 +575,147 @@ class MagicPowerLoraLoader:
 
         elif sdnq_mode == "sdnq" and is_sdnq:
             # SDNQ 模式 - 整合的 SDNQ LoRA 加载逻辑（用于 DiffusionPipeline）
+            # 基于 comfyui-sdnq 源文件的实现进行优化
             sdnq_success = False
             try:
                 from diffusers import DiffusionPipeline
+                diffusers_ok = True
             except ImportError:
-                print(f"❌ [MagicPowerLora] SDNQ 模式需要 diffusers 库，但未安装。回退到标准模式。")
-                sdnq_success = False
-            
-            if not sdnq_success:
-                # diffusers 未安装，回退到标准模式
-                pass
-            elif isinstance(out_model, DiffusionPipeline):
-                # 处理多个 LoRA，使用 adapter 系统
-                lora_adapters = []
-                lora_weights = []
-                
-                for idx, item in enumerate(items_to_process):
-                    lora_name = item.get("name")
-                    weight = float(item.get("weight", 1.0))
-                    if not lora_name: 
-                        continue
-                    
-                    lora_path = folder_paths.get_full_path("loras", lora_name)
-                    if lora_path is None:
-                        print(f"⚠️ [MagicPowerLora] Lora not found: {lora_name}")
-                        continue
-                    
-                    try:
-                        # 检查是本地文件还是 HuggingFace repo
-                        is_local_file = os.path.exists(lora_path) and os.path.isfile(lora_path)
-                        adapter_name = f"lora_{idx + 1}"
-                        
-                        if is_local_file:
-                            # 本地 .safetensors 文件
-                            lora_dir = os.path.dirname(lora_path)
-                            lora_file = os.path.basename(lora_path)
-                            
-                            out_model.load_lora_weights(
-                                lora_dir,
-                                weight_name=lora_file,
-                                adapter_name=adapter_name
-                            )
+                print(f"❌ [MagicPowerLora] SDNQ 模式需要 diffusers 库，但未安装。")
+                diffusers_ok = False
+
+            if diffusers_ok:
+                # 获取实际 pipeline（支持 Magic SDNQ Loader 的 wrapper）
+                pipeline = out_model.get_pipeline() if hasattr(out_model, 'get_pipeline') else out_model
+                if not isinstance(pipeline, DiffusionPipeline):
+                    print(f"   ⚠️ [MagicPowerLora] SDNQ 模式需要 DiffusionPipeline，当前 model: {type(out_model).__name__}, pipeline: {type(pipeline).__name__}")
+                elif isinstance(pipeline, DiffusionPipeline):
+                    print(f"   [SDNQ] Pipeline: {type(pipeline).__name__}，开始加载 {len(items_to_process)} 个 LoRA...")
+                    # 与标准模式一致：只追加本节点选择的 LoRA，不卸载、不用 metadata
+                    # pipeline 已含上游 adapters，本节点直接在其上追加；0 个时：有上游则透传，无上游则卸载（与 comfyui-sdnq 一致）
+                    if len(items_to_process) == 0:
+                        try:
+                            curr = pipeline.get_list_adapters()
+                            existing_adapters = list(curr.get("transformer", curr.get("unet", [])) or [])
+                        except Exception:
+                            existing_adapters = []
+                        if existing_adapters:
+                            print(f"   [SDNQ] 本节点未选 LoRA，透传上游")
                         else:
-                            # HuggingFace repo ID
-                            out_model.load_lora_weights(
-                                lora_path,
-                                adapter_name=adapter_name
-                            )
-                        
-                        lora_adapters.append(adapter_name)
-                        lora_weights.append(weight)
-                        
-                        print(f"   ✅ Applied (SDNQ): {lora_name} (strength: {weight})")
+                            if hasattr(pipeline, 'unload_lora_weights'):
+                                pipeline.unload_lora_weights()
+                                print(f"   [SDNQ] 本节点未选 LoRA，已卸载（与 comfyui-sdnq 一致）")
                         sdnq_success = True
-                        
-                    except Exception as e:
-                        print(f"   ❌ Failed (SDNQ): {lora_name} -> {e}")
-                        # 继续处理其他 LoRA，不中断
-                        continue
-                    
-                    if "tags" in item and item["tags"]:
-                        active_tags.append(str(item["tags"]))
-                    
-                    # 为每个lora尝试加载预览图
-                    img_path = self.get_preview_path(lora_name)
-                    if img_path:
+                    else:
+                        # 获取当前已加载的 adapters（上游）
                         try:
-                            i = Image.open(img_path).convert("RGB")
-                            i = np.array(i).astype(np.float32) / 255.0
-                            preview_tensor = torch.from_numpy(i)[None,]
-                            preview_images.append(preview_tensor)
+                            curr = pipeline.get_list_adapters()
+                            existing_adapters = list(curr.get("transformer", curr.get("unet", [])) or [])
+                        except Exception:
+                            existing_adapters = []
+                        lora_adapters = list(existing_adapters)
+                        lora_weights = [1.0] * len(existing_adapters)
+
+                    for idx, item in enumerate(items_to_process):
+                        lora_name = item.get("name", "").strip()
+                        weight = float(item.get("weight", 1.0))
+                        if not lora_name:
+                            continue
+                        lora_path = None
+                        try:
+                            lora_path = folder_paths.get_full_path("loras", lora_name) or folder_paths.get_full_path("loras", lora_name.replace("\\", "/"))
+                            if lora_path is None:
+                                lora_folders = folder_paths.get_folder_paths("loras") or []
+                                if lora_folders:
+                                    for lora_folder in lora_folders:
+                                        for name_variant in (lora_name, lora_name.replace("\\", "/"), lora_name.replace("/", "\\")):
+                                            potential_path = os.path.normpath(os.path.join(lora_folder, name_variant))
+                                            if os.path.isfile(potential_path):
+                                                lora_path = potential_path
+                                                break
+                                        if lora_path is not None:
+                                            break
+                                if lora_path is None and lora_folders:
+                                    fallback = os.path.normpath(os.path.join(lora_folders[0], lora_name))
+                                    lora_path = fallback if os.path.isfile(fallback) else None
+                        except Exception:
+                            pass
+                        if not lora_path or not os.path.isfile(lora_path):
+                            print(f"   ⚠️ [SDNQ] LoRA 未找到: {lora_name}")
+                            continue
+                        try:
+                            is_local_file = os.path.exists(lora_path) and os.path.isfile(lora_path)
+                            path_hash = abs(hash(os.path.normpath(lora_path))) % (10 ** 8)
+                            adapter_name = f"lora_{path_hash}_{idx}"
+                            # 若同路径已在上游加载，复用
+                            try:
+                                curr = pipeline.get_list_adapters()
+                                existing_list = list(curr.get("transformer", curr.get("unet", [])) or [])
+                            except Exception:
+                                existing_list = []
+                            reuse_name = next((a for a in existing_list if a.startswith(f"lora_{path_hash}_")), None)
+                            if reuse_name is not None:
+                                if reuse_name in lora_adapters:
+                                    lora_weights[lora_adapters.index(reuse_name)] = weight
+                                else:
+                                    lora_adapters.append(reuse_name)
+                                    lora_weights.append(weight)
+                                print(f"   [SDNQ] Reusing: {lora_name} (strength: {weight})")
+                                sdnq_success = True
+                                continue
+                            else:
+                                print(f"   [SDNQ] Loading ({adapter_name})... {lora_name} (strength: {weight})")
+                                if is_local_file:
+                                    pipeline.load_lora_weights(
+                                        os.path.dirname(lora_path),
+                                        weight_name=os.path.basename(lora_path),
+                                        adapter_name=adapter_name
+                                    )
+                                else:
+                                    pipeline.load_lora_weights(lora_path, adapter_name=adapter_name)
+                                lora_adapters.append(adapter_name)
+                                lora_weights.append(weight)
+                                print(f"   ✅ Applied (SDNQ): {lora_name} (strength: {weight})")
+                            sdnq_success = True
                         except Exception as e:
-                            print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
-                
-                # 一次性应用所有 adapters
-                if lora_adapters:
-                    try:
-                        out_model.set_adapters(lora_adapters, adapter_weights=lora_weights)
-                        print(f"   ✅ [SDNQ] {len(lora_adapters)} LoRA(s) applied to pipeline")
-                        sdnq_success = True
-                    except Exception as e:
-                        print(f"   ⚠️ [SDNQ] Failed to set adapters: {e}")
-                        # 回退到标准模式
-                        print(f"   🔄 [SDNQ] Falling back to standard mode...")
+                            import traceback
+                            print(f"   ❌ Failed (SDNQ): {lora_name}")
+                            traceback.print_exc()
+                            continue
+                        if "tags" in item and item.get("tags"):
+                            active_tags.append(str(item["tags"]))
+                        img_path = self.get_preview_path(lora_name)
+                        if img_path:
+                            try:
+                                i = Image.open(img_path).convert("RGB")
+                                i = np.array(i).astype(np.float32) / 255.0
+                                preview_tensor = torch.from_numpy(i)[None,]
+                                preview_images.append(preview_tensor)
+                            except Exception:
+                                pass
+
+                    if items_to_process and lora_adapters:
+                        try:
+                            pipeline.set_adapters(lora_adapters, adapter_weights=lora_weights)
+                            print(f"   ✅ [SDNQ] {len(lora_adapters)} LoRA(s) active")
+                            sdnq_success = True
+                        except Exception as e:
+                            print(f"   ⚠️ [SDNQ] Failed to set adapter weights: {e}")
+                            sdnq_success = False
+                    elif items_to_process and not lora_adapters:
+                        print(f"   ℹ️ [SDNQ] No LoRAs to load (本节点选择均加载失败)")
                         sdnq_success = False
-                else:
-                    print(f"   ℹ️ [SDNQ] No LoRAs to load")
-                    sdnq_success = False
             
-            # 如果 SDNQ 模式失败，需要回退到标准模式
+            # 如果 SDNQ 模式失败：SDNQ 模型（DiffusionPipeline）与 ComfyUI 标准 load_lora_for_models 不兼容，
+            # 标准模式需要 model.model_config，而 Flux2Transformer2DModel 等 diffusers 模型没有此属性。
+            # 因此不进行回退，仅输出提示，模型保持无 LoRA 状态。
             if not sdnq_success:
-                # 在 elif 分支内无法跳转到 else，所以直接执行标准模式逻辑
-                for item in items_to_process:
-                    lora_name = item.get("name")
-                    weight = float(item.get("weight", 1.0))
-                    if not lora_name: continue
-
-                    lora_path = folder_paths.get_full_path("loras", lora_name)
-                    if lora_path is None:
-                        print(f"⚠️ [MagicPowerLora] Lora not found: {lora_name}")
-                        continue
-
-                    try:
-                        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
-                        out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
-                        print(f"   ✅ Applied (Fallback from SDNQ): {lora_name}")
-                    except Exception as e:
-                        print(f"   ❌ Failed (Fallback from SDNQ): {lora_name} -> {e}")
-
-                    if "tags" in item and item["tags"]:
-                        active_tags.append(str(item["tags"]))
-
-                    # 为每个lora尝试加载预览图
-                    img_path = self.get_preview_path(lora_name)
-                    if img_path:
-                        try:
-                            i = Image.open(img_path).convert("RGB")
-                            i = np.array(i).astype(np.float32) / 255.0
-                            preview_tensor = torch.from_numpy(i)[None,]
-                            preview_images.append(preview_tensor)
-                        except Exception as e:
-                            print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
+                print(f"   ⚠️ [MagicPowerLora] SDNQ LoRA 加载失败，无法回退到标准模式（SDNQ 模型与 ComfyUI 标准 LoRA 不兼容）")
+                print(f"   💡 Troubleshooting（与 comfyui-sdnq 源节点一致）：")
+                print(f"      1. 确认 LoRA 文件存在（.safetensors），路径格式与 loras 文件夹内一致")
+                print(f"      2. 确认 LoRA 与当前 SDNQ 模型架构兼容（Flux2Klein 需 Flux2Klein 专用 LoRA）")
+                print(f"      3. 可在 comfyui-sdnq 独立采样器中验证该 LoRA 是否能加载")
+                print(f"      4. 或尝试不使用 LoRA 运行")
         
         else:
             # 标准模式（默认）或回退模式

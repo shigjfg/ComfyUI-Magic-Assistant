@@ -25,7 +25,18 @@ app.registerExtension({
     name: "Magic.Power.Lora",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === NODE_NAME) {
-            
+            const MPL_MIN_W = 470; //设置强力lora加载器节点的最小宽高
+            const MPL_MIN_H = 300;
+
+            // 覆盖 computeSize：强制最小尺寸（ComfyUI 前端会调用此方法）
+            const origComputeSize = nodeType.prototype.computeSize;
+            nodeType.prototype.computeSize = function() {
+                const result = origComputeSize ? origComputeSize.apply(this, arguments) : (this.size || [MPL_MIN_W, MPL_MIN_H]);
+                const w = Math.max(Array.isArray(result) ? result[0] : MPL_MIN_W, MPL_MIN_W);
+                const h = Math.max(Array.isArray(result) ? result[1] : MPL_MIN_H, MPL_MIN_H);
+                return [w, h];
+            };
+
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
@@ -74,7 +85,17 @@ app.registerExtension({
                 }
 
                 this._stackWidget = stackWidget;
-                this.size = [400, 600];
+                this.size = [MPL_MIN_W, MPL_MIN_H];
+                this.minWidth = MPL_MIN_W;
+                this.minHeight = MPL_MIN_H;
+
+                // onResize：用户拖拽调整时强制不小于最小尺寸
+                this.onResize = function(size) {
+                    if (size && size[0] !== undefined && size[1] !== undefined) {
+                        size[0] = Math.max(size[0], MPL_MIN_W);
+                        size[1] = Math.max(size[1], MPL_MIN_H);
+                    }
+                };
 
                 this.createDOMInterface();
                 return r;
@@ -4077,6 +4098,15 @@ app.registerExtension({
                     
                     // 触发更新
                     this.updateWidget();
+                    
+                    // SDNQ 模式缓存提示：首次保存时弹窗提醒
+                    if (selectedSdnqMode === "sdnq") {
+                        const hintKey = "mpl_sdnq_cache_hint_shown";
+                        if (!sessionStorage.getItem(hintKey)) {
+                            sessionStorage.setItem(hintKey, "1");
+                            alert("链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。");
+                        }
+                    }
                     
                     document.body.removeChild(overlay);
                 };

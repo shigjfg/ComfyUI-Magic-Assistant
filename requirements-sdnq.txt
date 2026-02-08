@@ -1,0 +1,6 @@
+# Optional: Magic SDNQ Loader dependencies
+# Install with: pip install -r requirements-sdnq.txt
+# Requires ComfyUI's existing diffusers/transformers.
+
+sdnq>=0.1.0
+huggingface-hub>=0.20.0
