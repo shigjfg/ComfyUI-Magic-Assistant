@@ -31,7 +31,7 @@ Documentation = "https://github.com/shigjfg/ComfyUI-Magic-Assistant/wiki"
 [tool.comfy]
 PublisherId = "shijun"
 DisplayName = "ComfyUI-Magic-Assistant"
-Icon = "https://raw.gitcode.com/shigjfg1/Noreason/raw/main/ComfyUI_temp_ferav_00004_.png"
+Icon = "https://raw.gitcode.com/shigjfg1/Noreason/raw/main/ComfyUI_temp_jkluj_00002_.png"
 includes = [] 
 # "requires-comfyui" = ">=1.0.0"  # ComfyUI version compatibility
 
