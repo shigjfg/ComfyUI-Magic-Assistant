@@ -1,6 +1,6 @@
 [project]
 name = "magic-assistant"
-description = "Say goodbye to clutter! 🚀 A suite of 'Integrated Nodes' to simplify your workflow. 🤖 AI Node: Versatile role-play & rules with handy one-click presets! 🧠 Programmable Logic: An exclusive node to edit logic directly—handle all checks in ONE node without complex wiring! Simple & High Freedom! 🌐 Full Bilingual Support: All nodes support real-time Chinese/English language switching via floating switcher! 🎨 More nodes await your discovery! 告别琐碎连线！🚀 本插件专注于“多功能集成节点”。🤖 AI节点：通过角色扮演和规则处理各种工作，自带好用预设，一键上手！🧠 独家逻辑计算节点：支持自定义编辑计算逻辑，一个节点直接搞定所有比较与运算甚至一键输出，拒绝繁复操作！简单易用，自由度极高！🌐 完整双语支持：所有节点均支持通过悬浮切换器实时切换中英文界面！🎨 更多节点等你发现！"
+description = "Say goodbye to clutter! 🚀 Integrated Nodes to simplify workflow. 🤖 AI Node: Role-play & rules with one-click presets! 🧠 Programmable Logic: Edit logic in ONE node—no complex wiring! 🌐 Bilaingual: Real-time Chinese/English switching! 📦 SDNQ: Low-VRAM model loader & sampler! 🎨 More nodes await! 告别琐碎连线！🚀 多功能集成节点。🤖 AI节点：角色扮演+规则，一键预设！🧠 逻辑计算：一节点搞定运算与比较！🌐 双语：实时中英切换！📦 SDNQ：低显存模型加载与采样！🎨 更多节点等你发现！"
 version = "1.1.8"
 license = {file = "LICENSE"} 
 # classifiers = [
