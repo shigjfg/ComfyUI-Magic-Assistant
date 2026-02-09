@@ -107,7 +107,7 @@ def _extract_embeddings_from_cond(cond) -> Tuple[Optional[torch.Tensor], Optiona
 
 
 def _extract_reference_latents_from_cond(cond) -> list:
-    """从 ComfyUI conditioning 提取 reference_latents（用于 Flux2Klein 图像编辑）
+    """从 ComfyUI conditioning 提取 reference_latents（用于图像编辑）
     ReferenceLatent 节点会将 VAE 编码的 latent 注入 conditioning 的 reference_latents 键。
     """
     refs = []
@@ -133,7 +133,7 @@ def _ref_latents_to_pil_list(ref_latents: list, pipeline) -> list:
     try:
         import numpy as np
         from PIL import Image
-        # 与 diffusers pipeline 一致：Flux2 用 BN，Flux/SD3 用 (latents/scale)+shift，SD/SDXL 用 latents/scale
+        # 与 diffusers pipeline 一致：有 BN 的用 BN，否则用 (latents/scale)+shift 或 latents/scale
         if hasattr(pipeline.vae, "bn") and pipeline.vae.bn is not None:
             sf, shift = 1.0, 0.0
         else:
@@ -169,6 +169,17 @@ def _align_dim(dim: int, multiple: int) -> int:
     return (dim // multiple) * multiple
 
 
+def _get_inpaint_expected_channels(pipeline) -> Optional[int]:
+    """从 pipeline 获取 inpainting 期望的 latent 通道数。支持 transformer (Flux/SD3/Qwen) 与 unet (SD/SDXL)。"""
+    if hasattr(pipeline, "transformer") and pipeline.transformer is not None:
+        return getattr(getattr(pipeline.transformer, "config", None), "in_channels", None)
+    if hasattr(pipeline, "unet") and pipeline.unet is not None:
+        cfg = getattr(pipeline.unet, "config", None)
+        if cfg is not None:
+            return getattr(cfg, "in_channels", None)
+    return None
+
+
 def _prepare_inpaint_latents_and_mask(
     pipeline,
     latent_samples: torch.Tensor,
@@ -181,33 +192,30 @@ def _prepare_inpaint_latents_and_mask(
 ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
     """
     为局部重绘准备初始 latent 和 mask（KSamplerX0Inpaint 风格）。
-    Flux2 pipeline 的 prepare_latents 期望 pre-patchify 格式 (B, 16, h, w)，内部会自行 patchify+pack。
+    支持多种 pipeline：Flux/Flux2/SD3/Qwen（transformer+pack）与 SD/SDXL（unet+标准 latent）。
     与官方 KSampler 的 denoise_mask 语义一致：1=重绘区，0=保留原图。
     返回 (initial_latents, original_packed, mask_packed)。
     """
     try:
-        pipeline_name = type(pipeline).__name__
-        if "Flux2" not in pipeline_name and "Flux" not in pipeline_name:
-            return None, None, None
-
         has_pack = hasattr(pipeline, "_pack_latents") and callable(getattr(pipeline, "_pack_latents"))
+
+        # 带 _pack_latents 的 pipeline（Flux/Flux2/SD3/Qwen/Z-Image 等 DiT 架构）
         if not has_pack:
             return None, None, None
 
-        # pipeline prepare_latents: shape = (B, num_latents_channels*4, h, w)
-        # num_latents_channels = in_channels // 4，故 expected_C = in_channels
         vae_sf = getattr(pipeline, "vae_scale_factor", 8)
-        mult = vae_sf * 2  # 16 for Flux2
+        mult = vae_sf * 2  # Flux2: 16, 其他: 视 vae_scale_factor 而定
         h_lat = (2 * (int(height) // mult)) // 2
         w_lat = (2 * (int(width) // mult)) // 2
 
-        expected_C = getattr(pipeline.transformer.config, "in_channels", 128)
-        # SDNQ 量化模型可能为 16；标准 Klein 为 128
+        expected_C = _get_inpaint_expected_channels(pipeline)
+        if expected_C is None:
+            expected_C = 128  # Flux2 常见默认，SD3/Qwen 等可能不同
 
         orig = latent_samples.to(device=device, dtype=dtype)
         B, C, H, W = orig.shape
 
-        # 转换为 pipeline 期望格式
+        # 转换为 pipeline 期望格式（不同模型通道数不同）
         if C == expected_C:
             pass
         elif C in (32, 128) and expected_C == 16:
@@ -235,7 +243,7 @@ def _prepare_inpaint_latents_and_mask(
                 orig, size=(h_lat, w_lat), mode="bilinear", align_corners=False
             )
 
-        # Flux2 pipeline 的 latent 空间使用 BN 归一化 (x-mean)/std，ComfyUI VAE 输出为原始值
+        # 部分 pipeline（Flux2/SD3 等）的 VAE 在 latent 空间使用 BN 归一化，ComfyUI VAE 输出为原始值
         # 需将 orig 转为 pipeline 空间，否则混合后解码会色调异常
         if hasattr(pipeline, "vae") and pipeline.vae is not None and hasattr(pipeline.vae, "bn") and pipeline.vae.bn is not None:
             bn_mean = pipeline.vae.bn.running_mean.view(1, -1, 1, 1).to(orig.device, orig.dtype)
@@ -364,13 +372,15 @@ class MagicSDNQSampler:
                 ref_pil_list = _ref_latents_to_pil_list(ref_latents, pipeline)
                 ref_pil = ref_pil_list[0] if len(ref_pil_list) == 1 else (ref_pil_list if ref_pil_list else None)
 
-        # latent 尺寸（用于 width/height）
+        # latent 尺寸（用于 width/height）。按 pipeline 类型推断：Flux/Flux2 等 16x，SD/SDXL 等 8x
         batch, channels, h, w = samples.shape
         pipeline_name = type(pipeline).__name__
         flux2klein = "Flux2Klein" in pipeline_name or "flux2klein" in pipeline_name.lower()
         is_qwen_image = "QwenImage" in pipeline_name
-        latent_scale = 16 if ("Flux" in pipeline_name or flux2klein) else 8
-        dim_mult = 16 if flux2klein else 8
+        # 有 transformer 的 DiT 多为 16x，unet 的 SD/SDXL 为 8x
+        has_transformer = hasattr(pipeline, "transformer") and pipeline.transformer is not None
+        latent_scale = 16 if has_transformer else 8
+        dim_mult = 16 if (flux2klein or "Flux2" in pipeline_name) else 8
         if ref_pil is not None:
             first_ref = ref_pil[0] if isinstance(ref_pil, list) else ref_pil
             src_w, src_h = first_ref.size
@@ -483,10 +493,11 @@ class MagicSDNQSampler:
                 progress_bar = None
 
         # 局部重绘：准备初始 latent（需 device/dtype，在此提前获取）
-        # 支持 Flux2Klein 与标准 Flux2（均有 _pack_latents/_patchify_latents）
-        if is_inpainting and ("Flux2" in pipeline_name or "Flux" in pipeline_name):
+        # 支持所有带 _pack_latents 的 pipeline（Flux/Flux2/SD3/Qwen/Z-Image 等）
+        if is_inpainting and hasattr(pipeline, "_pack_latents") and callable(getattr(pipeline, "_pack_latents")):
+            comp = pipeline.transformer if hasattr(pipeline, "transformer") and pipeline.transformer is not None else getattr(pipeline, "unet", None)
             _device = getattr(pipeline, "_execution_device", None) or (
-                next(pipeline.transformer.parameters()).device if hasattr(pipeline, "transformer") else torch.device("cuda")
+                next(comp.parameters()).device if comp is not None else torch.device("cuda")
             )
             if str(_device).lower() == "cpu" and torch.cuda.is_available():
                 _device = torch.device("cuda")
@@ -502,8 +513,7 @@ class MagicSDNQSampler:
 
         def _unpack_latent_for_preview(lat, pipe, h_px, w_px):
             """将 callback 的 latents 转为 (B, C, H, W) 供预览。支持多模型：
-            - Flux2/Flux2Klein: packed (B,H*W,C) + BN 反归一化
-            - Flux: packed，优先用 pipeline._unpack_latents
+            - DiT（Flux/Flux2/SD3/Qwen 等）: packed (B,H*W,C)，部分需 BN 反归一化
             - SD/SDXL/Z-Image 等: 已是 (B,C,H,W)"""
             if lat is None:
                 return None
@@ -529,7 +539,7 @@ class MagicSDNQSampler:
             if num_patches != h_lat * w_lat:
                 return None
             out = lat.permute(0, 2, 1).reshape(lat.shape[0], -1, h_lat, w_lat)
-            # Flux2/Flux2Klein：pipeline 在 _unpack 后对 latent 做 BN 反归一化，预览需一致
+            # 有 BN 的 pipeline：在 _unpack 后对 latent 做 BN 反归一化，预览需一致
             if hasattr(pipe, "vae") and pipe.vae is not None and hasattr(pipe.vae, "bn") and pipe.vae.bn is not None:
                 bn = pipe.vae.bn
                 eps = getattr(pipe.vae.config, "batch_norm_eps", 1e-5)
@@ -642,7 +652,7 @@ class MagicSDNQSampler:
             kwargs["true_cfg_scale"] = cfg
         else:
             kwargs["guidance_scale"] = cfg
-        # 请求 latents 传入 callback（Flux2 仅支持 latents/prompt_embeds，不支持 noise_pred）
+        # 请求 latents 传入 callback（部分 pipeline 仅支持 latents/prompt_embeds）
         kwargs["callback_on_step_end_tensor_inputs"] = ["latents"]
 
         # 移动到 pipeline 执行设备（CPU offload 时 transformer 在 CPU，但实际计算在 CUDA）
@@ -678,7 +688,7 @@ class MagicSDNQSampler:
             kwargs["image"] = ref_pil
 
         # 请求 latent 输出（与官方 K 采样器一致，输出 latent 供 VAEDecode）
-        # Flux2/Flux2Klein 支持 output_type="latent"，返回 (B,16,H,W) 格式，避免 PIL 往返损失
+        # 支持 output_type="latent" 的 pipeline 直接返回 latent，避免 PIL 往返损失
         kwargs["output_type"] = "latent"
 
         try:
@@ -755,8 +765,7 @@ class MagicSDNQSampler:
                         img_t = img_t * 2 - 1
                         with torch.no_grad():
                             enc = pipeline.vae.encode(img_t).latent_dist.sample()
-                            # 与 diffusers pipeline 一致：latent = (raw - shift) * scale
-                            # Flux2: bn 无 scaling，Flux/SD3: scaling+shift，SD/SDXL: scaling only
+                            # 与 diffusers pipeline 一致：有 BN 的用 BN，否则用 scaling+shift
                             if hasattr(pipeline.vae, "bn") and pipeline.vae.bn is not None:
                                 lat = enc
                             else:
