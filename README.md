@@ -364,16 +364,18 @@ This plugin implements SDNQ based on the [comfyui-sdnq](https://github.com/Enrag
 #### 使用本插件运行 SDNQ 的优势 / Advantages
 
 * **模型与采样器独立**：无 LoRA 数量限制，可自由搭配其他节点进行复杂操作
-* **支持丰富工作流**：局部重绘、图生图、文生图、深度图控制、姿态图控制等
+* **支持丰富工作流**：图生图、文生图、深度图控制、姿态图控制等
 * **采样逻辑接近官方**：仿照官方 KSampler 的生成逻辑
 * **实时进度与预览**：可实时显示采样进度和预览图，与官方 K 采样器几乎一致
 * **Standalone model & sampler**: No LoRA limit; freely combine with other nodes
-* **Rich workflows**: Inpainting, img2img, txt2img, depth control, pose control, etc.
+* **Rich workflows**: Img2img, txt2img, depth control, pose control, etc.
 * **Official-like sampling**: Logic follows official KSampler
 * **Real-time progress & preview**: Displays sampling progress and preview like official KSampler
 
 #### ⚠️ 注意事项 / Notes
 
+* **❌ 不支持局部重绘 / Inpainting NOT supported**：Magic SDNQ Sampler 基于 diffusers pipeline，与 ComfyUI 原生 KSampler 的 inpainting 机制架构不同，无法保证局部重绘效果。如需局部重绘，请使用 ComfyUI 官方工作流（如 UNetLoader/OTUNetLoader + KSampler）。
+* **Magic SDNQ Sampler does NOT support inpainting**: It uses diffusers pipeline, which differs from ComfyUI's native KSampler inpainting. For inpainting, use official ComfyUI workflow (e.g. UNetLoader/OTUNetLoader + KSampler).
 * **当前仅支持图像**：因配置限制，暂未适配视频模型，仅支持图像生成和图像编辑模型。视频模型适配将在后续版本考虑。
 * **Image models only**: Video model support is not yet implemented; currently supports image generation and image editing models only.
 

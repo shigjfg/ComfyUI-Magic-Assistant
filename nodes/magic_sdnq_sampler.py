@@ -169,6 +169,128 @@ def _align_dim(dim: int, multiple: int) -> int:
     return (dim // multiple) * multiple
 
 
+def _prepare_inpaint_latents_and_mask(
+    pipeline,
+    latent_samples: torch.Tensor,
+    noise_mask: torch.Tensor,
+    dtype,
+    device,
+    generator,
+    width: int,
+    height: int,
+) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+    """
+    为局部重绘准备初始 latent 和 mask（KSamplerX0Inpaint 风格）。
+    Flux2 pipeline 的 prepare_latents 期望 pre-patchify 格式 (B, 16, h, w)，内部会自行 patchify+pack。
+    与官方 KSampler 的 denoise_mask 语义一致：1=重绘区，0=保留原图。
+    返回 (initial_latents, original_packed, mask_packed)。
+    """
+    try:
+        pipeline_name = type(pipeline).__name__
+        if "Flux2" not in pipeline_name and "Flux" not in pipeline_name:
+            return None, None, None
+
+        has_pack = hasattr(pipeline, "_pack_latents") and callable(getattr(pipeline, "_pack_latents"))
+        if not has_pack:
+            return None, None, None
+
+        # pipeline prepare_latents: shape = (B, num_latents_channels*4, h, w)
+        # num_latents_channels = in_channels // 4，故 expected_C = in_channels
+        vae_sf = getattr(pipeline, "vae_scale_factor", 8)
+        mult = vae_sf * 2  # 16 for Flux2
+        h_lat = (2 * (int(height) // mult)) // 2
+        w_lat = (2 * (int(width) // mult)) // 2
+
+        expected_C = getattr(pipeline.transformer.config, "in_channels", 128)
+        # SDNQ 量化模型可能为 16；标准 Klein 为 128
+
+        orig = latent_samples.to(device=device, dtype=dtype)
+        B, C, H, W = orig.shape
+
+        # 转换为 pipeline 期望格式
+        if C == expected_C:
+            pass
+        elif C in (32, 128) and expected_C == 16:
+            orig = orig[:, :16]  # 取前 16 通道
+            C, H, W = 16, H, W
+        elif C == 32 and expected_C == 128 and hasattr(pipeline, "_patchify_latents"):
+            if H != 128 or W != 128:
+                orig = torch.nn.functional.interpolate(
+                    orig, size=(128, 128), mode="bilinear", align_corners=False
+                )
+            orig = pipeline._patchify_latents(orig)
+            _, C, H, W = orig.shape
+        elif C == 128 and expected_C == 128:
+            pass  # 已是正确格式
+        elif C == 64 and hasattr(pipeline, "_unpatchify_latents") and expected_C == 16:
+            orig = pipeline._unpatchify_latents(orig)
+            _, C, H, W = orig.shape
+        elif C != expected_C:
+            print(f"[SDNQ Sampler] Inpaint 跳过: latent C={C}，pipeline 期望 {expected_C}")
+            return None, None, None
+
+        # 对齐到 pipeline 期望的 latent 尺寸 (B, expected_C, h_lat, w_lat)
+        if H != h_lat or W != w_lat:
+            orig = torch.nn.functional.interpolate(
+                orig, size=(h_lat, w_lat), mode="bilinear", align_corners=False
+            )
+
+        # Flux2 pipeline 的 latent 空间使用 BN 归一化 (x-mean)/std，ComfyUI VAE 输出为原始值
+        # 需将 orig 转为 pipeline 空间，否则混合后解码会色调异常
+        if hasattr(pipeline, "vae") and pipeline.vae is not None and hasattr(pipeline.vae, "bn") and pipeline.vae.bn is not None:
+            bn_mean = pipeline.vae.bn.running_mean.view(1, -1, 1, 1).to(orig.device, orig.dtype)
+            bn_std = torch.sqrt(
+                pipeline.vae.bn.running_var.view(1, -1, 1, 1).to(orig.device, orig.dtype)
+                + getattr(pipeline.vae.config, "batch_norm_eps", 1e-5)
+            )
+            # 若 orig 通道数小于 bn，需对齐（取前 expected_C 通道的 bn 统计）
+            if orig.shape[1] != bn_mean.shape[1]:
+                bn_mean = bn_mean[:, : orig.shape[1]]
+                bn_std = bn_std[:, : orig.shape[1]]
+            orig = (orig - bn_mean) / bn_std
+
+        # mask 与 latent 同尺寸（noise_mask 可能为 (B,1,H,W) 或 (1,H,W)）
+        m = noise_mask.float()
+        while m.dim() < 4:
+            m = m.unsqueeze(0)
+        if m.shape[1] != 1:
+            m = m[:, :1]
+        mask_resized = torch.nn.functional.interpolate(
+            m, size=(h_lat, w_lat), mode="bilinear", align_corners=False
+        )
+        if mask_resized.shape[0] < B:
+            mask_resized = mask_resized.repeat(B, 1, 1, 1)
+        mask_resized = mask_resized.to(device=device, dtype=dtype)
+        denoise_mask = mask_resized  # 1=重绘区, 0=保留原图
+
+        # 初始 latent：遮罩内用噪声，遮罩外用原图（与 KSamplerX0Inpaint 一致）
+        noise = torch.randn(orig.shape, generator=generator, device="cpu", dtype=dtype).to(device=device)
+        initial = noise * denoise_mask + orig * (1.0 - denoise_mask)
+
+        # 供 callback 使用：packed 格式 (B, H*W, C)
+        original_packed = pipeline._pack_latents(orig)
+        mask_packed = denoise_mask.reshape(B, 1, -1).permute(0, 2, 1)
+
+        return initial, original_packed, mask_packed
+    except Exception as e:
+        import traceback
+        print(f"[SDNQ Sampler] Inpaint latent 准备失败: {e}")
+        traceback.print_exc()
+        return None, None, None
+
+
+def _apply_inpaint_mask_blend(
+    latents: torch.Tensor,
+    original_packed: torch.Tensor,
+    mask_packed: torch.Tensor,
+) -> torch.Tensor:
+    """
+    KSamplerX0Inpaint 风格：遮罩内用模型输出，遮罩外用原图。
+    latents/original_packed: (B, seq_len, C), mask_packed: (B, seq_len, 1), 1=重绘区
+    """
+    return latents * mask_packed + original_packed * (1.0 - mask_packed)
+
+
 class MagicSDNQSampler:
     """可连接的 SDNQ 采样器：model + 正负面条件 + latent → latent"""
 
@@ -179,7 +301,7 @@ class MagicSDNQSampler:
                 "model": ("MODEL", {"tooltip": "来自 Magic SDNQ Loader 或 LoRA Loader"}),
                 "positive": ("CONDITIONING", {"tooltip": "正面条件"}),
                 "negative": ("CONDITIONING", {"tooltip": "负面条件"}),
-                "latent": ("LATENT", {"tooltip": "空 latent"}),
+                "latent": ("LATENT", {"tooltip": "文生图用空 latent；局部重绘用 InpaintModelConditioning 输出的 latent（含 noise_mask）"}),
                 "seed": ("INT", {"default": 0, "min": -1, "max": 0xffffffffffffffff, "control_after_generate": True}),
                 "steps": ("INT", {"default": 25, "min": 1, "max": 150}),
                 "cfg": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 30.0, "step": 0.1}),
@@ -230,16 +352,19 @@ class MagicSDNQSampler:
         if prompt_embeds is None:
             raise RuntimeError("请连接 CLIP 文本编码到 positive 输入")
 
-        # 图像编辑：从 conditioning 的 reference_latents 解码参考图
+        samples = latent["samples"]
+        noise_mask = latent.get("noise_mask")
+        is_inpainting = noise_mask is not None and noise_mask.numel() > 0
+
+        # 图像编辑：非 inpainting 时从 reference_latents 解码参考图
         ref_pil = None
-        ref_latents = _extract_reference_latents_from_cond(positive)
-        if ref_latents:
-            ref_pil_list = _ref_latents_to_pil_list(ref_latents, pipeline)
-            ref_pil = ref_pil_list[0] if len(ref_pil_list) == 1 else (ref_pil_list if ref_pil_list else None)
+        if not is_inpainting:
+            ref_latents = _extract_reference_latents_from_cond(positive)
+            if ref_latents:
+                ref_pil_list = _ref_latents_to_pil_list(ref_latents, pipeline)
+                ref_pil = ref_pil_list[0] if len(ref_pil_list) == 1 else (ref_pil_list if ref_pil_list else None)
 
         # latent 尺寸（用于 width/height）
-        # 图像编辑时使用参考图尺寸；否则用 latent 推算
-        samples = latent["samples"]
         batch, channels, h, w = samples.shape
         pipeline_name = type(pipeline).__name__
         flux2klein = "Flux2Klein" in pipeline_name or "flux2klein" in pipeline_name.lower()
@@ -254,6 +379,13 @@ class MagicSDNQSampler:
         else:
             width = max(8, _align_dim(w * latent_scale, dim_mult))
             height = max(8, _align_dim(h * latent_scale, dim_mult))
+
+        # 局部重绘时限制分辨率，避免 12GB 显存下 2048x2048 等大图 OOM
+        if is_inpainting and width * height > 1024 * 1024:
+            scale = (1024 * 1024 / (width * height)) ** 0.5
+            width = max(dim_mult, _align_dim(int(width * scale), dim_mult))
+            height = max(dim_mult, _align_dim(int(height * scale), dim_mult))
+            print(f"[SDNQ Sampler] 局部重绘：分辨率已限制为 {width}x{height} (防 OOM)")
 
         _swap_scheduler(pipeline, scheduler)
 
@@ -288,8 +420,9 @@ class MagicSDNQSampler:
         generator = torch.Generator(device="cpu").manual_seed(actual_seed)
 
         is_image_edit = ref_pil is not None
+        mode_str = "inpainting (局部重绘)" if is_inpainting else ("image-to-image" if is_image_edit else "text-to-image")
         print(f"\n{'='*50}")
-        print("[SDNQ Sampler] Generating (" + ("image-to-image" if is_image_edit else "text-to-image") + ")")
+        print(f"[SDNQ Sampler] Generating ({mode_str})")
         print(f"{'='*50}")
         print(f"  Pipeline: {pipeline_name}")
         print(f"  Size: {width}x{height} (aligned to {dim_mult})")
@@ -299,12 +432,19 @@ class MagicSDNQSampler:
         print(f"  Seed: {actual_seed}")
         if flux2klein:
             print("  [Flux2Klein] negative_prompt not supported (Qwen3 T5)")
-        if is_image_edit:
+        if is_inpainting:
+            print("  [Inpainting] 使用 mask 混合逻辑（KSamplerX0Inpaint 风格）")
+        elif is_image_edit:
             print("  [Image Edit] 使用参考图像进行编辑")
         print(f"{'='*50}\n")
 
         # 降噪影响步数
         effective_steps = max(1, int(steps * 降噪))
+
+        # 局部重绘：准备初始 latent 与 mask（在取得 device 后执行）
+        inpaint_initial_latents = None
+        inpaint_original_packed = None
+        inpaint_mask_packed = None
 
         # latent 预览：与官方 K 采样器一致，使用 latent_preview.prepare_callback
         preview_method_map = {
@@ -341,6 +481,24 @@ class MagicSDNQSampler:
                 progress_bar = comfy.utils.ProgressBar(effective_steps, node_id=unique_id)
             except Exception:
                 progress_bar = None
+
+        # 局部重绘：准备初始 latent（需 device/dtype，在此提前获取）
+        # 支持 Flux2Klein 与标准 Flux2（均有 _pack_latents/_patchify_latents）
+        if is_inpainting and ("Flux2" in pipeline_name or "Flux" in pipeline_name):
+            _device = getattr(pipeline, "_execution_device", None) or (
+                next(pipeline.transformer.parameters()).device if hasattr(pipeline, "transformer") else torch.device("cuda")
+            )
+            if str(_device).lower() == "cpu" and torch.cuda.is_available():
+                _device = torch.device("cuda")
+            _dtype = prompt_embeds.dtype
+            prep = _prepare_inpaint_latents_and_mask(
+                pipeline, samples, noise_mask, _dtype, _device, generator, width, height
+            )
+            if prep[0] is not None:
+                inpaint_initial_latents, inpaint_original_packed, inpaint_mask_packed = prep
+            else:
+                is_inpainting = False
+                print("[SDNQ Sampler] Inpaint 准备失败，回退为 text-to-image")
 
         def _unpack_latent_for_preview(lat, pipe, h_px, w_px):
             """将 callback 的 latents 转为 (B, C, H, W) 供预览。支持多模型：
@@ -411,6 +569,13 @@ class MagicSDNQSampler:
                 return None
 
         def on_step_end(pipe, step_index, timestep, callback_kwargs):
+            # 局部重绘：每步后按 mask 混合（KSamplerX0Inpaint 风格）
+            if inpaint_original_packed is not None and inpaint_mask_packed is not None and "latents" in callback_kwargs:
+                lat = callback_kwargs["latents"]
+                orig = inpaint_original_packed.to(lat.device).to(lat.dtype)
+                msk = inpaint_mask_packed.to(lat.device).to(lat.dtype)
+                blended = _apply_inpaint_mask_blend(lat, orig, msk)
+                callback_kwargs["latents"] = blended
             # 与官方 K 采样器一致：优先用 denoised (x0) 做预览，回退到 latents
             lat_unpacked = None
             if comfy_callback is not None and "latents" in callback_kwargs:
@@ -477,17 +642,8 @@ class MagicSDNQSampler:
             kwargs["true_cfg_scale"] = cfg
         else:
             kwargs["guidance_scale"] = cfg
-        # 请求 latents + noise_pred 传入 callback，用于 denoised 预览（与 K 采样器一致）
-        if comfy_callback is not None:
-            tensor_inputs = ["latents"]
-            if hasattr(pipeline, "_callback_tensor_inputs"):
-                cb_inputs = pipeline._callback_tensor_inputs
-                if not isinstance(cb_inputs, list):
-                    cb_inputs = list(cb_inputs) if cb_inputs else []
-                if "noise_pred" not in cb_inputs:
-                    pipeline._callback_tensor_inputs = list(cb_inputs) + ["noise_pred"]
-                tensor_inputs.append("noise_pred")
-            kwargs["callback_on_step_end_tensor_inputs"] = tensor_inputs
+        # 请求 latents 传入 callback（Flux2 仅支持 latents/prompt_embeds，不支持 noise_pred）
+        kwargs["callback_on_step_end_tensor_inputs"] = ["latents"]
 
         # 移动到 pipeline 执行设备（CPU offload 时 transformer 在 CPU，但实际计算在 CUDA）
         device = getattr(pipeline, "_execution_device", None)
@@ -513,13 +669,17 @@ class MagicSDNQSampler:
         kwargs["width"] = width
         kwargs["height"] = height
 
-        # 图像编辑：传递参考图像给 pipeline（Flux2/Flux2Klein 支持 image 参数）
-        if ref_pil is not None:
+        # 局部重绘：传递初始 latent，且必须排除 image（否则 pipeline 会 concat image_latents 导致通道数错误）
+        if is_inpainting and inpaint_initial_latents is not None:
+            kwargs["latents"] = inpaint_initial_latents
+            kwargs.pop("image", None)  # 局部重绘时禁止传 image，避免 128 通道 concat 错误
+        # 图像编辑：传递参考图像（仅当非 inpainting 时）
+        elif ref_pil is not None:
             kwargs["image"] = ref_pil
 
-        # 请求 latent 输出（非 FLUX 部分 pipeline 支持）
-        if "Flux" not in pipeline_name:
-            kwargs["output_type"] = "latent"
+        # 请求 latent 输出（与官方 K 采样器一致，输出 latent 供 VAEDecode）
+        # Flux2/Flux2Klein 支持 output_type="latent"，返回 (B,16,H,W) 格式，避免 PIL 往返损失
+        kwargs["output_type"] = "latent"
 
         try:
             result = pipeline(**kwargs)
@@ -536,6 +696,10 @@ class MagicSDNQSampler:
                 kwargs.pop("callback_on_step_end_tensor_inputs", None)
                 print("[SDNQ Sampler] 当前 pipeline 不支持 callback_on_step_end_tensor_inputs，采样过程预览不可用")
                 result = pipeline(**kwargs)
+            elif "output_type" in err:
+                kwargs.pop("output_type", None)
+                print("[SDNQ Sampler] 当前 pipeline 不支持 output_type=latent，将使用 VAE 解码后再编码输出")
+                result = pipeline(**kwargs)
             elif "image" in err and ref_pil is not None:
                 kwargs.pop("image", None)
                 print("[SDNQ Sampler] 当前 pipeline 不支持 image 参数，回退为 text-to-image")
@@ -543,13 +707,16 @@ class MagicSDNQSampler:
             else:
                 raise
 
-        # 若采样过程中未产生预览，结束时发送最终图像作为预览（Flux 返回 PIL）
+        # 若采样过程中未产生预览，结束时发送最终图像作为预览（仅当 pipeline 返回 PIL 时）
+        # output_type="latent" 时 result.images 为 tensor，预览系统需要 PIL，故跳过
         if (progress_bar is not None or comfy_callback is not None) and 预览方式 != "none":
             try:
                 img = getattr(result, "images", None)
-                if img and ((isinstance(img, list) and img) or (not isinstance(img, list) and img is not None)):
-                    first = img[0] if isinstance(img, list) else img
-                    if hasattr(first, "size") and first.size:
+                if img is not None and isinstance(img, list) and len(img) > 0:
+                    first = img[0]
+                    if isinstance(first, torch.Tensor):
+                        pass  # latent 输出，不传预览
+                    elif hasattr(first, "width") and hasattr(first, "height"):
                         max_preview = 512
                         if COMFYUI_AVAILABLE and comfy_args is not None:
                             max_preview = getattr(comfy_args, "preview_size", 512)
@@ -561,8 +728,12 @@ class MagicSDNQSampler:
 
         # 取 latent
         out_latent = latent.copy()
-        if hasattr(result, "images") and result.images:
-            first = result.images[0] if isinstance(result.images, list) else result.images
+        imgs = getattr(result, "images", None)
+        if imgs is not None:
+            first = imgs[0] if isinstance(imgs, list) and len(imgs) > 0 else (imgs if not isinstance(imgs, list) else None)
+        else:
+            first = None
+        if first is not None:
             if isinstance(first, torch.Tensor):
                 lat = first
                 if lat.dim() == 3:
