@@ -158,6 +158,10 @@ class MagicSDNQLoader:
             raise ValueError(
                 "请同时连接外接 CLIP 和 VAE（仅加载本体、省显存），或两者都不连（整包加载）。不能只连其中一个。"
             )
+        
+        # Debug: log the input types at the start
+        if has_clip and has_vae:
+            print(f"[SDNQ] Input validation - clip type: {type(clip).__name__}, vae type: {type(vae).__name__}")
 
         if not compiler_available:
             torch._dynamo.config.suppress_errors = True
