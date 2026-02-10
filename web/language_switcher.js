@@ -173,14 +173,21 @@ const sdnqTranslations = {
     "仅以下类型支持外接 CLIP/VAE：FLUX.2（如 Flux2Klein）、FLUX.1（如 FluxPipeline）。": { zh: "仅以下类型支持外接 CLIP/VAE：FLUX.2（如 Flux2Klein）、FLUX.1（如 FluxPipeline）。", en: "Only these types support external CLIP/VAE: FLUX.2 (e.g. Flux2Klein), FLUX.1 (e.g. FluxPipeline)." },
     "请断开 CLIP/VAE 连接以整包加载，或更换为上述模型后再使用外接 CLIP/VAE。": { zh: "请断开 CLIP/VAE 连接以整包加载，或更换为上述模型后再使用外接 CLIP/VAE。", en: "Disconnect CLIP/VAE for full-package load, or switch to one of the above models to use external CLIP/VAE." },
     // SDNQ Sampler
-    "来自 Magic SDNQ Loader 或 LoRA Loader": { zh: "来自 Magic SDNQ Loader 或 LoRA Loader", en: "From Magic SDNQ Loader or LoRA Loader" },
+    "来自 Magic SDNQ Loader、LoRA Loader 或其他模型加载器": { zh: "来自 Magic SDNQ Loader、LoRA Loader 或其他模型加载器", en: "From Magic SDNQ Loader, LoRA Loader, or other model loaders" },
     "正面条件": { zh: "正面条件", en: "Positive conditioning" },
     "负面条件": { zh: "负面条件", en: "Negative conditioning" },
     "空 latent": { zh: "空 latent", en: "Empty latent" },
-    "FLUX/SD3/Qwen 用 FlowMatch; SDXL/SD1.5 用 DPMSolver/Euler": { zh: "FLUX/SD3/Qwen 用 FlowMatch; SDXL/SD1.5 用 DPMSolver/Euler", en: "FLUX/SD3/Qwen: FlowMatch; SDXL/SD1.5: DPMSolver/Euler" },
+    "SDNQ 模式的调度器。FLUX/SD3/Qwen 用 FlowMatch; SDXL/SD1.5 用 DPMSolver/Euler": { zh: "SDNQ 模式的调度器。FLUX/SD3/Qwen 用 FlowMatch; SDXL/SD1.5 用 DPMSolver/Euler", en: "SDNQ scheduler. FLUX/SD3/Qwen: FlowMatch; SDXL/SD1.5: DPMSolver/Euler" },
     "降噪": { zh: "降噪", en: "Denoise" },
     "预览方式": { zh: "预览方式", en: "Preview" },
-    "auto=自动, latent2rgb=快, taesd=慢但更清晰, none=不预览": { zh: "auto=自动, latent2rgb=快, taesd=慢但更清晰, none=不预览", en: "auto=auto, latent2rgb=fast, taesd=slower but clearer, none=no preview" }
+    "auto=自动, latent2rgb=快, taesd=慢但更清晰, none=不预览": { zh: "auto=自动, latent2rgb=快, taesd=慢但更清晰, none=不预览", en: "auto=auto, latent2rgb=fast, taesd=slower but clearer, none=no preview" },
+    "采样模式": { zh: "采样模式", en: "Sample Mode" },
+    "SDNQ + KSampler": { zh: "SDNQ + KSampler", en: "SDNQ + K Sampler" },
+    "SDNQ=仅支持 SDNQ 模型; SDNQ + KSampler=同时兼容其他模型（自动判定）": { zh: "SDNQ=仅支持 SDNQ 模型; SDNQ + KSampler=同时兼容其他模型（自动判定）", en: "SDNQ=SDNQ models only; SDNQ + KSampler=also supports other models (auto-detect)" },
+    "sampler_name": { zh: "采样器名称", en: "Sampler Name" },
+    "comfy_scheduler": { zh: "官方调度器", en: "Comfy Scheduler" },
+    "官方 KSampler 的采样器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）": { zh: "官方 KSampler 的采样器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）", en: "KSampler sampler (only used for non-SDNQ models in SDNQ + KSampler mode)" },
+    "官方 KSampler 的调度器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）": { zh: "官方 KSampler 的调度器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）", en: "KSampler scheduler (only used for non-SDNQ models in SDNQ + KSampler mode)" }
 };
 
 // 节点翻译映射表 - Magic Logic Compute
@@ -1206,10 +1213,10 @@ const nodeTranslations = {
         zh: "📦 SDNQ模型加载器 Magic SDNQ Model Loader",
         en: "📦 Magic SDNQ Model Loader"
     },
-    // 节点10: Magic SDNQ Sampler
+    // 节点10: Magic SDNQ K Sampler
     "MagicSDNQSampler": {
-        zh: "🎲 SDNQ采样器 Magic SDNQ Sampler",
-        en: "🎲 Magic SDNQ Sampler"
+        zh: "🎲 SDNQ K采样器 Magic SDNQ K Sampler",
+        en: "🎲 SDNQ K Sampler"
     }
 };
 
@@ -1705,7 +1712,7 @@ function isLoraNodeElement(element) {
             '删除选中', 'Delete Selected', '退出编辑', 'Exit Edit Mode', '保存并发送', 'Save and Send',
             'Photopea', 'Magic Photopea', 'Magic Gallery',
             // SDNQ 相关
-            'SDNQ', 'SDNQ模型', 'SDNQ采样', '降噪', '预览方式', 'Magic SDNQ', '正面条件', '负面条件'
+            'SDNQ', 'SDNQ K Sampler', 'SDNQ K采样器', 'SDNQ模型', 'SDNQ采样', '降噪', '预览方式', '采样模式', 'Magic SDNQ', '正面条件', '负面条件'
         ];
         return keywords.some(keyword => text.includes(keyword));
     };

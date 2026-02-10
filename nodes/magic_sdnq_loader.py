@@ -204,6 +204,12 @@ class MagicSDNQLoader:
                             model_type = "FLUX"
                         elif "qwen" in cn:
                             model_type = "Qwen"
+                        elif "zimage" in cn or "z_image" in cn or "z-image" in cn:
+                            model_type = "Z-Image"
+                        elif "chroma" in cn:
+                            model_type = "Chroma"
+                        elif "glm" in cn:
+                            model_type = "GLM"
                 # Flux2/Klein 用 BN；FLUX/Qwen 用 scaling_factor
                 use_bn = model_type and "FLUX2" in model_type.upper()
                 external_vae = DiffusersVAEFromComfy(

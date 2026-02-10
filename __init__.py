@@ -37,13 +37,13 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicPowerLoraLoader": "🚀 强力lora加载器 Magic Power LoRA Loader",
     "MagicResolution": "📐 分辨率输出器 Magic Resolution Output",
     "MagicSDNQLoader": "📦 SDNQ模型加载器 Magic SDNQ Model Loader",
-    "MagicSDNQSampler": "🎲 SDNQ采样器 Magic SDNQ Sampler"
+    "MagicSDNQSampler": "🎲 SDNQ K采样器 Magic SDNQ K Sampler"
 }
 
 # --- 指定 Web 目录 ---
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.2.0 - SDNQ Model Loader)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.2.1 - SDNQ Model Loader)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")

@@ -198,13 +198,24 @@ class SDNQModelWrapper:
     def _normalize_model_type(self, model_type: str) -> str:
         if not model_type:
             return "unknown"
-        model_type = model_type.upper()
-        if "FLUX" in model_type:
+        mt = model_type.upper()
+        # 顺序重要：先检测更具体的类型
+        if "FLUX2" in mt or "FLUX.2" in mt:
+            return "flux2"
+        if "FLUX" in mt:
             return "flux"
-        elif "SD3" in model_type:
+        if "SD3" in mt:
             return "sd3"
-        elif "SDXL" in model_type:
+        if "SDXL" in mt:
             return "sdxl"
+        if "QWEN" in mt:
+            return "qwen_image"
+        if "Z-IMAGE" in mt or "ZIMAGE" in mt or "Z_IMAGE" in mt:
+            return "z_image"
+        if "CHROMA" in mt:
+            return "chroma"
+        if "GLM" in mt:
+            return "glm_image"
         return "unknown"
 
     def _detect_model_type(self) -> str:
@@ -299,7 +310,7 @@ class SDNQModelWrapper:
     def partially_unload_ram(self, ram_to_unload):
         pass
 
-    def detach(self, unpatch_weights=True):
+    def detach(self, unpatch_weights=True, unpatch_all=False):
         """Offload to CPU and return the pipeline (real_model)."""
         self.model_patches_to(self.offload_device)
         return self.model

@@ -12,12 +12,29 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > Latest Update / 最新更新：2026-02-11
 
+> **V1.2.1 版本介绍 / Version Introduction** 2026-02-11
+
+> 1. **Optimization / 优化**: 代码优化与 bug 修复
+>    * 与官方 K 采样器对齐的显存管理、全模型（文生图/图生图/图编辑）输出尺寸补偿等逻辑优化与修复
+>    * Code and bug fixes including VRAM handling alignment with official KSampler and output size compensation for all modes (txt2img, img2img, image edit)
+
+> 2. **New Feature / 新增功能**: SDNQ K 采样器局部重绘适配
+>    * 支持所有 SDNQ 模型（含 Flux2Klein）；使用 ComfyUI 的 InpaintModelConditioning + SetLatentNoiseMask 准备数据
+>    * 4D latent 模型（如 SDXL/GLM）采用 latent 空间混合；3D packed 模型（如 Flux/Flux2/QwenImage/Chroma）采用像素空间 composite
+>    * SDNQ node introduction includes an example inpainting workflow (download image to import into ComfyUI)
+>    * Inpainting support for all SDNQ models; use InpaintModelConditioning + SetLatentNoiseMask; 4D models use latent blending, 3D packed models use pixel-space composite
+
+> 3. **New Feature / 新增功能**: SDNQ K 采样器模式切换（SDNQ / SDNQ + KSampler）
+>    * 可切换「仅 SDNQ」与「SDNQ + KSampler」两种模式。「仅 SDNQ」下接入非 SDNQ 模型会报错；「SDNQ + KSampler」下根据接入模型自动选择采样方式
+>    * 在「SDNQ + KSampler」模式下，SDNQ 模型走 SDNQ 逻辑，其他模型（如 CheckpointLoader）走 ComfyUI 官方 KSampler，即可当作通用 K 采样器使用
+>    * Sampler mode switch: "SDNQ" (SDNQ models only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler)
+
 > **V1.2.0 版本介绍 / Version Introduction** 2026-02-11
 
-> 1. **Optimization / 优化**: Magic SDNQ Sampler - VRAM 处理逻辑与官方 K 采样器对齐
+> 1. **Optimization / 优化**: Magic SDNQ K Sampler - VRAM 处理逻辑与官方 K 采样器对齐
 >    * 采样前接入 ComfyUI 的 load_models_gpu / free_memory，与其他模型统一显存管理
 >    * 在 12GB 等显存下可先卸载其他已加载模型、再加载 SDNQ 进行采样，减少爆显存
->    * SDNQ Sampler now uses ComfyUI's load_models_gpu/free_memory for consistent VRAM control with official KSampler
+>    * SDNQ K Sampler now uses ComfyUI's load_models_gpu/free_memory for consistent VRAM control with official KSampler
 >    * On 12GB VRAM, other models can be offloaded before SDNQ sampling to reduce OOM
 
 > 2. **New Feature / 新增功能**: Magic SDNQ Loader - FLUX 系列支持外接 CLIP/VAE（仅加载本体）
@@ -35,16 +52,19 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * SDNQ 模型自带 model、clip、vae，可灵活搭配其他节点
 >    * 强力 LoRA 加载器新增 SDNQ 模式，在设置中切换即可支持 SDNQ 模型
 >    * 按照 SDNQ 技术源仓库教程配置环境后即可使用
->    * SDNQ 的详细功能和工作流请参阅 [节点介绍](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器)
+>    * SDNQ 的详细功能和工作流请参阅 [节点介绍](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器)
 >    * Standalone SDNQ model loader and sampler nodes, sampling and LoRA loading similar to official ComfyUI
 >    * SDNQ models include model, clip, vae; can be combined with other nodes
 >    * Magic Power LoRA Loader adds SDNQ mode; switch in settings to support SDNQ models
 >    * Follow SDNQ technical source repo tutorial for environment setup
->    * For detailed SDNQ features and workflow, see [Node Introduction](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器)
+>    * For detailed SDNQ features and workflow, see [Node Introduction](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器)
 
 > 2. **Update / 更新**: Magic Power LoRA Loader - 节点最小尺寸限制
 >    * 设置节点最小宽高为 470×300，防止加载时权重修改按钮不可见或 UI 溢出
 >    * Set minimum node size to 470×300 to prevent weight control being hidden or UI overflow
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.1.6 版本介绍 / Version Introduction** 2026-01-31
 
@@ -66,9 +86,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 新增对 SDNQ 量化模型的 LoRA 加载支持
 >    * 兼容 [comfyui-sdnq](https://github.com/EnragedAntelope/comfyui-sdnq) 主分支仓库
 >    * 支持来自 [HuggingFace SDNQ 集合](https://huggingface.co/collections/Disty0/sdnq) 的 SDNQ 量化模型
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.1.7 版本介绍 / Version Introduction** 2026-01-31
 
@@ -323,7 +340,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
 * **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
-* **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器).
+* **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器).
 * **可视化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
 * **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
 * **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
@@ -335,7 +352,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
 * **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
-* **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-sdnq-model-loader--sdnq-sampler--sdnq-模型加载器与采样器) 配合使用。
+* **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器) 配合使用。
 
 </details>
 
@@ -360,7 +377,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 </details>
 
-### 9. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ Sampler (SDNQ 模型加载器与采样器)
+### 9. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ K Sampler (SDNQ 模型加载器与 K 采样器)
 > **Standalone SDNQ model loading and sampling, ComfyUI-style workflow.** / **独立的 SDNQ 模型加载与采样，贴近 ComfyUI 官方工作流。**
 
 <details>
@@ -406,10 +423,22 @@ FLUX models (including FLUX.1, FLUX.2, and Flux2Klein) support **connecting both
 
 At 1024×1536 or below, single image editing or text-to-image can complete in about 10–20 seconds. Support for external CLIP/VAE on other model types (e.g. Qwen, Z-Image) may be added in future versions.
 
+#### 局部重绘工作流事例 / Inpainting Example Workflow
+
+可直接下载图片导入 ComfyUI 使用。You can download the image and import into ComfyUI.
+
+<img width="4995" height="2281" alt="SDNQ Inpainting Workflow" src="https://github.com/user-attachments/assets/8bec05e9-4de1-4674-ba47-fbc5cef2060c" />
+
+**运行结果 / Result**
+
+<img width="2544" height="1060" alt="SDNQ Inpainting Result" src="https://github.com/user-attachments/assets/2ca3b26f-eefe-48e2-95c3-d75d4025f0f9" />
+
 #### ⚠️ 注意事项 / Notes
 
-* **❌ 不支持局部重绘 / Inpainting NOT supported**：Magic SDNQ Sampler 基于 diffusers pipeline，与 ComfyUI 原生 KSampler 的 inpainting 机制架构不同，无法保证局部重绘效果。如需局部重绘，请使用 ComfyUI 官方工作流（如 UNetLoader/OTUNetLoader + KSampler）。
-* **Magic SDNQ Sampler does NOT support inpainting**: It uses diffusers pipeline, which differs from ComfyUI's native KSampler inpainting. For inpainting, use official ComfyUI workflow (e.g. UNetLoader/OTUNetLoader + KSampler).
+* **✅ 局部重绘 / Inpainting**：SDNQ K 采样器已适配局部重绘，支持所有 SDNQ 模型（含 Flux2Klein）。使用 ComfyUI 的 **InpaintModelConditioning** + **SetLatentNoiseMask** 准备数据即可；4D latent 模型采用 latent 空间混合，3D packed 模型（如 Flux/Flux2）采用像素空间 composite。下方附有局部重绘示例工作流。
+* **Inpainting supported**: Use **InpaintModelConditioning** + **SetLatentNoiseMask**; 4D models use latent blending, 3D packed models use pixel-space composite. Example workflow below.
+* **🎲 采样模式切换 / Sampler mode**: 可选「仅 SDNQ」或「SDNQ + KSampler」。在「SDNQ + KSampler」模式下，根据接入模型自动选择采样方式（SDNQ 模型走 SDNQ 逻辑，其他模型走官方 KSampler），可当作通用 K 采样器使用。
+* **Sampler mode**: "SDNQ" (SDNQ only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler).
 * **当前仅支持图像**：因配置限制，暂未适配视频模型，仅支持图像生成和图像编辑模型。视频模型适配将在后续版本考虑。
 * **Image models only**: Video model support is not yet implemented; currently supports image generation and image editing models only.
 
@@ -455,9 +484,9 @@ At 1024×1536 or below, single image editing or text-to-image can complete in ab
 
 **使用 SDNQ 节点 / Using SDNQ Nodes**
 
-若使用 Magic SDNQ Loader 与 Magic SDNQ Sampler，请按照 [SDNQ 技术源仓库](https://github.com/Disty0/sdnq) 的教程配置环境，并安装 `requirements-sdnq.txt` 中的依赖。
+若使用 Magic SDNQ Loader 与 Magic SDNQ K Sampler，请按照 [SDNQ 技术源仓库](https://github.com/Disty0/sdnq) 的教程配置环境，并安装 `requirements-sdnq.txt` 中的依赖。
 
-To use Magic SDNQ Loader and Magic SDNQ Sampler, follow the [SDNQ technical source](https://github.com/Disty0/sdnq) tutorial for environment setup and install dependencies from `requirements-sdnq.txt`.
+To use Magic SDNQ Loader and Magic SDNQ K Sampler, follow the [SDNQ technical source](https://github.com/Disty0/sdnq) tutorial for environment setup and install dependencies from `requirements-sdnq.txt`.
 
 ---
 
