@@ -115,6 +115,9 @@ class MagicSDNQLoader:
         use_torch_compile: bool = False,
         enable_vae_tiling: bool = False,
     ) -> Tuple:
+        # NOTE: ComfyUI passes optional inputs in declaration order from INPUT_TYPES.
+        # In INPUT_TYPES, optional has: clip, vae, custom_repo_or_path, auto_download, use_xformers, use_torch_compile, enable_vae_tiling
+        # This matches the function parameter order, so clip and vae are correctly assigned.
         if model_selection == "--Custom Model--":
             if not custom_repo_or_path or not custom_repo_or_path.strip():
                 raise ValueError(
@@ -262,6 +265,14 @@ class MagicSDNQLoader:
                         gc.collect()
                         print("[SDNQ] 已释放加载阶段显存碎片，便于首次采样")
                     print(f"\n[SDNQ] ✓ 仅加载本体完成 (Body-only loaded). 使用外接 CLIP/VAE，显存占用更低。\n")
+                    
+                    # Sanity check: ensure external CLIP and VAE are the correct objects
+                    if clip is None or vae is None:
+                        raise ValueError("Body-only mode requires both external CLIP and VAE to be connected, but one or both are None")
+                    
+                    # Debug logging for type verification
+                    print(f"[SDNQ] Body-only return types: model_wrapper={type(model_wrapper).__name__}, clip={type(clip).__name__}, vae={type(vae).__name__}")
+                    
                     return (model_wrapper, clip, vae)
                 # 当前模型不支持 body-only：报错并阻止继续运行
                 display_name = model_selection if model_selection != "--Custom Model--" else (custom_repo_or_path.strip() or "当前自定义模型")
