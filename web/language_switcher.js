@@ -153,7 +153,12 @@ const loraLoaderTranslations = {
     "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）": { zh: "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）", en: "Use diffusers PEFT adapter system to load LoRAs, supports parallel application of multiple LoRAs, suitable for SDNQ quantized models (DiffusionPipeline)" },
 
     // SDNQ 缓存提示（弹窗）
-    "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。": { zh: "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。", en: "If you Bypass a middle loader or change LoRA selection in a chain, please Clear Queue before running to avoid using cached output." }
+    "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。": { zh: "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。", en: "If you Bypass a middle loader or change LoRA selection in a chain, please Clear Queue before running to avoid using cached output." },
+    
+    // LoRA 串连功能相关
+    "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。": { zh: "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。", en: "lora串接受 received invalid data. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader, not from other text or nodes." },
+    "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。": { zh: "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。", en: "lora串接受 received data that is not in LoRA chain format. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader." },
+    "链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。": { zh: "链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。", en: "Chain-end node (node that does not connect lora串输出 to other loaders) must connect model and clip." }
 };
 
 // 节点翻译映射表 - Magic SDNQ Loader & Sampler

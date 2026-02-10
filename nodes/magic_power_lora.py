@@ -116,6 +116,39 @@ if _LORA_ADAPTER_AVAILABLE:
 else:
     INT8LoRAPatchAdapter = None
 
+# --- LoRA 串（lora_chain）格式：仅本加载器识别，用于节点间传递 LoRA 列表 ---
+MAGIC_LORA_CHAIN_KEY = "_magic_lora_chain"
+
+def _parse_lora_chain(chain_in):
+    """解析 lora串接受。
+    合法格式为 dict: {"_magic_lora_chain": True, "loras": [...]}
+    也兼容旧版 JSON 字符串格式。None / 空值返回空列表。
+    """
+    if chain_in is None:
+        return []
+    # 兼容旧版 JSON 字符串
+    if isinstance(chain_in, str):
+        if not chain_in.strip():
+            return []
+        try:
+            chain_in = json.loads(chain_in)
+        except (json.JSONDecodeError, TypeError):
+            raise RuntimeError(
+                "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。"
+            )
+    if not isinstance(chain_in, dict) or chain_in.get(MAGIC_LORA_CHAIN_KEY) is not True:
+        raise RuntimeError(
+            "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。"
+        )
+    loras = chain_in.get("loras")
+    if not isinstance(loras, list):
+        return []
+    return loras
+
+def _serialize_lora_chain(items):
+    """将 LoRA 列表打包为 lora串输出（dict 格式，作为 MAGIC_LORA_CHAIN 类型传递）。"""
+    return {MAGIC_LORA_CHAIN_KEY: True, "loras": items}
+
 # --- 动态 LoRA 同步 Hook ---
 
 class DynamicLoRAHook:
@@ -230,19 +263,23 @@ class MagicPowerLoraLoader:
     def INPUT_TYPES(s):
         return {
             "required": {
+                "lora_stack": ("STRING", {"default": "[]", "multiline": False}),
+            },
+            "optional": {
                 "model": ("MODEL",),
                 "clip": ("CLIP",),
-                "lora_stack": ("STRING", {"default": "[]", "multiline": False}),
+                "lora串接受": ("MAGIC_LORA_CHAIN",),
             },
             "hidden": {
                 "int8_mode": ("STRING", {"default": "none"}),
                 "sdnq_mode": ("STRING", {"default": "none"}),
+                "lora串输出已连接": ("BOOLEAN", {"default": True}),  # 由前端根据图连接注入：未连接=链末端
             }
         }
 
-    RETURN_TYPES = ("MODEL", "CLIP", "IMAGE", "STRING")
-    RETURN_NAMES = ("model", "clip", "lora_preview", "tags_output")
-    OUTPUT_IS_LIST = (False, False, True, False)  # IMAGE是列表输出（图片组）
+    RETURN_TYPES = ("MODEL", "CLIP", "IMAGE", "STRING", "MAGIC_LORA_CHAIN")
+    RETURN_NAMES = ("model", "clip", "lora_preview", "tags_output", "lora串输出")
+    OUTPUT_IS_LIST = (False, False, True, False, False)  # IMAGE是列表输出（图片组）
     FUNCTION = "apply_loras"
     CATEGORY = "✨ Magic Assistant"
 
@@ -326,77 +363,86 @@ class MagicPowerLoraLoader:
         except Exception:
             return None
 
-    def apply_loras(self, model, clip, lora_stack, int8_mode="none", sdnq_mode="none"):
+    def apply_loras(self, lora_stack, model=None, clip=None, int8_mode="none", sdnq_mode="none", **kwargs):
         """
         应用 LoRA
         int8_mode: "none" (默认), "stochastic" (静态), "dynamic" (动态)
         sdnq_mode: "none" (默认), "sdnq" (SDNQ 模式，用于 DiffusionPipeline)
+        链末端由「lora串输出」是否被连接判定：未连接则为末端，末端才加载 LoRA 并需连接 model/clip。
         """
-        out_model = model
-        out_clip = clip
-        active_tags = []
-        preview_images = []  # 改为列表，收集所有预览图
+        # 前端根据图连接注入 lora串输出已连接；未注入时默认 True（视为非末端，不加载，避免误加载）
+        lora_output_connected = kwargs.get("lora串输出已连接", True)
+        chain_end = not lora_output_connected
 
+        # ---------- 解析 lora串接受（MAGIC_LORA_CHAIN 类型，由 ComfyUI 自动传递）----------
+        lora_chain_in = kwargs.get("lora串接受", None)
+        try:
+            received_list = _parse_lora_chain(lora_chain_in)
+        except RuntimeError as e:
+            raise RuntimeError(str(e))
+
+        # ---------- 本节点 lora_stack 解析 ----------
         try:
             if not isinstance(lora_stack, str) or not lora_stack.strip():
                 stack_data = []
             else:
                 stack_data = json.loads(lora_stack)
-        except:
+        except Exception:
             stack_data = []
 
-        items_to_process = []
+        own_items = []
         if isinstance(stack_data, dict):
             if "folders" in stack_data:
                 for f in stack_data["folders"]:
                     if f.get("loras"):
-                        items_to_process.extend([l for l in f["loras"] if l.get("enabled", True)])
+                        own_items.extend([l for l in f["loras"] if l.get("enabled", True)])
             if "loras" in stack_data:
-                items_to_process.extend([l for l in stack_data["loras"] if l.get("enabled", True)])
+                own_items.extend([l for l in stack_data["loras"] if l.get("enabled", True)])
         elif isinstance(stack_data, list):
-            items_to_process = [l for l in stack_data if l.get("enabled", True)]
+            own_items = [l for l in stack_data if l.get("enabled", True)]
+
+        # 合并顺序：本节点 + 接收到的（本节点在上，接收到的在下）
+        merged = own_items + received_list
+        lora_chain_out = _serialize_lora_chain(merged)
+
+        # 链末端但未收到上游时提示：可能上游加载器未参与执行（依赖未进 prompt/执行列表）
+        if chain_end and len(received_list) == 0:
+            print(f"💡 [MagicPowerLora] 链末端：本节点 {len(own_items)} 个 LoRA，未收到上游 lora 串。若工作流中有上游加载器将「lora串输出」接到本节点「lora串接受」，请保存工作流后执行完整图（不要只执行部分节点）。")
+
+        # ---------- 非链末端：只传出 lora 串，不加载；不要求 model/clip ----------
+        if not chain_end:
+            placeholder_preview = [torch.zeros((1, 64, 64, 3), dtype=torch.float32, device="cpu")]
+            return (model, clip, placeholder_preview, "", lora_chain_out)
+
+        # ---------- 链末端：必须连接 model 和 clip ----------
+        if model is None or clip is None:
+            raise RuntimeError("链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。")
+        out_model = model
+        out_clip = clip
+        active_tags = []
+        preview_images = []
+
+        items_to_process = merged  # 末端用合并后的整链列表加载
 
         # 检测模型类型
         is_int8 = self.is_int8_model(out_model)
         is_sdnq = self.is_sdnq_model(out_model)
-        
-        # 如果启用 SDNQ 模式，优先使用 SDNQ 加载
-        if sdnq_mode == "sdnq" and is_sdnq:
-            # SDNQ 模式处理
-            pass  # 将在下面的代码中实现
-        elif sdnq_mode == "sdnq" and not is_sdnq:
+
+        if sdnq_mode == "sdnq" and not is_sdnq:
             print(f"⚠️ [MagicPowerLora] SDNQ 模式已启用，但模型似乎不是 SDNQ 模型（DiffusionPipeline），将回退到标准模式")
             sdnq_mode = "none"
-        
-        # 如果未启用 SDNQ 模式但模型是 SDNQ，给出提示
         if sdnq_mode == "none" and is_sdnq:
             print(f"💡 [MagicPowerLora] 检测到 SDNQ 模型（DiffusionPipeline），建议在设置中启用 SDNQ 模式")
-        
-        # 如果启用 INT8 模式但模型不是 INT8，给出警告
-        if int8_mode != "none" and not is_int8:
-            print(f"⚠️ [MagicPowerLora] INT8 模式已启用，但模型似乎不是 INT8 量化模型，将尝试使用 INT8 加载器")
-        
-        # 如果未启用 INT8 模式但模型是 INT8，给出提示
-        if int8_mode == "none" and is_int8:
-            print(f"💡 [MagicPowerLora] 检测到 INT8 模型，建议在设置中启用 INT8 模式以获得更好的兼容性")
+        # 仅在实际会走 INT8/标准路径时提示 INT8（走 SDNQ 时忽略节点上残留的 int8_mode 设置，避免误报）
+        using_sdnq = (sdnq_mode == "sdnq" and is_sdnq)
+        if not using_sdnq:
+            if int8_mode != "none" and not is_int8:
+                print(f"⚠️ [MagicPowerLora] INT8 模式已启用，但模型似乎不是 INT8 量化模型，将尝试使用 INT8 加载器")
+            if int8_mode == "none" and is_int8:
+                print(f"💡 [MagicPowerLora] 检测到 INT8 模型，建议在设置中启用 INT8 模式以获得更好的兼容性")
 
         mode_str = f"{int8_mode}" if int8_mode != "none" else (f"{sdnq_mode}" if sdnq_mode != "none" else "standard")
-        # SDNQ 链式：本节点 0 个时提示透传；本节点 >0 个时正常
-        upstream_count = 0
-        if sdnq_mode == "sdnq" and is_sdnq and len(items_to_process) == 0:
-            try:
-                pipe = out_model.get_pipeline() if hasattr(out_model, 'get_pipeline') else out_model
-                if getattr(pipe, 'get_list_adapters', None):
-                    existing = pipe.get_list_adapters()
-                    upstream_count = len(existing.get("transformer", existing.get("unet", [])) or [])
-            except Exception:
-                pass
-        if len(items_to_process) == 0 and upstream_count > 0:
-            print(f"🚀 [MagicPowerLora] Processing 0 Loras (链式：保留上游 {upstream_count} 个)... (Mode: {mode_str})")
-        elif len(items_to_process) == 0:
-            print(f"🚀 [MagicPowerLora] Processing 0 Loras... (Mode: {mode_str})")
-        else:
-            print(f"🚀 [MagicPowerLora] Processing {len(items_to_process)} Loras... (Mode: {mode_str})")
+        print(f"🚀 [MagicPowerLora] 链末端：加载 {len(items_to_process)} 个 LoRA（含串接）... (Mode: {mode_str})")
 
         # 根据模式选择加载方式
         if int8_mode == "stochastic" and INT8_AVAILABLE:
@@ -574,8 +620,7 @@ class MagicPowerLoraLoader:
                         print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
 
         elif sdnq_mode == "sdnq" and is_sdnq:
-            # SDNQ 模式 - 整合的 SDNQ LoRA 加载逻辑（用于 DiffusionPipeline）
-            # 基于 comfyui-sdnq 源文件的实现进行优化
+            # SDNQ 模式 - 链末端：先全局卸载，再按合并列表顺序加载（与 comfyui-sdnq 每次运行先卸再加载一致）
             sdnq_success = False
             try:
                 from diffusers import DiffusionPipeline
@@ -585,36 +630,16 @@ class MagicPowerLoraLoader:
                 diffusers_ok = False
 
             if diffusers_ok:
-                # 获取实际 pipeline（支持 Magic SDNQ Loader 的 wrapper）
                 pipeline = out_model.get_pipeline() if hasattr(out_model, 'get_pipeline') else out_model
                 if not isinstance(pipeline, DiffusionPipeline):
                     print(f"   ⚠️ [MagicPowerLora] SDNQ 模式需要 DiffusionPipeline，当前 model: {type(out_model).__name__}, pipeline: {type(pipeline).__name__}")
-                elif isinstance(pipeline, DiffusionPipeline):
-                    print(f"   [SDNQ] Pipeline: {type(pipeline).__name__}，开始加载 {len(items_to_process)} 个 LoRA...")
-                    # 与标准模式一致：只追加本节点选择的 LoRA，不卸载、不用 metadata
-                    # pipeline 已含上游 adapters，本节点直接在其上追加；0 个时：有上游则透传，无上游则卸载（与 comfyui-sdnq 一致）
-                    if len(items_to_process) == 0:
-                        try:
-                            curr = pipeline.get_list_adapters()
-                            existing_adapters = list(curr.get("transformer", curr.get("unet", [])) or [])
-                        except Exception:
-                            existing_adapters = []
-                        if existing_adapters:
-                            print(f"   [SDNQ] 本节点未选 LoRA，透传上游")
-                        else:
-                            if hasattr(pipeline, 'unload_lora_weights'):
-                                pipeline.unload_lora_weights()
-                                print(f"   [SDNQ] 本节点未选 LoRA，已卸载（与 comfyui-sdnq 一致）")
-                        sdnq_success = True
-                    else:
-                        # 获取当前已加载的 adapters（上游）
-                        try:
-                            curr = pipeline.get_list_adapters()
-                            existing_adapters = list(curr.get("transformer", curr.get("unet", [])) or [])
-                        except Exception:
-                            existing_adapters = []
-                        lora_adapters = list(existing_adapters)
-                        lora_weights = [1.0] * len(existing_adapters)
+                else:
+                    print(f"   [SDNQ] Pipeline: {type(pipeline).__name__}，链末端：先全局卸载再加载 {len(items_to_process)} 个 LoRA...")
+                    if hasattr(pipeline, 'unload_lora_weights'):
+                        pipeline.unload_lora_weights()
+                        print(f"   [SDNQ] 已全局卸载")
+                    lora_adapters = []
+                    lora_weights = []
 
                     for idx, item in enumerate(items_to_process):
                         lora_name = item.get("name", "").strip()
@@ -647,35 +672,18 @@ class MagicPowerLoraLoader:
                             is_local_file = os.path.exists(lora_path) and os.path.isfile(lora_path)
                             path_hash = abs(hash(os.path.normpath(lora_path))) % (10 ** 8)
                             adapter_name = f"lora_{path_hash}_{idx}"
-                            # 若同路径已在上游加载，复用
-                            try:
-                                curr = pipeline.get_list_adapters()
-                                existing_list = list(curr.get("transformer", curr.get("unet", [])) or [])
-                            except Exception:
-                                existing_list = []
-                            reuse_name = next((a for a in existing_list if a.startswith(f"lora_{path_hash}_")), None)
-                            if reuse_name is not None:
-                                if reuse_name in lora_adapters:
-                                    lora_weights[lora_adapters.index(reuse_name)] = weight
-                                else:
-                                    lora_adapters.append(reuse_name)
-                                    lora_weights.append(weight)
-                                print(f"   [SDNQ] Reusing: {lora_name} (strength: {weight})")
-                                sdnq_success = True
-                                continue
+                            print(f"   [SDNQ] Loading ({adapter_name})... {lora_name} (strength: {weight})")
+                            if is_local_file:
+                                pipeline.load_lora_weights(
+                                    os.path.dirname(lora_path),
+                                    weight_name=os.path.basename(lora_path),
+                                    adapter_name=adapter_name
+                                )
                             else:
-                                print(f"   [SDNQ] Loading ({adapter_name})... {lora_name} (strength: {weight})")
-                                if is_local_file:
-                                    pipeline.load_lora_weights(
-                                        os.path.dirname(lora_path),
-                                        weight_name=os.path.basename(lora_path),
-                                        adapter_name=adapter_name
-                                    )
-                                else:
-                                    pipeline.load_lora_weights(lora_path, adapter_name=adapter_name)
-                                lora_adapters.append(adapter_name)
-                                lora_weights.append(weight)
-                                print(f"   ✅ Applied (SDNQ): {lora_name} (strength: {weight})")
+                                pipeline.load_lora_weights(lora_path, adapter_name=adapter_name)
+                            lora_adapters.append(adapter_name)
+                            lora_weights.append(weight)
+                            print(f"   ✅ Applied (SDNQ): {lora_name} (strength: {weight})")
                             sdnq_success = True
                         except Exception as e:
                             import traceback
@@ -694,7 +702,7 @@ class MagicPowerLoraLoader:
                             except Exception:
                                 pass
 
-                    if items_to_process and lora_adapters:
+                    if lora_adapters:
                         try:
                             pipeline.set_adapters(lora_adapters, adapter_weights=lora_weights)
                             print(f"   ✅ [SDNQ] {len(lora_adapters)} LoRA(s) active")
@@ -702,14 +710,11 @@ class MagicPowerLoraLoader:
                         except Exception as e:
                             print(f"   ⚠️ [SDNQ] Failed to set adapter weights: {e}")
                             sdnq_success = False
-                    elif items_to_process and not lora_adapters:
-                        print(f"   ℹ️ [SDNQ] No LoRAs to load (本节点选择均加载失败)")
+                    elif items_to_process:
+                        print(f"   ℹ️ [SDNQ] No LoRAs to load (本链均加载失败)")
                         sdnq_success = False
-            
-            # 如果 SDNQ 模式失败：SDNQ 模型（DiffusionPipeline）与 ComfyUI 标准 load_lora_for_models 不兼容，
-            # 标准模式需要 model.model_config，而 Flux2Transformer2DModel 等 diffusers 模型没有此属性。
-            # 因此不进行回退，仅输出提示，模型保持无 LoRA 状态。
-            if not sdnq_success:
+
+            if not sdnq_success and (sdnq_mode == "sdnq" and is_sdnq):
                 print(f"   ⚠️ [MagicPowerLora] SDNQ LoRA 加载失败，无法回退到标准模式（SDNQ 模型与 ComfyUI 标准 LoRA 不兼容）")
                 print(f"   💡 Troubleshooting（与 comfyui-sdnq 源节点一致）：")
                 print(f"      1. 确认 LoRA 文件存在（.safetensors），路径格式与 loras 文件夹内一致")
@@ -756,7 +761,7 @@ class MagicPowerLoraLoader:
             preview_images = [torch.zeros((1, 64, 64, 3), dtype=torch.float32, device="cpu")]
 
         final_text = ", ".join(active_tags)
-        return (out_model, out_clip, preview_images, final_text)
+        return (out_model, out_clip, preview_images, final_text, lora_chain_out)
 
 # --- API 接口 ---
 

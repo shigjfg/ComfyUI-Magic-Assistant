@@ -1,7 +1,7 @@
 [project]
 name = "magic-assistant"
 description = "Say goodbye to clutter! 🚀 Integrated Nodes to simplify workflow. 🤖 AI Node: Role-play & rules with one-click presets! 🧠 Programmable Logic: Edit logic in ONE node—no complex wiring! 🌐 Bilaingual: Real-time Chinese/English switching! 📦 SDNQ: Low-VRAM model loader & sampler! 🎨 More nodes await! 告别琐碎连线！🚀 多功能集成节点。🤖 AI节点：角色扮演+规则，一键预设！🧠 逻辑计算：一节点搞定运算与比较！🌐 双语：实时中英切换！📦 SDNQ：低显存模型加载与采样！🎨 更多节点等你发现！"
-version = "1.2.1"
+version = "1.2.2"
 license = {file = "LICENSE"} 
 # classifiers = [
 #     # For OS-independent nodes (works on all operating systems)

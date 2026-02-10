@@ -26,7 +26,7 @@ app.registerExtension({
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === NODE_NAME) {
             const MPL_MIN_W = 470; //设置强力lora加载器节点的最小宽高
-            const MPL_MIN_H = 300;
+            const MPL_MIN_H = 350;
 
             // 覆盖 computeSize：强制最小尺寸（ComfyUI 前端会调用此方法）
             const origComputeSize = nodeType.prototype.computeSize;
@@ -54,7 +54,12 @@ app.registerExtension({
                 }
                 // 完全隐藏widget（参考zml代码的方式）
                 stackWidget.hidden = true;
-                stackWidget.computeSize = () => [0, 0]; 
+                stackWidget.computeSize = () => [0, 0];
+                // 移除 lora_stack 的输入端口（防止用户误连接）
+                const stackInputIdx = this.inputs?.findIndex(i => i.name === "lora_stack");
+                if (stackInputIdx >= 0) {
+                    this.removeInput(stackInputIdx);
+                }
 
                 // INT8 模式设置（隐藏的 widget）
                 let int8ModeWidget = this.widgets.find(w => w.name === "int8_mode");
@@ -373,6 +378,11 @@ app.registerExtension({
                     if (stackWidget) {
                         stackWidget.hidden = true;
                         stackWidget.computeSize = () => [0, 0];
+                    }
+                    // 移除 lora_stack 的输入端口（防止用户误连接）
+                    const stackInputIdx = this.inputs?.findIndex(i => i.name === "lora_stack");
+                    if (stackInputIdx >= 0) {
+                        this.removeInput(stackInputIdx);
                     }
                     const int8ModeWidget = this.widgets.find(w => w.name === "int8_mode");
                     if (int8ModeWidget) {
@@ -4469,5 +4479,37 @@ app.registerExtension({
             };
 
         }
+    },
+    // 注入「lora串输出已连接」：根据 prompt 中是否有其他节点引用本节点的 lora串输出 判定链末端（未连接=末端）
+    init(app) {
+        const LORA_OUTPUT_INDEX = 4; // RETURN_NAMES: model, clip, lora_preview, tags_output, lora串输出
+        const originalQueuePrompt = api.queuePrompt;
+        api.queuePrompt = async function (index, prompt, ...args) {
+            if (prompt && prompt.output && typeof prompt.output === "object") {
+                const output = prompt.output;
+                const loraOutputConnectedIds = new Set();
+                // 从 prompt.output 已有的 inputs 中找出哪些节点的 lora串输出 已被连接
+                for (const nodeId of Object.keys(output)) {
+                    const node = output[nodeId];
+                    const inputs = node && node.inputs;
+                    if (!inputs) continue;
+                    for (const key of Object.keys(inputs)) {
+                        const val = inputs[key];
+                        if (Array.isArray(val) && val.length >= 2 && val[1] === LORA_OUTPUT_INDEX) {
+                            loraOutputConnectedIds.add(String(val[0]));
+                        }
+                    }
+                }
+                // 注入「lora串输出已连接」（链末端判定）
+                for (const nodeId of Object.keys(output)) {
+                    const node = output[nodeId];
+                    if (node && node.class_type === NODE_NAME) {
+                        if (!node.inputs) node.inputs = {};
+                        node.inputs["lora串输出已连接"] = loraOutputConnectedIds.has(String(nodeId));
+                    }
+                }
+            }
+            return originalQueuePrompt.apply(api, [index, prompt, ...args]);
+        };
     }
 });

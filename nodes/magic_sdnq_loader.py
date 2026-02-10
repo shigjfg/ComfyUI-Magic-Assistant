@@ -247,6 +247,9 @@ class MagicSDNQLoader:
                         pipeline.enable_model_cpu_offload()
                     elif memory_mode == "lowvram":
                         pipeline.enable_sequential_cpu_offload()
+                    # 触发 VAE 加载，使 "Requested to load AutoencoderKL" 紧接在 pipeline 加载信息后
+                    if hasattr(pipeline, "vae"):
+                        _ = getattr(pipeline, "vae", None)
                     if enable_vae_tiling:
                         try:
                             pipeline.enable_vae_tiling()
@@ -374,6 +377,10 @@ class MagicSDNQLoader:
                 print("[SDNQ] Enabling sequential CPU offload (low VRAM mode)...")
                 pipeline.enable_sequential_cpu_offload()
                 print("[SDNQ] ✓ Sequential offloading enabled (minimal VRAM usage)")
+
+            # 触发 VAE 加载，使 "Requested to load AutoencoderKL" 紧接在 pipeline 加载信息后
+            if hasattr(pipeline, "vae"):
+                _ = getattr(pipeline, "vae", None)
 
             # VAE tiling
             vae_tiling_ok = False

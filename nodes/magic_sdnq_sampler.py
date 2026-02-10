@@ -382,8 +382,8 @@ class MagicSDNQSampler:
             ref_pil_list = _ref_latents_to_pil_list(ref_latents, pipeline)
             ref_pil = ref_pil_list[0] if len(ref_pil_list) == 1 else (ref_pil_list if ref_pil_list else None)
 
-        # latent 尺寸（用于 width/height）
-        # 图像编辑时使用参考图尺寸；否则用 latent 推算
+        # latent 尺寸（用于 width/height），适用于所有 SDNQ 模型（Flux/Flux2Klein/SDXL/GLM 等）
+        # 图像编辑时使用参考图尺寸；文生图用 latent 推算，用户传多少分辨率就输出多少
         samples = latent["samples"]
         noise_mask_raw = latent.get("noise_mask", None)  # 局部重绘 mask（来自 SetLatentNoiseMask / VAEEncodeForInpaint）
         batch, channels, h, w = samples.shape
@@ -404,11 +404,29 @@ class MagicSDNQSampler:
             width = max(8, _align_dim(src_w, dim_mult))
             height = max(8, _align_dim(src_h, dim_mult))
         else:
-            # 文生图：从 latent 形状推算（ComfyUI latent 统一 h/8, w/8）
-            width = max(8, _align_dim(w * 8, dim_mult))
-            height = max(8, _align_dim(h * 8, dim_mult))
+            # 文生图：与图生图一致，输出尺寸 = 用户期望。packed pipeline 的 latent 空间为 1/16，故 *16；非 packed 为 1/8，故 *8
+            if _has_pack:
+                width = max(8, _align_dim(w * 16, dim_mult))
+                height = max(8, _align_dim(h * 16, dim_mult))
+            else:
+                width = max(8, _align_dim(w * 8, dim_mult))
+                height = max(8, _align_dim(h * 8, dim_mult))
 
         _swap_scheduler(pipeline, scheduler)
+
+        # 先触发 VAE 加载，使 "Requested to load AutoencoderKL" 等出现在 pipeline 加载信息附近，而非采样块下方
+        # getattr 只获取属性引用不会触发实际加载，需要做一次 dummy encode 让 offload hook 真正把 VAE 搬到 GPU
+        if hasattr(pipeline, "vae") and pipeline.vae is not None:
+            try:
+                vae = pipeline.vae
+                vae_dtype = next(vae.parameters()).dtype
+                vae_dev = next(vae.parameters()).device
+                # 用极小的 tensor 做一次 encode，触发 offload hook 将 VAE 加载到 GPU
+                _dummy = torch.zeros(1, 3, 8, 8, device=vae_dev, dtype=vae_dtype)
+                with torch.no_grad():
+                    vae.encode(_dummy)
+            except Exception:
+                pass
 
         # 首次采样时应用 torch.compile（在 LoRA 已加载之后，与 comfyui-sdnq 顺序一致）
         if getattr(pipeline, "_sdnq_use_torch_compile", False) and torch.cuda.is_available():
@@ -785,10 +803,9 @@ class MagicSDNQSampler:
             if neg_pooled is not None:
                 kwargs["negative_pooled_prompt_embeds"] = neg_pooled.to(device=device, dtype=model_dtype)
 
-        # Packed latent pipeline（Flux/Flux2/QwenImage/ZImage/Chroma 等）的 prepare_latents
-        # 内部会把 height/width 除以 vae_scale_factor*2 再除以 2，
-        # 导致输出像素仅为传入 height/width 的一半。
-        # 统一补偿：传入 2x 值，使输出尺寸 = 用户期望尺寸 (width x height)。
+        # 所有 SDNQ 模型统一：输出分辨率 = 用户传入的 width x height（文生图由 latent 推算）
+        # Packed latent pipeline（Flux/Flux2/Flux2Klein/QwenImage/ZImage/Chroma 等）内部会再除以 2，
+        # 故传入 2x 补偿；非 packed（SDXL/GLM 等）直接传入 width/height。
         if _has_pack:
             kwargs["width"] = width * 2
             kwargs["height"] = height * 2

@@ -12,6 +12,32 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > Latest Update / 最新更新：2026-02-11
 
+> **V1.2.2 版本介绍 / Version Introduction** 2026-02-11
+
+> 1. **New Feature / 新增功能**: Magic Power LoRA Loader - LoRA 串连功能
+>    * 新增 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连
+>    * 输出了 `lora串` 的 LoRA 加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器
+>    * 直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA
+>    * 可搭配 SDNQ 模式用于模型全局卸载再加载使用（非 SDNQ 模式也可以根据自己的需求使用）
+>    * 输出了 `lora串` 的 LoRA 加载器可以不连接 model 和 clip 了
+>    * 修复了 bypass（忽略）节点时 lora 串无法正确透传的问题
+>    * 使用自定义类型 MAGIC_LORA_CHAIN 替代 STRING，确保 ComfyUI 正确处理连接依赖和 bypass 透传
+>    * Added `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports for chaining multiple Magic Power LoRA Loaders
+>    * LoRA loaders that output `lora串` don't load LoRAs; they only pass their configured LoRA list to the next loader
+>    * Only the last loader (chain end) that doesn't output `lora串` loads all LoRAs (its own + received)
+>    * Can be used with SDNQ mode for global model unload/reload (also works in non-SDNQ mode)
+>    * LoRA loaders that output `lora串` don't require model/clip connections
+>    * Fixed issue where bypassed nodes couldn't correctly pass through lora chains
+>    * Uses custom type MAGIC_LORA_CHAIN instead of STRING for proper ComfyUI connection handling and bypass passthrough
+
+> 2. **Bug Fix / 错误修复**: Magic SDNQ K Sampler - 修复文生图图片过小的 bug
+>    * 修复了文生图模式下输出图片尺寸过小的问题
+>    * Fixed issue where generated images were too small in text-to-image mode
+
+> 3. **Optimization / 优化**: Magic SDNQ K Sampler - VAE 加载日志顺序优化
+>    * 调整了 VAE 加载日志的输出顺序，使其出现在 pipeline 加载信息之后、采样信息之前
+>    * Optimized VAE loading log sequence to appear after pipeline loading info and before sampling info
+
 > **V1.2.1 版本介绍 / Version Introduction** 2026-02-11
 
 > 1. **Optimization / 优化**: 代码优化与 bug 修复
@@ -45,6 +71,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * Both CLIP and VAE must be connected to enable body-only loading; connect neither for full-package load
 >    * Only FLUX/FLUX.2 support this mode; other model types will show an error if external CLIP/VAE are connected
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.1.9 版本介绍 / Version Introduction** 2026-02-08
 
 > 1. **New Feature / 新增功能**: Magic SDNQ Loader & Sampler - SDNQ 独立模型加载节点与采样器
@@ -62,9 +91,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > 2. **Update / 更新**: Magic Power LoRA Loader - 节点最小尺寸限制
 >    * 设置节点最小宽高为 470×300，防止加载时权重修改按钮不可见或 UI 溢出
 >    * Set minimum node size to 470×300 to prevent weight control being hidden or UI overflow
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.1.6 版本介绍 / Version Introduction** 2026-01-31
 
