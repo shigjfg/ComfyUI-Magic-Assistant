@@ -223,6 +223,27 @@ class MagicSDNQSampler:
                 "标准 K Sampler 的 model 不兼容。"
             )
 
+        # 接入 ComfyUI 显存管理：采样前让 load_models_gpu 腾出空间并加载本模型，减少 12GB 下 OOM
+        if COMFYUI_AVAILABLE and hasattr(model, "model_size") and hasattr(model, "load_device"):
+            try:
+                mem_model = model.model_size()
+                inference_mem = (
+                    comfy.model_management.minimum_inference_memory()
+                    if hasattr(comfy.model_management, "minimum_inference_memory")
+                    else 1024 * 1024 * 1024
+                )
+                if callable(inference_mem):
+                    inference_mem = inference_mem()
+                memory_required = mem_model + int(inference_mem)
+                minimum_memory_required = mem_model + max(200 * 1024 * 1024, int(inference_mem * 0.5))
+                comfy.model_management.load_models_gpu(
+                    [model],
+                    memory_required=memory_required,
+                    minimum_memory_required=minimum_memory_required,
+                )
+            except Exception as e:
+                print(f"[SDNQ Sampler] load_models_gpu 跳过（将直接使用当前显存）: {e}")
+
         # 提取 conditioning
         prompt_embeds, pooled_embeds = _extract_embeddings_from_cond(positive)
         neg_embeds, neg_pooled = _extract_embeddings_from_cond(negative)
@@ -489,7 +510,7 @@ class MagicSDNQSampler:
                 tensor_inputs.append("noise_pred")
             kwargs["callback_on_step_end_tensor_inputs"] = tensor_inputs
 
-        # 移动到 pipeline 执行设备（CPU offload 时 transformer 在 CPU，但实际计算在 CUDA）
+        # 移动到 pipeline 执行设备并统一 dtype（外接 CLIP 可能为 float32/float16，transformer 为 bfloat16）
         device = getattr(pipeline, "_execution_device", None)
         if device is None:
             try:
@@ -501,14 +522,18 @@ class MagicSDNQSampler:
         is_cpu = (device == "cpu" or (hasattr(device, "type") and getattr(device, "type", None) == "cpu"))
         if is_cpu and torch.cuda.is_available():
             device = torch.device("cuda")
-        kwargs["prompt_embeds"] = prompt_embeds.to(device)
+        try:
+            model_dtype = next((pipeline.transformer if hasattr(pipeline, "transformer") else pipeline.unet).parameters()).dtype
+        except Exception:
+            model_dtype = torch.bfloat16
+        kwargs["prompt_embeds"] = prompt_embeds.to(device=device, dtype=model_dtype)
         if not flux2klein:
             if pooled_embeds is not None:
-                kwargs["pooled_prompt_embeds"] = pooled_embeds.to(device)
+                kwargs["pooled_prompt_embeds"] = pooled_embeds.to(device=device, dtype=model_dtype)
             if neg_embeds is not None:
-                kwargs["negative_prompt_embeds"] = neg_embeds.to(device)
+                kwargs["negative_prompt_embeds"] = neg_embeds.to(device=device, dtype=model_dtype)
             if neg_pooled is not None:
-                kwargs["negative_pooled_prompt_embeds"] = neg_pooled.to(device)
+                kwargs["negative_pooled_prompt_embeds"] = neg_pooled.to(device=device, dtype=model_dtype)
 
         kwargs["width"] = width
         kwargs["height"] = height
@@ -588,6 +613,10 @@ class MagicSDNQSampler:
                             # Flux2: bn 无 scaling，Flux/SD3: scaling+shift，SD/SDXL: scaling only
                             if hasattr(pipeline.vae, "bn") and pipeline.vae.bn is not None:
                                 lat = enc
+                                # Body-only 时 encode 返回 (B,32,H,W) 供 pipeline concat；下游 VAE Decode 需 ComfyUI 格式 (B,128,h,w)
+                                if lat.dim() == 4 and lat.shape[1] == 32:
+                                    from einops import rearrange
+                                    lat = rearrange(lat, "b c (i pi) (j pj) -> b (c pi pj) i j", pi=2, pj=2)
                             else:
                                 cfg = pipeline.vae.config
                                 sf = getattr(cfg, "scaling_factor", None) or (cfg.get("scaling_factor") if hasattr(cfg, "get") else None) or 0.18215

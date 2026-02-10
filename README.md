@@ -10,7 +10,23 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：2026-02-08
+> Latest Update / 最新更新：2026-02-11
+
+> **V1.2.0 版本介绍 / Version Introduction** 2026-02-11
+
+> 1. **Optimization / 优化**: Magic SDNQ Sampler - VRAM 处理逻辑与官方 K 采样器对齐
+>    * 采样前接入 ComfyUI 的 load_models_gpu / free_memory，与其他模型统一显存管理
+>    * 在 12GB 等显存下可先卸载其他已加载模型、再加载 SDNQ 进行采样，减少爆显存
+>    * SDNQ Sampler now uses ComfyUI's load_models_gpu/free_memory for consistent VRAM control with official KSampler
+>    * On 12GB VRAM, other models can be offloaded before SDNQ sampling to reduce OOM
+
+> 2. **New Feature / 新增功能**: Magic SDNQ Loader - FLUX 系列支持外接 CLIP/VAE（仅加载本体）
+>    * FLUX、FLUX.2（含 Flux2Klein）模型可**同时**连接外部的 CLIP 和 VAE，仅加载 SDNQ 目录下的 transformer 本体，省显存、可提升生成速度
+>    * 必须同时连接 CLIP 与 VAE 才启用“仅加载本体”；只连其一将报错；两者都不连则整包加载
+>    * 当前仅 FLUX / FLUX.2 支持该模式；其他模型（如 Qwen、Z-Image）连接外接 CLIP/VAE 时会提示不支持
+>    * FLUX and FLUX.2 (including Flux2Klein) can use external CLIP + VAE and load only the transformer body from SDNQ for lower VRAM and faster generation
+>    * Both CLIP and VAE must be connected to enable body-only loading; connect neither for full-package load
+>    * Only FLUX/FLUX.2 support this mode; other model types will show an error if external CLIP/VAE are connected
 
 > **V1.1.9 版本介绍 / Version Introduction** 2026-02-08
 
@@ -29,18 +45,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > 2. **Update / 更新**: Magic Power LoRA Loader - 节点最小尺寸限制
 >    * 设置节点最小宽高为 470×300，防止加载时权重修改按钮不可见或 UI 溢出
 >    * Set minimum node size to 470×300 to prevent weight control being hidden or UI overflow
-
-> **V1.1.7 版本介绍 / Version Introduction** 2026-01-31
-
-> 1. **Bug Fix / 错误修复**: Magic Power LoRA Loader - LoRA Loading Fix / LoRA 加载修复
->    * Fixed duplicate LoRA loading issue when selecting INT8 or SDNQ modes / 修复了选择 INT8 或 SDNQ 模式时 LoRA 重复加载的问题
->    * Improved mode selection logic to ensure only one loading method is executed / 改进了模式选择逻辑，确保只执行一种加载方法
->    * Enhanced SDNQ mode fallback mechanism for better error handling / 增强了 SDNQ 模式的回退机制，提供更好的错误处理
->    * LoRA mode selection only applies to individual nodes, different Magic Power LoRA Loader nodes can use different modes as needed / LoRA 模式选择只作用于单一节点，不同的强力lora加载节点可以按照需求使用不同模式
->    * 修复了选择 INT8 或 SDNQ 模式时 LoRA 重复加载的问题
->    * 改进了模式选择逻辑，确保只执行一种加载方法
->    * 增强了 SDNQ 模式的回退机制，提供更好的错误处理
->    * LoRA 模式选择只作用于单一节点，不同的强力lora加载节点可以按照需求使用不同模式
 
 > **V1.1.6 版本介绍 / Version Introduction** 2026-01-31
 
@@ -65,6 +69,18 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 <details>
 <summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
+> **V1.1.7 版本介绍 / Version Introduction** 2026-01-31
+
+> 1. **Bug Fix / 错误修复**: Magic Power LoRA Loader - LoRA Loading Fix / LoRA 加载修复
+>    * Fixed duplicate LoRA loading issue when selecting INT8 or SDNQ modes / 修复了选择 INT8 或 SDNQ 模式时 LoRA 重复加载的问题
+>    * Improved mode selection logic to ensure only one loading method is executed / 改进了模式选择逻辑，确保只执行一种加载方法
+>    * Enhanced SDNQ mode fallback mechanism for better error handling / 增强了 SDNQ 模式的回退机制，提供更好的错误处理
+>    * LoRA mode selection only applies to individual nodes, different Magic Power LoRA Loader nodes can use different modes as needed / LoRA 模式选择只作用于单一节点，不同的强力lora加载节点可以按照需求使用不同模式
+>    * 修复了选择 INT8 或 SDNQ 模式时 LoRA 重复加载的问题
+>    * 改进了模式选择逻辑，确保只执行一种加载方法
+>    * 增强了 SDNQ 模式的回退机制，提供更好的错误处理
+>    * LoRA 模式选择只作用于单一节点，不同的强力lora加载节点可以按照需求使用不同模式
 
 > **V1.1.5 版本介绍 / Version Introduction** 2026-01-29
 
@@ -371,6 +387,24 @@ This plugin implements SDNQ based on the [comfyui-sdnq](https://github.com/Enrag
 * **Rich workflows**: Img2img, txt2img, depth control, pose control, etc.
 * **Official-like sampling**: Logic follows official KSampler
 * **Real-time progress & preview**: Displays sampling progress and preview like official KSampler
+
+#### 外接 CLIP/VAE（仅加载本体）/ External CLIP & VAE (Body-Only Loading)
+
+FLUX 系列模型（包括 FLUX.1、FLUX.2 及最新的 Flux2Klein）支持**同时连接**外部的 CLIP 和 VAE：加载时仅从 SDNQ 目录加载 transformer 本体（约 5GB），使用您连接的 CLIP 与 VAE。这样既能节省显存，也可能获得更好的效果，并提高生成速度。**注意**：必须**同时**连接 CLIP 与 VAE 才会启用“仅加载本体”；只连其中一个会报错；两者都不连则按整包加载。
+
+FLUX models (including FLUX.1, FLUX.2, and Flux2Klein) support **connecting both** external CLIP and VAE: only the transformer body (~5GB) is loaded from the SDNQ folder, using your connected CLIP and VAE. This saves VRAM, may improve quality, and speeds up generation. **Note**: You must connect **both** CLIP and VAE to enable body-only loading; connecting only one will raise an error; connecting neither loads the full package.
+
+**外接 CLIP/VAE 示例工作流 / Example Workflow (External CLIP + VAE)**（可直接下载图片导入 ComfyUI / Download image and import into ComfyUI）
+
+<img width="4286" height="2709" alt="SDNQ External CLIP VAE Workflow" src="https://github.com/user-attachments/assets/853a2ef1-a64d-42d9-84d1-8d11a027e2a1" />
+
+**运行结果 / Result**（RTX 3060 本次采样约 40.88s / RTX 3060, ~40.88s per sample）
+
+<img width="2048" height="1058" alt="SDNQ External CLIP VAE Result" src="https://github.com/user-attachments/assets/04a22e66-397b-47a9-b8c2-8359b4cfcb5a" />
+
+**性能参考 / Performance**: 在不超过 1024×1536 分辨率下，单图编辑或文生图时，采样可快至约 10–20 秒，速度与效率较高。其他模型（如 Qwen、Z-Image）的外接 CLIP/VAE 支持将在后续版本考虑。
+
+At 1024×1536 or below, single image editing or text-to-image can complete in about 10–20 seconds. Support for external CLIP/VAE on other model types (e.g. Qwen, Z-Image) may be added in future versions.
 
 #### ⚠️ 注意事项 / Notes
 

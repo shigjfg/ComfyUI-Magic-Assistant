@@ -21,7 +21,8 @@ if _parent_dir not in sys.path:
 from core.sdnq_config import get_dtype_from_string
 from core.sdnq_registry import get_model_names_for_dropdown, get_repo_id_from_name, get_model_info
 from core.sdnq_downloader import download_model, check_model_cached, get_cached_model_path
-from core.sdnq_wrapper import wrap_pipeline_components
+from core.sdnq_wrapper import wrap_pipeline_components, DiffusersVAEFromComfy
+from core.sdnq_body_only import load_body_only_pipeline
 
 
 def _check_cpp_compiler() -> bool:
@@ -85,6 +86,8 @@ class MagicSDNQLoader:
                 "use_quantized_matmul": ("BOOLEAN", {"default": True}),
             },
             "optional": {
+                "clip": ("CLIP", {"tooltip": "连接后仅加载模型本体(~5GB)，使用此外部 CLIP，省显存"}),
+                "vae": ("VAE", {"tooltip": "连接后仅加载模型本体(~5GB)，使用此外部 VAE，省显存"}),
                 "custom_repo_or_path": ("STRING", {"default": "", "multiline": False}),
                 "auto_download": ("BOOLEAN", {"default": True, "tooltip": "模型未缓存时自动从 HuggingFace 下载"}),
                 "use_xformers": ("BOOLEAN", {"default": True, "tooltip": "xFormers 注意力 (10-45% 加速)。未安装时回退到 SDPA"}),
@@ -104,6 +107,8 @@ class MagicSDNQLoader:
         dtype: str,
         memory_mode: str = "balanced",
         use_quantized_matmul: bool = True,
+        clip=None,
+        vae=None,
         custom_repo_or_path: str = "",
         auto_download: bool = True,
         use_xformers: bool = True,
@@ -143,6 +148,14 @@ class MagicSDNQLoader:
         is_local = os.path.exists(model_path)
         compiler_available = _check_cpp_compiler()
 
+        # 外接 CLIP/VAE：必须同时都连或都不连，不能只连一个
+        has_clip = clip is not None
+        has_vae = vae is not None
+        if has_clip != has_vae:
+            raise ValueError(
+                "请同时连接外接 CLIP 和 VAE（仅加载本体、省显存），或两者都不连（整包加载）。不能只连其中一个。"
+            )
+
         if not compiler_available:
             torch._dynamo.config.suppress_errors = True
             torch._dynamo.config.verbose = False
@@ -172,6 +185,81 @@ class MagicSDNQLoader:
             except ImportError:
                 raise RuntimeError(
                     "SDNQ support requires the 'sdnq' package. Install with: pip install sdnq"
+                )
+
+            # Body-only path: when user connects CLIP + VAE, load only transformer (~5GB) and use external CLIP/VAE
+            body_only = (clip is not None and vae is not None)
+            if body_only:
+                model_type = (model_info or {}).get("type") if model_info else None
+                if model_type is None and os.path.isdir(model_path):
+                    model_index_path = os.path.join(model_path, "model_index.json")
+                    if os.path.isfile(model_index_path):
+                        import json
+                        with open(model_index_path, "r", encoding="utf-8") as f:
+                            idx = json.load(f)
+                        cn = (idx.get("_class_name") or "").lower()
+                        if "flux2klein" in cn or "flux2" in cn:
+                            model_type = "FLUX2"
+                        elif "flux" in cn and "flux2" not in cn:
+                            model_type = "FLUX"
+                        elif "qwen" in cn:
+                            model_type = "Qwen"
+                # Flux2/Klein 用 BN；FLUX/Qwen 用 scaling_factor
+                use_bn = model_type and "FLUX2" in model_type.upper()
+                external_vae = DiffusersVAEFromComfy(
+                    vae,
+                    scaling_factor=0.18215,
+                    shift_factor=0.0,
+                    use_bn=use_bn,
+                )
+                pipeline = load_body_only_pipeline(
+                    model_path=model_path,
+                    model_type=model_type,
+                    torch_dtype=torch_dtype,
+                    is_local=is_local,
+                    external_vae_for_diffusers=external_vae,
+                    use_quantized_matmul=use_quantized_matmul,
+                )
+                if pipeline is not None:
+                    # Same post-processing as full load: compile flag, xFormers, memory, VAE tiling
+                    pipeline._sdnq_use_torch_compile = False
+                    if use_torch_compile and torch.cuda.is_available():
+                        pipeline._sdnq_use_torch_compile = True
+                        print("[SDNQ] ✓ torch.compile 将在首次采样时应用")
+                    xformers_ok = False
+                    if use_xformers:
+                        try:
+                            import xformers  # noqa: F401
+                            pipeline.enable_xformers_memory_efficient_attention()
+                            xformers_ok = True
+                            print("[SDNQ] ✓ xFormers enabled")
+                        except Exception:
+                            print("[SDNQ] Using SDPA (xFormers skipped)")
+                    if memory_mode == "gpu":
+                        pipeline.to("cuda")
+                    elif memory_mode == "balanced":
+                        pipeline.enable_model_cpu_offload()
+                    elif memory_mode == "lowvram":
+                        pipeline.enable_sequential_cpu_offload()
+                    if enable_vae_tiling:
+                        try:
+                            pipeline.enable_vae_tiling()
+                            print("[SDNQ] ✓ VAE tiling enabled")
+                        except Exception:
+                            pass
+                    model_wrapper, _, _ = wrap_pipeline_components(pipeline, model_type=model_type)
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        gc.collect()
+                        print("[SDNQ] 已释放加载阶段显存碎片，便于首次采样")
+                    print(f"\n[SDNQ] ✓ 仅加载本体完成 (Body-only loaded). 使用外接 CLIP/VAE，显存占用更低。\n")
+                    return (model_wrapper, clip, vae)
+                # 当前模型不支持 body-only：报错并阻止继续运行
+                display_name = model_selection if model_selection != "--Custom Model--" else (custom_repo_or_path.strip() or "当前自定义模型")
+                raise ValueError(
+                    f"「仅加载本体」模式不支持当前模型（{display_name}）。\n"
+                    "仅以下类型支持外接 CLIP/VAE：FLUX.2（如 Flux2Klein）、FLUX.1（如 FluxPipeline）。\n"
+                    "请断开 CLIP/VAE 连接以整包加载，或更换为上述模型后再使用外接 CLIP/VAE。"
                 )
 
             print("[SDNQ] Loading pipeline (DiffusionPipeline auto-detects SDNQ from config)...")
@@ -293,6 +381,11 @@ class MagicSDNQLoader:
 
             model_type = (model_info or {}).get("type")
             model, clip, vae = wrap_pipeline_components(pipeline, model_type=model_type)
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                gc.collect()
+                print("[SDNQ] 已释放加载阶段显存碎片，便于首次采样")
 
             # 加载完成汇总：当前模式、成功状态
             mode_desc = {"gpu": "全显存(24GB+)", "balanced": "CPU 卸载(12-16GB)", "lowvram": "顺序卸载(8GB)"}.get(memory_mode, memory_mode)

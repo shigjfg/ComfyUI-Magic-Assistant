@@ -3,32 +3,197 @@ ComfyUI Type Wrappers for SDNQ Models
 
 Wraps diffusers pipeline components into ComfyUI-compatible types (MODEL, CLIP, VAE).
 Includes clone(), latent_format, model_options for better ComfyUI compatibility.
+
+Also provides:
+- DiffusersVAEFromComfy: wrap ComfyUI VAE for use as pipeline.vae (body-only loading).
+- Placeholder text_encoder/tokenizer for body-only pipeline when using prompt_embeds.
 """
 
 import torch
 from typing import Any, Tuple, Optional
 
 
+# --- ComfyUI VAE -> diffusers interface (for body-only loading) ---
+
+class _LatentDistSample:
+    """Minimal object so pipeline can call .latent_dist.sample() or .latent_dist.mode() (image-to-image)."""
+
+    def __init__(self, latent: torch.Tensor):
+        self._latent = latent
+
+    def sample(self, generator=None) -> torch.Tensor:
+        return self._latent
+
+    def mode(self) -> torch.Tensor:
+        return self._latent
+
+
+class _DecodeSample:
+    """Minimal object so pipeline can call .decode(...).sample."""
+
+    def __init__(self, images: torch.Tensor):
+        self.sample = images
+
+
+class _FakeVAEConfig:
+    """Minimal config for Flux/Flux2 VAE. Pipeline expects .scaling_factor, .shift_factor, .block_out_channels, .batch_norm_eps."""
+
+    def __init__(self, scaling_factor: float = 0.18215, shift_factor: float = 0.0):
+        self.scaling_factor = scaling_factor
+        self.shift_factor = shift_factor
+        # Flux2KleinPipeline.__init__ uses: vae_scale_factor = 2 ** (len(block_out_channels) - 1). Flux2 uses 16.
+        self.block_out_channels = (128, 256, 512, 512, 512)
+        # Flux2KleinPipeline.__call__ uses vae.config.batch_norm_eps when normalizing latents (Flux2 BN).
+        self.batch_norm_eps = 1e-5
+
+
+class DiffusersVAEFromComfy:
+    """
+    Wraps a ComfyUI VAE so it can be used as pipeline.vae (diffusers interface).
+    Pipeline expects: .encode(images).latent_dist.sample(), .decode(latents).sample,
+    .config (scaling_factor, shift_factor), and optionally .bn for Flux2.
+    ComfyUI VAE: .encode(images) returns scaled latent, .decode(latents) returns image tensor.
+    """
+
+    def __init__(self, comfy_vae, scaling_factor: float = 0.18215, shift_factor: float = 0.0, use_bn: bool = False):
+        self._comfy_vae = comfy_vae
+        self.config = _FakeVAEConfig(scaling_factor=scaling_factor, shift_factor=shift_factor)
+        self.bn = torch.nn.BatchNorm1d(1) if use_bn else None  # Flux2 uses bn; placeholder if needed
+        if self.bn is not None:
+            self.bn.eval()
+        # At least one parameter so next(self.parameters()).device/dtype works in sampler
+        self._dummy_param = torch.nn.Parameter(torch.zeros(1, dtype=torch.float32))
+
+    def parameters(self, recurse=True):
+        """So pipeline can get device/dtype. Prefer ComfyUI VAE params, else dummy."""
+        p = getattr(self._comfy_vae, "parameters", None)
+        if p is not None and callable(p):
+            try:
+                it = p(recurse=recurse)
+                if it is not None:
+                    return it
+            except Exception:
+                pass
+        return iter([self._dummy_param])
+
+    @property
+    def dtype(self):
+        """Flux2KleinPipeline image-to-image path accesses self.vae.dtype."""
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            return self._dummy_param.dtype
+
+    def to(self, device=None, dtype=None):
+        if hasattr(self._comfy_vae, "to") and (device or dtype):
+            self._comfy_vae.to(device=device, dtype=dtype)
+        return self
+
+    def _comfy_encode(self, images: torch.Tensor) -> torch.Tensor:
+        """ComfyUI encode: expects (B, H, W, C) and does movedim(-1,1) internally. We accept (B,C,H,W) or (B,H,W,C)."""
+        vae = self._comfy_vae
+        if hasattr(vae, "encode"):
+            if images.dim() == 4:
+                # ComfyUI sd.VAE.encode() expects (B, H, W, C); it then does movedim(-1, 1) -> (B, C, H, W)
+                if images.shape[1] in (3, 4):
+                    images = images.permute(0, 2, 3, 1)
+            return vae.encode(images)
+        raise NotImplementedError("ComfyUI VAE has no encode")
+
+    def _comfy_decode(self, latents: torch.Tensor) -> torch.Tensor:
+        """ComfyUI decode: latents scaled (B,C,H,W), returns images (B,C,H,W) in [-1,1] or [0,1]."""
+        vae = self._comfy_vae
+        if hasattr(vae, "decode"):
+            return vae.decode(latents)
+        raise NotImplementedError("ComfyUI VAE has no decode")
+
+    def encode(self, images: torch.Tensor):
+        """Return object with .latent_dist.sample() returning 'raw' latent for diffusers.
+        Pipeline uses latent L = (raw - shift) * scale. ComfyUI returns scaled (= L); so raw = L/scale + shift.
+        Callers (e.g. Sampler) often pass images in [-1, 1]; ComfyUI process_input expects [0, 1] and does *2-1.
+        """
+        if images.dim() == 4 and images.dtype.is_floating_point:
+            im_min, im_max = images.min().item(), images.max().item()
+            if im_min >= -1.1 and im_max <= 1.1:
+                images = (images + 1.0) * 0.5
+        scaled = self._comfy_encode(images)
+        sf = self.config.scaling_factor
+        shift = self.config.shift_factor
+        if hasattr(self, "bn") and self.bn is not None:
+            raw = scaled
+            # Flux2: ComfyUI returns (B, 128, h, w); pipeline expects (B, 32, 2h, 2w) to concat with latents
+            if raw.dim() == 4 and raw.shape[1] == 128:
+                from einops import rearrange
+                raw = rearrange(raw, "b (c pi pj) i j -> b c (i pi) (j pj)", pi=2, pj=2)
+        else:
+            raw = (scaled / sf) + shift if sf != 0 else (scaled + shift)
+        # ComfyUI often returns to CPU; pipeline expects same device as latents (cuda) for torch.cat
+        raw = raw.to(device=images.device, dtype=images.dtype if images.dtype.is_floating_point else raw.dtype)
+        # Pipeline then does (image_latents - bn_mean) / bn_std; ensure placeholder bn is on same device
+        if hasattr(self, "bn") and self.bn is not None:
+            self.bn.to(images.device)
+        return type("EncodeOut", (), {"latent_dist": _LatentDistSample(raw)})()
+
+    def decode(self, latents: torch.Tensor, return_dict: bool = True, **kwargs):
+        """Pipeline passes (scaled/scale)+shift into decode. We convert to scaled then ComfyUI.decode.
+        When return_dict=False, pipeline expects [0] to get the image tensor (Flux2KleinPipeline).
+        Flux2: diffusers uses (B, 32, 2h, 2w); ComfyUI Flux2 VAE expects (B, 128, h, w) for BN, so we rearrange.
+        """
+        sf = self.config.scaling_factor
+        shift = self.config.shift_factor
+        if hasattr(self, "bn") and self.bn is not None:
+            scaled = latents
+            # Diffusers Flux2 latent shape (B, 32, H, W); ComfyUI decode expects (B, 128, h, w) with 128 = 32*pi*pj, pi=pj=2
+            if scaled.dim() == 4 and scaled.shape[1] == 32:
+                from einops import rearrange
+                scaled = rearrange(scaled, "b c (i pi) (j pj) -> b (c pi pj) i j", pi=2, pj=2)
+        else:
+            scaled = (latents - shift) * sf
+        images = self._comfy_decode(scaled)
+        # Diffusers pipeline postprocess expects (B, C, H, W) in [-1, 1]; ComfyUI often returns (B, H, W, C) in [0, 1]
+        if images.dim() == 4 and images.shape[-1] in (3, 4):
+            images = images.permute(0, 3, 1, 2)
+        if images.dtype != torch.float32 and images.dtype != torch.float16 and images.dtype != torch.bfloat16:
+            images = images.float()
+        if images.max() <= 1.0 and images.min() >= 0.0:
+            images = images * 2.0 - 1.0
+        if return_dict:
+            return _DecodeSample(images)
+        return (images,)
+
+
 class SDNQModelWrapper:
     """
-    Wraps a diffusers transformer/unet model for ComfyUI MODEL compatibility.
-    Provides clone(), latent_format, model_options, load_device for ComfyUI nodes.
-    Note: KSampler may not work directly as it expects ModelPatcher; use with Magic Power LoRA SDNQ mode.
+    Wraps a diffusers pipeline for ComfyUI MODEL compatibility.
+    Implements the interface required by load_models_gpu/free_memory so ComfyUI can
+    unload other models and load this one before sampling (12GB VRAM friendly).
     """
 
     def __init__(self, pipeline, model_component, model_type=None):
         self.pipeline = pipeline
-        self.model = model_component
+        self._model_component = model_component
+        # For ComfyUI LoadedModel: .model is the "real" model (pipeline), so real_model = pipeline
+        self.model = pipeline
         if model_type:
             self.model_type = self._normalize_model_type(model_type)
         else:
             self.model_type = self._detect_model_type()
-        # ComfyUI expects load_device (e.g. for KSampler)
         try:
             import comfy.model_management
             self.load_device = comfy.model_management.get_torch_device()
         except ImportError:
             self.load_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.offload_device = torch.device("cpu")
+        self.parent = None
+        # Track loaded size for load_models_gpu / free_memory
+        self._loaded_weight_memory = 0
+        self.model_offload_buffer_memory = 0
+        self.model_lowvram = False
+
+    @property
+    def model_loaded_weight_memory(self):
+        """ComfyUI LoadedModel / model_patcher 会读此属性。"""
+        return self._loaded_weight_memory
 
     def _normalize_model_type(self, model_type: str) -> str:
         if not model_type:
@@ -55,14 +220,92 @@ class SDNQModelWrapper:
             return "chroma"
         if "glm" in pipe_name and "image" in pipe_name:
             return "glm_image"
-        if hasattr(self.pipeline, 'transformer'):
+        if hasattr(self.pipeline, "transformer") and self.pipeline.transformer is not None:
             transformer_class = self.pipeline.transformer.__class__.__name__
             if "SD3" in transformer_class:
                 return "sd3"
             return "flux"
-        elif hasattr(self.pipeline, 'unet'):
+        elif hasattr(self.pipeline, "unet") and self.pipeline.unet is not None:
             return "sdxl"
         return "unknown"
+
+    def model_size(self):
+        """Size in bytes for load_models_gpu / free_memory."""
+        try:
+            import comfy.model_management
+            comp = getattr(self.pipeline, "transformer", None) or getattr(self.pipeline, "unet", None)
+            if comp is not None:
+                return comfy.model_management.module_size(comp)
+        except Exception:
+            pass
+        return 1024 * 1024 * 1024 * 5  # fallback 5GB
+
+    def loaded_size(self):
+        return self._loaded_weight_memory
+
+    def current_loaded_device(self):
+        try:
+            comp = getattr(self.pipeline, "transformer", None) or getattr(self.pipeline, "unet", None)
+            if comp is not None:
+                return next(comp.parameters()).device
+        except Exception:
+            pass
+        return self.offload_device
+
+    def model_dtype(self):
+        try:
+            comp = getattr(self.pipeline, "transformer", None) or getattr(self.pipeline, "unet", None)
+            if comp is not None:
+                return next(comp.parameters()).dtype
+        except Exception:
+            pass
+        return torch.bfloat16
+
+    def model_patches_to(self, device_or_dtype):
+        """Move pipeline to device or apply dtype (for load_models_gpu)."""
+        if device_or_dtype is None:
+            return
+        if isinstance(device_or_dtype, torch.dtype):
+            return  # dtype: no-op (pipeline components keep their dtypes)
+        if hasattr(self.pipeline, "to"):
+            self.pipeline.to(device_or_dtype)
+        if str(device_or_dtype).lower() != "cpu":
+            self._loaded_weight_memory = self.model_size()
+        else:
+            self._loaded_weight_memory = 0
+
+    def model_patches_models(self):
+        """No additional models to load (required by load_models_gpu)."""
+        return []
+
+    def is_clone(self, other):
+        """True if the other patcher wraps the same pipeline (so we can unload the other)."""
+        if other is None:
+            return False
+        return getattr(other, "model", None) is self.model
+
+    def partially_load(self, device_to, extra_memory=0, force_patch_weights=False):
+        """Load pipeline to device. Called by LoadedModel.model_use_more_vram."""
+        old_loaded = self._loaded_weight_memory
+        self.model_patches_to(device_to)
+        return self._loaded_weight_memory - old_loaded
+
+    def partially_unload(self, device_to, memory_to_free=0, force_patch_weights=False):
+        """Offload pipeline to CPU to free VRAM. Returns bytes freed."""
+        freed = self._loaded_weight_memory
+        self.model_patches_to(self.offload_device)
+        return freed
+
+    def partially_unload_ram(self, ram_to_unload):
+        pass
+
+    def detach(self, unpatch_weights=True):
+        """Offload to CPU and return the pipeline (real_model)."""
+        self.model_patches_to(self.offload_device)
+        return self.model
+
+    def is_dynamic(self):
+        return False
 
     def _get_latent_format(self):
         """ComfyUI latent_format：FLUX 16ch, Flux2 128ch, SDXL 4ch, Z-Image/Qwen 用 Flux(16ch)"""
@@ -90,10 +333,10 @@ class SDNQModelWrapper:
 
     def clone(self):
         """Return a shallow clone for ComfyUI batching/sampling compatibility."""
-        return SDNQModelWrapper(self.pipeline, self.model, self.model_type)
+        return SDNQModelWrapper(self.pipeline, self._model_component, self.model_type)
 
     def get_model(self):
-        return self.model
+        return self._model_component
 
     def get_pipeline(self):
         return self.pipeline
@@ -103,8 +346,8 @@ class SDNQModelWrapper:
             return self._get_latent_format()
         if hasattr(self.pipeline, name):
             return getattr(self.pipeline, name)
-        if hasattr(self.model, name):
-            return getattr(self.model, name)
+        if hasattr(self._model_component, name):
+            return getattr(self._model_component, name)
         return None
 
 
