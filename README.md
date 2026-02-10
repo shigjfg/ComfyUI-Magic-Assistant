@@ -367,6 +367,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
 * **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
 * **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器).
+* **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
 * **可视化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
 * **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
 * **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
@@ -379,6 +380,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
 * **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
 * **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器) 配合使用。
+* **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
 
 </details>
 
