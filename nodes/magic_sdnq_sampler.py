@@ -577,6 +577,78 @@ class MagicSDNQSampler:
                 out = out * std + mean
             return out
 
+        def _composite_for_preview(latent_for_preview, pipe, h_px, w_px, ref_image, mask_tensor):
+            """对于 3D packed latent 模型，在像素空间做 composite 供预览。
+
+            Args:
+                latent_for_preview: unpack 后的 4D latent (B, C, H, W)
+                pipe: diffusers pipeline
+                h_px, w_px: 原始图像尺寸
+                ref_image: 参考 PIL 图像
+                mask_tensor: noise_mask tensor (B, 1, H_mask, W_mask), 1=重绘区
+
+            Returns:
+                PIL Image (composite 后的预览图)
+            """
+            if latent_for_preview is None:
+                return None
+            try:
+                import numpy as np
+                from PIL import Image as PILImage, ImageFilter
+
+                # 1. VAE decode latent_for_preview
+                vae = pipe.vae
+                vae_sf = getattr(pipe, "vae_scale_factor", 16)
+
+                # 决定 scaling
+                if hasattr(vae, "bn") and vae.bn is not None:
+                    vae_in = latent_for_preview
+                else:
+                    cfg = vae.config
+                    sf = getattr(cfg, "scaling_factor", None) or (cfg.get("scaling_factor") if hasattr(cfg, "get") else None) or 0.18215
+                    shift = getattr(cfg, "shift_factor", None) or (cfg.get("shift_factor") if hasattr(cfg, "get") else None) or 0.0
+                    vae_in = (latent_for_preview / sf) + shift if shift != 0 else latent_for_preview / sf
+
+                vae_dtype = next(vae.parameters()).dtype
+                vae_dev = next(vae.parameters()).device
+                vae_in = vae_in.to(device=vae_dev, dtype=vae_dtype)
+
+                with torch.no_grad():
+                    decoded = vae.decode(vae_in).sample
+
+                # 2. 转成 PIL
+                arr = decoded[0].cpu().float().permute(1, 2, 0).numpy()
+                arr = (arr * 0.5 + 0.5).clip(0, 1)
+                arr = (arr * 255).astype(np.uint8)
+                gen_pil = PILImage.fromarray(arr).convert("RGB")
+
+                # 3. 如果是 3D packed 且有参考图，做像素 composite
+                if ref_image is not None and mask_tensor is not None:
+                    # 调整生成图尺寸到原图尺寸
+                    if gen_pil.size != ref_image.size:
+                        gen_pil = gen_pil.resize(ref_image.size, PILImage.LANCZOS)
+
+                    # 准备 mask
+                    mask = mask_tensor
+                    if mask.dim() == 4:
+                        mask = mask[0, 0]
+                    elif mask.dim() == 3:
+                        mask = mask[0]
+
+                    mask_np = mask.cpu().float().numpy()
+                    mask_pil = PILImage.fromarray((mask_np * 255).astype(np.uint8), mode="L")
+                    if mask_pil.size != ref_image.size:
+                        mask_pil = mask_pil.resize(ref_image.size, PILImage.LANCZOS)
+                    mask_pil = mask_pil.filter(ImageFilter.GaussianBlur(radius=5))
+
+                    # PIL composite: mask=255→gen_pil, mask=0→ref_image
+                    result = PILImage.composite(gen_pil, ref_image, mask_pil)
+                    return result
+
+                return gen_pil
+            except Exception:
+                return None
+
         def _compute_denoised_for_preview(prev_sample, noise_pred, pipe, step_index):
             """从 prev_sample + noise_pred 计算 denoised (x0)，与 K 采样器一致。失败则返回 None 回退到 latents"""
             if prev_sample is None or noise_pred is None:
@@ -685,23 +757,60 @@ class MagicSDNQSampler:
                     inp_orig = _inpaint_state["original_latents"]
                     inp_noise = _inpaint_state["noise"]
 
-                    # 非 Flux2：按当前去噪阶段给原图加噪
-                    timesteps_list = pipe.scheduler.timesteps
-                    if step_index < len(timesteps_list) - 1:
-                        next_t = timesteps_list[step_index + 1]
-                        blended = _scale_noise_for_inpaint(
-                            pipe.scheduler, inp_orig, inp_noise, next_t
-                        )
-                    else:
-                        blended = inp_orig
+                    # ========== 官方 KSamplerX0Inpaint 逻辑：输入混合 + 输出混合 ==========
+                    # 关键：mask=1 是重绘区，mask=0 是保留区
+                    latent_mask = 1.0 - inp_mask  # 反转：0=保留区，1=重绘区
 
-                    # mask=1 → 重绘区（保留模型输出），mask=0 → 保留区
-                    latents = inp_mask * latents + (1.0 - inp_mask) * blended
-                    callback_kwargs["latents"] = latents
+                    # 获取当前 timestep 的 sigma
+                    sched = pipe.scheduler
+                    timesteps_list = sched.timesteps
+                    if step_index < len(timesteps_list):
+                        current_t = timesteps_list[step_index]
+                    else:
+                        current_t = 0
+
+                    # 将 timestep 转换为 sigma（与 scheduler 一致）
+                    # diffusers 的 timestep 通常是 0-1000，sigma = timestep / 1000
+                    sigma = current_t / 1000.0
+
+                    # ========== 1. 输入混合（官方 KSamplerX0Inpaint 逻辑）==========
+                    # 与官方一致：x = x * denoise_mask + scale_latent_inpaint(...) * (1-denoise_mask)
+                    # scale_latent_inpaint 相当于 noise_scaling(sigma, noise, latent_image)
+                    # noise_scaling: mixed = sigma * noise + (1-sigma) * latent_image
+                    sigma_tensor = torch.tensor([sigma], device=latents.device, dtype=latents.dtype)
+                    sigma_tensor = sigma_tensor.reshape([sigma_tensor.shape[0]] + [1] * (latents.ndim - 1))
+
+                    # 计算加噪后的原图：sigma * noise + (1-sigma) * latent
+                    scaled_orig = sigma_tensor * inp_noise + (1.0 - sigma_tensor) * inp_orig
+
+                    # 输入混合：重绘区用 latents，保留区用加噪后的原图
+                    x_input = inp_mask * latents + latent_mask * scaled_orig
+
+                    # 更新 callback_kwargs 的 latents 为混合后的输入
+                    callback_kwargs["latents"] = x_input
+
+                    # ========== 2. 输出混合（官方 KSamplerX0Inpaint 逻辑）==========
+                    # 官方：out = out * denoise_mask + latent_image * (1-denoise_mask)
+                    # 即：out = inp_mask * out + latent_mask * latent_image
+                    # 但 diffusers pipeline 已经返回了 out，我们需要在返回前做混合
+
+                    # 注意：diffusers pipeline 在 callback 返回后会自动继续，
+                    # 我们在这里修改 latents 会影响下一轮迭代的输入
+                    # 输出混合需要在 pipeline 返回结果后做（在 sample 函数末尾）
+
+                    # 保存当前混合状态供输出混合使用
+                    _inpaint_state["current_mask"] = inp_mask
+                    _inpaint_state["current_latent_mask"] = latent_mask
+                    _inpaint_state["current_sigma"] = sigma_tensor
+                    _inpaint_state["current_orig"] = inp_orig
 
             # ---------- 预览逻辑 ----------
             # 与官方 K 采样器一致：优先用 denoised (x0) 做预览，回退到 latents
+            # 注意：对于 3D packed latent 模型（Flux/Flux2 等），latent-space blending 不适用，
+            # 预览需要在像素空间做 composite，与最终结果一致
             lat_unpacked = None
+            preview_pil_composite = None  # 用于存储 composite 后的预览图（PIL）
+
             if comfy_callback is not None and "latents" in callback_kwargs:
                 lat = callback_kwargs["latents"]
                 noise_pred = callback_kwargs.get("noise_pred")
@@ -713,9 +822,29 @@ class MagicSDNQSampler:
                 if to_preview is None:
                     to_preview = _unpack_latent_for_preview(lat, pipe, _pipe_height, _pipe_width)
                 lat_unpacked = to_preview
+
+                # 对于 3D packed latent + inpaint，在像素空间做 composite 供预览
+                if _inpaint_state.get("use_pixel_composite", False) and ref_pil is not None:
+                    preview_pil_composite = _composite_for_preview(
+                        lat_unpacked, pipe, _pipe_height, _pipe_width, ref_pil, noise_mask_raw
+                    )
+
                 if lat_unpacked is not None:
                     try:
-                        comfy_callback(step_index, lat_unpacked, lat_unpacked, effective_steps)
+                        # 如果做了 composite，用 composite 后的 PIL 图调用 preview callback
+                        if preview_pil_composite is not None:
+                            # 降级为图像预览（comfy_callback 需要 latent，但这里是 PIL）
+                            # 使用 progress bar 更新预览
+                            import numpy as np
+                            arr = np.array(preview_pil_composite)
+                            max_preview = 512
+                            if COMFYUI_AVAILABLE and comfy_args is not None:
+                                max_preview = getattr(comfy_args, "preview_size", 512)
+                            preview_data = ("JPEG", preview_pil_composite, max_preview)
+                            if progress_bar is not None:
+                                progress_bar.update_absolute(step_index + 1, effective_steps, preview=preview_data)
+                        else:
+                            comfy_callback(step_index, lat_unpacked, lat_unpacked, effective_steps)
                     except Exception:
                         if progress_bar is not None:
                             progress_bar.update_absolute(step_index + 1, effective_steps, None)
@@ -724,7 +853,9 @@ class MagicSDNQSampler:
                         progress_bar.update_absolute(step_index + 1, effective_steps, None)
             elif progress_bar is not None:
                 progress_bar.update_absolute(step_index + 1, effective_steps, None)
-            # 兜底：直接通过 server 发送预览（progress 系统可能因 node_id 等不生效）
+
+            # 兜底：直接通过 server 发送预览
+            # 对于 3D packed latent + inpaint，发送 composite 后的预览图
             if lat_unpacked is not None and server is not None and BinaryEventTypes is not None and latent_preview and comfy_args:
                 try:
                     load_dev = getattr(model, "load_device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
@@ -738,7 +869,22 @@ class MagicSDNQSampler:
                             comfy_args.preview_method = old_pm
                     else:
                         previewer = None
-                    if previewer is not None:
+
+                    # 对于 3D packed latent + inpaint，发送 composite 后的预览图
+                    if preview_pil_composite is not None:
+                        max_preview = 512
+                        if COMFYUI_AVAILABLE and comfy_args is not None:
+                            max_preview = getattr(comfy_args, "preview_size", 512)
+                        preview_data = ("JPEG", preview_pil_composite, max_preview)
+                        inst = getattr(getattr(server, "PromptServer", None), "instance", None)
+                        if inst is not None and getattr(inst, "client_id", None) is not None:
+                            meta = {
+                                "node_id": str(unique_id),
+                                "display_node_id": str(unique_id),
+                                "prompt_id": str(getattr(inst, "last_prompt_id", "") or ""),
+                            }
+                            inst.send_sync(BinaryEventTypes.PREVIEW_IMAGE_WITH_METADATA, (preview_data, meta), inst.client_id)
+                    elif previewer is not None and lat_unpacked is not None:
                         preview_data = previewer.decode_latent_to_preview_image("JPEG", lat_unpacked)
                         inst = getattr(getattr(server, "PromptServer", None), "instance", None)
                         if inst is not None and getattr(inst, "client_id", None) is not None:
@@ -820,139 +966,224 @@ class MagicSDNQSampler:
         # 请求 latent 输出（非 packed latent pipeline 尝试直接返回 latent 避免额外 VAE decode）
         # Packed latent pipeline（Flux/Flux2/QwenImage/ZImage/Chroma 等）总是返回 PIL；
         # 其他 pipeline（SDXL/GLM 等）尝试 latent 输出，失败时 try-except 兜底
+        _output_is_latent = False  # 标记 pipeline 输出是否是 latent
         if not _has_pack:
             kwargs["output_type"] = "latent"
 
-        try:
-            result = pipeline(**kwargs)
-        except TypeError as e:
-            err = str(e)
-            # Flux2Klein 等 pipeline 不支持 pooled/negative 相关参数，移除后重试
-            if "pooled_prompt_embeds" in err or "negative_prompt" in err or "negative_prompt_embeds" in err:
-                kwargs.pop("pooled_prompt_embeds", None)
-                kwargs.pop("negative_prompt", None)
-                kwargs.pop("negative_prompt_embeds", None)
-                kwargs.pop("negative_pooled_prompt_embeds", None)
+        # 首次运行 torch.compile 可能 OOM，捕获后清理重试（第二次必成功）
+        _oom_retry_done = False
+        _first_run_oom = False
+        while True:
+            try:
                 result = pipeline(**kwargs)
-            elif "callback_on_step_end_tensor_inputs" in err:
-                kwargs.pop("callback_on_step_end_tensor_inputs", None)
-                print("[SDNQ K Sampler] 当前 pipeline 不支持 callback_on_step_end_tensor_inputs，采样过程预览不可用")
-                result = pipeline(**kwargs)
-            elif "image" in err and ref_pil is not None:
-                kwargs.pop("image", None)
-                print("[SDNQ K Sampler] 当前 pipeline 不支持 image 参数，回退为 text-to-image")
-                result = pipeline(**kwargs)
+                break  # 成功，跳出循环
+            except RuntimeError as e:
+                err_str = str(e)
+                # 检测是否为 CUDA OOM
+                if "out of memory" in err_str.lower() or "allocation on device" in err_str.lower() or "cuda" in err_str.lower():
+                    if not _oom_retry_done:
+                        _oom_retry_done = True
+                        _first_run_oom = True
+                        print(f"[SDNQ K Sampler] ⚠️ 首次运行 OOM（torch.compile 编译中，预期行为）: {e}")
+                        print("[SDNQ K Sampler] 清理显存并重试...")
+                        # 清理 CUDA 内存
+                        if torch.cuda.is_available():
+                            try:
+                                torch.cuda.synchronize()
+                                torch.cuda.empty_cache()
+                                torch.cuda.reset_peak_memory_stats()
+                            except Exception:
+                                pass
+                        import gc
+                        gc.collect()
+                        # 重试（编译已完成）
+                        continue
+                    else:
+                        # 重试后仍然 OOM，真正的问题
+                        print(f"[SDNQ K Sampler] ❌ 重试后仍然 OOM: {e}")
+                        raise
+                else:
+                    raise
+            except TypeError as e:
+                err = str(e)
+                # Flux2Klein 等 pipeline 不支持 pooled/negative 相关参数，移除后重试
+                if "pooled_prompt_embeds" in err or "negative_prompt" in err or "negative_prompt_embeds" in err:
+                    kwargs.pop("pooled_prompt_embeds", None)
+                    kwargs.pop("negative_prompt", None)
+                    kwargs.pop("negative_prompt_embeds", None)
+                    kwargs.pop("negative_pooled_prompt_embeds", None)
+                    # 重试
+                    continue
+                elif "callback_on_step_end_tensor_inputs" in err:
+                    kwargs.pop("callback_on_step_end_tensor_inputs", None)
+                    print("[SDNQ K Sampler] 当前 pipeline 不支持 callback_on_step_end_tensor_inputs，采样过程预览不可用")
+                    continue
+                elif "image" in err and ref_pil is not None:
+                    kwargs.pop("image", None)
+                    print("[SDNQ K Sampler] 当前 pipeline 不支持 image 参数，回退为 text-to-image")
+                    continue
+                elif "output_type" in err:
+                    # pipeline 不支持 output_type 参数，回退到默认输出
+                    kwargs.pop("output_type", None)
+                    print("[SDNQ K Sampler] 当前 pipeline 不支持 output_type，将返回 PIL 图像")
+                    continue
+                else:
+                    raise
+
+        if _first_run_oom:
+            print("[SDNQ K Sampler] ✓ 重试成功（torch.compile 编译已完成）")
+
+        # 没有异常，检查输出是否是 latent
+        if hasattr(result, "images") and result.images:
+                first = result.images[0] if isinstance(result.images, list) else result.images
+                if isinstance(first, torch.Tensor):
+                    _output_is_latent = True
+                    print(f"  [Inpaint] Pipeline 返回 latent: {first.shape}")
+
+        # ========== 最终输出处理 ==========
+        # 策略：
+        # 1. 3D packed latent + inpaint: 做像素 composite
+        # 2. 4D latent + inpaint: 尝试 latent 混合，如果失败则回退到像素 composite
+        # 3. 常规: 直接使用 pipeline 输出
+
+        _final_output = None  # 最终输出 (PIL 或 latent)
+
+        # 3D packed latent + inpaint: 做像素 composite
+        if inpaint_active and _inpaint_state.get("use_pixel_composite", False):
+            if hasattr(result, "images") and result.images:
+                try:
+                    import numpy as np
+                    from PIL import Image as PILImage, ImageFilter
+                    gen_img = result.images[0] if isinstance(result.images, list) else result.images
+                    if hasattr(gen_img, "size"):
+                        orig_img = ref_pil[0] if isinstance(ref_pil, list) else ref_pil
+                        orig_w, orig_h = orig_img.size
+                        # 准备 mask
+                        mask_t = noise_mask_raw
+                        if mask_t.dim() == 4:
+                            mask_t = mask_t[0, 0]
+                        elif mask_t.dim() == 3:
+                            mask_t = mask_t[0]
+                        mask_np = mask_t.cpu().float().numpy()
+                        mask_pil = PILImage.fromarray((mask_np * 255).astype(np.uint8), mode="L")
+                        if mask_pil.size != (orig_w, orig_h):
+                            mask_pil = mask_pil.resize((orig_w, orig_h), PILImage.LANCZOS)
+                        mask_pil = mask_pil.filter(ImageFilter.GaussianBlur(radius=5))
+                        _final_output = PILImage.composite(gen_img, orig_img, mask_pil)
+                        print(f"  [Inpaint] 像素 composite 完成: {orig_w}x{orig_h}")
+                except Exception as e:
+                    print(f"  [Inpaint] 像素 composite 失败: {e}")
+                    if hasattr(result, "images") and result.images:
+                        _final_output = result.images[0] if isinstance(result.images, list) else result.images
             else:
-                raise
+                if hasattr(result, "images") and result.images:
+                    _final_output = result.images[0] if isinstance(result.images, list) else result.images
 
-        # ========== 像素空间 mask composite（3D packed latent 模型的 inpaint）==========
-        # 3D packed latent 模型（Flux/Flux2/Flux2Klein/QwenImage/ZImage/Chroma 等）的
-        # noise latent 和 image latent 在不同分辨率空间，无法做 latent blending。
-        # 所以在 pipeline 输出 PIL 图片后，用原始 mask 在像素空间做 composite。
-        _pixel_composited = None  # 如果做了像素 composite，存储结果
-        if inpaint_active and _inpaint_state.get("use_pixel_composite", False) and hasattr(result, "images") and result.images:
-            try:
-                import numpy as np
-                from PIL import Image as PILImage, ImageFilter
-                gen_img = result.images[0] if isinstance(result.images, list) else result.images
-                if hasattr(gen_img, "size"):
-                    orig_img = ref_pil[0] if isinstance(ref_pil, list) else ref_pil
-                    orig_w, orig_h = orig_img.size
-                    gen_w, gen_h = gen_img.size
-                    # 以原图尺寸为基准：把生成图 resize 到原图大小（pipeline 可能输出更小的图）
-                    if gen_img.size != (orig_w, orig_h):
-                        print(f"  [Inpaint] 生成图 ({gen_w}x{gen_h}) 与原图 ({orig_w}x{orig_h}) 尺寸不同，resize 生成图到原图尺寸")
-                        gen_img = gen_img.resize((orig_w, orig_h), PILImage.LANCZOS)
-                    # 准备 mask（1=重绘区，0=保留区）
-                    # noise_mask_raw: (B,1,H,W) or (B,H,W) tensor
-                    mask_t = noise_mask_raw
-                    if mask_t.dim() == 4:
-                        mask_t = mask_t[0, 0]
-                    elif mask_t.dim() == 3:
-                        mask_t = mask_t[0]
-                    # resize mask 到原图尺寸
-                    mask_np = mask_t.cpu().float().numpy()
-                    mask_pil = PILImage.fromarray((mask_np * 255).astype(np.uint8), mode="L")
-                    if mask_pil.size != (orig_w, orig_h):
-                        mask_pil = mask_pil.resize((orig_w, orig_h), PILImage.LANCZOS)
-                    # 对 mask 做高斯模糊，实现平滑过渡边缘
-                    mask_pil = mask_pil.filter(ImageFilter.GaussianBlur(radius=5))
-                    # PIL composite: mask=255→gen_img, mask=0→orig_img
-                    _pixel_composited = PILImage.composite(gen_img, orig_img, mask_pil)
-                    print(f"  [Inpaint] 像素空间 composite 完成: {orig_w}x{orig_h}")
-            except Exception as e:
-                print(f"  [Inpaint] 像素空间 composite 失败: {e}")
-                import traceback; traceback.print_exc()
+        # 4D latent + inpaint: 尝试 latent 混合
+        elif inpaint_active and not _inpaint_state.get("use_pixel_composite", False):
+            inp_mask = _inpaint_state.get("mask")
+            inp_orig = _inpaint_state.get("original_latents")
 
-        # 若采样过程中未产生预览，结束时发送最终图像作为预览（Flux 返回 PIL）
-        if (progress_bar is not None or comfy_callback is not None) and 预览方式 != "none":
-            try:
-                # 如果做了像素 composite，优先预览 composited 结果
-                preview_img = _pixel_composited
-                if preview_img is None:
-                    img = getattr(result, "images", None)
-                    if img and ((isinstance(img, list) and img) or (not isinstance(img, list) and img is not None)):
-                        preview_img = img[0] if isinstance(img, list) else img
-                if preview_img is not None and hasattr(preview_img, "size") and preview_img.size:
-                    max_preview = 512
-                    if COMFYUI_AVAILABLE and comfy_args is not None:
-                        max_preview = getattr(comfy_args, "preview_size", 512)
-                    preview_data = ("JPEG", preview_img, max_preview)
-                    pbar = progress_bar if progress_bar is not None else comfy.utils.ProgressBar(effective_steps)
-                    pbar.update_absolute(effective_steps, total=effective_steps, preview=preview_data)
-            except Exception:
-                pass
+            # 尝试从 pipeline 结果获取 latent
+            _latent_from_pipeline = None
 
-        # 取 latent
+            # 如果 pipeline 返回了 latent tensor
+            if _output_is_latent and hasattr(result, "images") and result.images:
+                first = result.images[0] if isinstance(result.images, list) else result.images
+                if isinstance(first, torch.Tensor):
+                    _latent_from_pipeline = first
+                    if _latent_from_pipeline.dim() == 3:
+                        _latent_from_pipeline = _latent_from_pipeline.unsqueeze(0)
+                    print(f"  [Inpaint] 获取 pipeline latent: {_latent_from_pipeline.shape}")
+            # 否则尝试从 result.latents 获取
+            elif hasattr(result, "latents") and result.latents:
+                _latent_from_pipeline = result.latents[0] if isinstance(result.latents, list) else result.latents
+                print(f"  [Inpaint] 从 result.latents 获取: {_latent_from_pipeline.shape}")
+
+            # 如果获取到 latent，做混合
+            if _latent_from_pipeline is not None and inp_mask is not None and inp_orig is not None:
+                latent_mask = 1.0 - inp_mask
+                if _latent_from_pipeline.shape == inp_orig.shape:
+                    _final_output = inp_mask * _latent_from_pipeline + latent_mask * inp_orig
+                    print(f"  [Inpaint] 4D latent 混合完成")
+                else:
+                    # shape 不匹配，尝试 resize
+                    if _latent_from_pipeline.dim() == 4 and inp_orig.dim() == 4:
+                        _resized = F.interpolate(_latent_from_pipeline, size=inp_orig.shape[2:], mode="bilinear", align_corners=False)
+                        _final_output = inp_mask * _resized + latent_mask * inp_orig
+                        print(f"  [Inpaint] 4D latent 混合完成 (resize)")
+                    else:
+                        print(f"  [Inpaint] ⚠️ 4D latent shape 不匹配，跳过混合")
+                        _final_output = _latent_from_pipeline
+            else:
+                # 无法获取 latent，回退到像素 composite
+                print(f"  [Inpaint] ⚠️ 无法获取 latent，回退到像素 composite")
+                if hasattr(result, "images") and result.images:
+                    gen_pil = result.images[0] if isinstance(result.images, list) else result.images
+                    if hasattr(gen_pil, "size") and hasattr(pipeline, "vae") and pipeline.vae is not None:
+                        try:
+                            import numpy as np
+                            orig_pil = ref_pil[0] if isinstance(ref_pil, list) else ref_pil
+                            # 准备 mask
+                            mask_t = noise_mask_raw
+                            if mask_t.dim() == 4:
+                                mask_t = mask_t[0, 0]
+                            elif mask_t.dim() == 3:
+                                mask_t = mask_t[0]
+                            mask_np = mask_t.cpu().float().numpy()
+                            from PIL import Image as PILImage, ImageFilter
+                            mask_pil = PILImage.fromarray((mask_np * 255).astype(np.uint8), mode="L")
+                            if mask_pil.size != orig_pil.size:
+                                mask_pil = mask_pil.resize(orig_pil.size, PILImage.LANCZOS)
+                            mask_pil = mask_pil.filter(ImageFilter.GaussianBlur(radius=5))
+                            _final_output = PILImage.composite(gen_pil, orig_pil, mask_pil)
+                            print(f"  [Inpaint] 回退像素 composite 完成")
+                        except Exception as e:
+                            print(f"  [Inpaint] 回退像素 composite 失败: {e}")
+                            _final_output = None
+
+        # 常规输出
+        if _final_output is None:
+            if hasattr(result, "images") and result.images:
+                _final_output = result.images[0] if isinstance(result.images, list) else result.images
+
+        # ========== 取 latent ==========
         out_latent = latent.copy()
-        # 如果做了像素 composite，优先使用 composite 结果
-        _result_images = result.images if hasattr(result, "images") else None
-        if _pixel_composited is not None:
-            _result_images = [_pixel_composited]
-        if _result_images:
-            first = _result_images[0] if isinstance(_result_images, list) else _result_images
-            if isinstance(first, torch.Tensor):
-                lat = first
+
+        if _final_output is not None:
+            if isinstance(_final_output, torch.Tensor):
+                # 是 latent tensor
+                lat = _final_output
                 if lat.dim() == 3:
                     lat = lat.unsqueeze(0)
                 out_latent["samples"] = lat.cpu()
             else:
-                # PIL 输出（FLUX 等）：用 VAE 编码回 latent
+                # 是 PIL 图像，需要 encode
                 try:
                     import numpy as np
-                    pil_img = first if hasattr(first, "size") else result.images[0]
-                    arr = np.array(pil_img).astype(np.float32) / 255.0
+                    arr = np.array(_final_output).astype(np.float32) / 255.0
                     img_t = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0)
                     if hasattr(pipeline, "vae") and pipeline.vae is not None:
                         vae_dev = getattr(pipeline, "_execution_device", None)
                         if vae_dev is None or str(vae_dev).lower() == "cpu":
                             vae_dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
                         vae_dtype = next(pipeline.vae.parameters()).dtype
-                        img_t = img_t.to(device=vae_dev, dtype=vae_dtype)
-                        img_t = img_t * 2 - 1
+                        img_t = img_t.to(device=vae_dev, dtype=vae_dtype) * 2.0 - 1.0
                         with torch.no_grad():
                             enc = pipeline.vae.encode(img_t).latent_dist.sample()
-                            # 与 diffusers pipeline 一致：latent = (raw - shift) * scale
-                            # Flux2: bn 无 scaling，Flux/SD3: scaling+shift，SD/SDXL: scaling only
                             if hasattr(pipeline.vae, "bn") and pipeline.vae.bn is not None:
                                 lat = enc
-                                # Body-only 时 encode 返回 (B,32,H,W) 供 pipeline concat；下游 VAE Decode 需 ComfyUI 格式 (B,128,h,w)
                                 if lat.dim() == 4 and lat.shape[1] == 32:
                                     from einops import rearrange
                                     lat = rearrange(lat, "b c (i pi) (j pj) -> b (c pi pj) i j", pi=2, pj=2)
                             else:
                                 cfg = pipeline.vae.config
-                                sf = getattr(cfg, "scaling_factor", None) or (cfg.get("scaling_factor") if hasattr(cfg, "get") else None) or 0.18215
-                                shift = getattr(cfg, "shift_factor", None) or (cfg.get("shift_factor") if hasattr(cfg, "get") else None) or 0.0
-                                lat = (enc - shift) * sf
+                                sf = getattr(cfg, "scaling_factor", None) or 0.18215
+                                shift = getattr(cfg, "shift_factor", None) or 0.0
+                                lat = (enc - shift) * sf if shift != 0 else enc / sf
                         out_latent["samples"] = lat.cpu()
-                    else:
-                        out_latent["samples"] = torch.zeros(batch, channels, h, w)
-                except Exception as e:
-                    print(f"[SDNQ K Sampler] VAE encode fallback: {e}")
+                except Exception:
                     out_latent["samples"] = torch.zeros(batch, channels, h, w)
-        else:
-            out_latent["samples"] = torch.zeros(batch, channels, h, w)
 
         return (out_latent,)
 

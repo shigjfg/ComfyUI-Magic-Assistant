@@ -4109,15 +4109,6 @@ app.registerExtension({
                     // 触发更新
                     this.updateWidget();
                     
-                    // SDNQ 模式缓存提示：首次保存时弹窗提醒
-                    if (selectedSdnqMode === "sdnq") {
-                        const hintKey = "mpl_sdnq_cache_hint_shown";
-                        if (!sessionStorage.getItem(hintKey)) {
-                            sessionStorage.setItem(hintKey, "1");
-                            alert("链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。");
-                        }
-                    }
-                    
                     document.body.removeChild(overlay);
                 };
                 confirmBtn.onmouseenter = () => confirmBtn.style.background = "#42A5F5";

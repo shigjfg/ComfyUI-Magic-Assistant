@@ -9,7 +9,6 @@ import os
 import sys
 import torch
 import gc
-import subprocess
 from typing import Tuple, Optional
 
 # Add parent for core imports
@@ -23,17 +22,6 @@ from core.sdnq_registry import get_model_names_for_dropdown, get_repo_id_from_na
 from core.sdnq_downloader import download_model, check_model_cached, get_cached_model_path
 from core.sdnq_wrapper import wrap_pipeline_components, DiffusersVAEFromComfy
 from core.sdnq_body_only import load_body_only_pipeline
-
-
-def _check_cpp_compiler() -> bool:
-    """Check if C++ compiler is available (needed for torch.compile on Windows)."""
-    if sys.platform != "win32":
-        return True
-    try:
-        subprocess.run(["cl"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
-        return True
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
 
 
 def _cleanup_resources(pipeline=None, force=True):
@@ -91,7 +79,6 @@ class MagicSDNQLoader:
                 "custom_repo_or_path": ("STRING", {"default": "", "multiline": False}),
                 "auto_download": ("BOOLEAN", {"default": True, "tooltip": "模型未缓存时自动从 HuggingFace 下载"}),
                 "use_xformers": ("BOOLEAN", {"default": True, "tooltip": "xFormers 注意力 (10-45% 加速)。未安装时回退到 SDPA"}),
-                "use_torch_compile": ("BOOLEAN", {"default": False, "tooltip": "torch.compile 加速 (1.8-3x)。使用 max-autotune-no-cudagraphs 避免 cudaMallocAsync 报错。首次运行需编译约 30-60 秒"}),
                 "enable_vae_tiling": ("BOOLEAN", {"default": False, "tooltip": "大图时 VAE 分块处理省显存"}),
             }
         }
@@ -112,7 +99,6 @@ class MagicSDNQLoader:
         custom_repo_or_path: str = "",
         auto_download: bool = True,
         use_xformers: bool = True,
-        use_torch_compile: bool = False,
         enable_vae_tiling: bool = False,
     ) -> Tuple:
         if model_selection == "--Custom Model--":
@@ -146,7 +132,6 @@ class MagicSDNQLoader:
         model_path = model_path.strip()
         torch_dtype = get_dtype_from_string(dtype)
         is_local = os.path.exists(model_path)
-        compiler_available = _check_cpp_compiler()
 
         # 外接 CLIP/VAE：必须同时都连或都不连，不能只连一个
         has_clip = clip is not None
@@ -155,11 +140,6 @@ class MagicSDNQLoader:
             raise ValueError(
                 "请同时连接外接 CLIP 和 VAE（仅加载本体、省显存），或两者都不连（整包加载）。不能只连其中一个。"
             )
-
-        if not compiler_available:
-            torch._dynamo.config.suppress_errors = True
-            torch._dynamo.config.verbose = False
-            print("[SDNQ] ℹ C++ compiler not found - suppressing torch.compile errors; will still attempt Quantized MatMul")
 
         print(f"[SDNQ] Loading model from: {model_path}")
         print(f"[SDNQ] Using dtype: {dtype} ({torch_dtype})")
@@ -227,11 +207,7 @@ class MagicSDNQLoader:
                     use_quantized_matmul=use_quantized_matmul,
                 )
                 if pipeline is not None:
-                    # Same post-processing as full load: compile flag, xFormers, memory, VAE tiling
-                    pipeline._sdnq_use_torch_compile = False
-                    if use_torch_compile and torch.cuda.is_available():
-                        pipeline._sdnq_use_torch_compile = True
-                        print("[SDNQ] ✓ torch.compile 将在首次采样时应用")
+                    # Same post-processing as full load: xFormers, memory, VAE tiling
                     xformers_ok = False
                     if use_xformers:
                         try:
@@ -284,10 +260,8 @@ class MagicSDNQLoader:
             # 不检查 compiler_available / triton_ok，直接尝试；失败则回退
             qmatmul_ok = False
             if use_quantized_matmul and torch.cuda.is_available():
-                _orig_use_torch_compile = None
                 try:
                     import sdnq.common
-                    _orig_use_torch_compile = getattr(sdnq.common, "use_torch_compile", None)
                     sdnq.common.use_torch_compile = True  # 强制启用，与 comfyui-sdnq 的 _triton_available=True 等效
                     from sdnq.loader import apply_sdnq_options_to_model
                     print("[SDNQ] Applying Triton Quantized MatMul optimizations...")
@@ -325,25 +299,10 @@ class MagicSDNQLoader:
                 except Exception as e:
                     print(f"[SDNQ] ⚠️ Failed to apply optimizations: {e}")
                     print("[SDNQ] Continuing without optimizations...")
-                finally:
-                    try:
-                        if _orig_use_torch_compile is not None:
-                            sdnq.common.use_torch_compile = _orig_use_torch_compile
-                    except NameError:
-                        pass
             elif use_quantized_matmul and not torch.cuda.is_available():
                 print("[SDNQ] ℹ️ Quantized MatMul requires CUDA. Optimization disabled.")
             elif not use_quantized_matmul:
                 print("[SDNQ] Quantized MatMul optimization disabled")
-
-            # torch.compile 延后到 Sampler 执行（在 LoRA 加载之后），否则 PEFT 无法注入 adapter
-            # 与 comfyui-sdnq 一致：Loader 不 compile，保证 LoRA 能正常加载
-            compile_ok = False
-            pipeline._sdnq_use_torch_compile = False
-            if use_torch_compile and torch.cuda.is_available():
-                pipeline._sdnq_use_torch_compile = True
-                compile_ok = True
-                print("[SDNQ] ✓ torch.compile 将在首次采样时应用（LoRA 加载后再 compile）")
 
             # xFormers (must be before memory management)
             # 若用户勾选但未安装 xformers，会静默回退到 SDPA，不会报错
@@ -409,7 +368,6 @@ class MagicSDNQLoader:
             print(f"  当前模式: {memory_mode} ({mode_desc})")
             print(f"  注意力: {attn_desc}")
             print(f"  Quantized MatMul: {'已启用' if qmatmul_ok else '未启用'}")
-            print(f"  torch.compile: {'已启用' if compile_ok else '未启用'}")
             print(f"  VAE Tiling: {'已启用' if vae_tiling_ok else '未启用'}")
             print(f"  Pipeline: {type(pipeline).__name__}")
             print(f"{'='*50}\n")

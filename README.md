@@ -10,7 +10,27 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：2026-02-11
+> Latest Update / 最新更新：**2026-02-12**
+
+> **V1.2.3 版本介绍 / Version Introduction** 2026-02-12
+
+> 1. **🛠️ 问题修复**: Magic SDNQ K Sampler - 图片生成更稳定
+>    * 修复了文生图/图生图时可能出现的报错问题
+>    * 现在各种模型的生成过程更加稳定可靠
+>    * Fixed an error that could occur during image generation, making the process more stable
+
+> 2. **✨ 新增功能**: Magic SDNQ K Sampler - 更好的局部重绘支持
+>    * 优化了局部重绘的混合算法
+>    * 3D 打包模型（如 Flux/Flux2）使用像素级混合，效果更自然
+>    * 4D 模型（如 SDXL）使用潜在空间混合，速度更快
+>    * 即使遇到意外情况，系统会自动选择最合适的处理方式
+>    * Enhanced inpainting with optimized blending algorithms for different model types; 3D models use pixel blending for better quality, 4D models use latent blending for speed; automatic fallback ensures stability
+
+> 3. **⚡ 性能优化**: Magic SDNQ K Sampler - 代码更简洁高效
+>    * 精简了内部代码逻辑
+>    * 减少了不必要的内存占用
+>    * 让系统运行更加流畅
+>    * Streamlined internal code for better performance and lower memory usage
 
 > **V1.2.2 版本介绍 / Version Introduction** 2026-02-11
 

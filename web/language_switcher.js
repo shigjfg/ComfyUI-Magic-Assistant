@@ -103,6 +103,7 @@ const loraLoaderTranslations = {
     "Error: ": { zh: "错误: ", en: "Error: " },
     "删除失败: ": { zh: "删除失败: ", en: "Deletion failed: " },
     "爬取失败: ": { zh: "爬取失败: ", en: "Fetch failed: " },
+    "Upload failed: ": { zh: "上传失败: ", en: "Upload failed: " },
     "保存时发生错误：": { zh: "保存时发生错误：", en: "Error occurred while saving: " },
     " 的内容已保存到 ": { zh: " 的内容已保存到 ", en: "'s content saved to " },
     "！": { zh: "！", en: "!" },
@@ -152,9 +153,6 @@ const loraLoaderTranslations = {
     "SDNQ 模式": { zh: "SDNQ 模式", en: "SDNQ Mode" },
     "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）": { zh: "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）", en: "Use diffusers PEFT adapter system to load LoRAs, supports parallel application of multiple LoRAs, suitable for SDNQ quantized models (DiffusionPipeline)" },
 
-    // SDNQ 缓存提示（弹窗）
-    "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。": { zh: "链式 LoRA 若 Bypass 中间 loader 或增减选择，请先 Clear Queue 再运行，否则可能使用缓存。", en: "If you Bypass a middle loader or change LoRA selection in a chain, please Clear Queue before running to avoid using cached output." },
-    
     // LoRA 串连功能相关
     "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。": { zh: "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。", en: "lora串接受 received invalid data. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader, not from other text or nodes." },
     "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。": { zh: "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。", en: "lora串接受 received data that is not in LoRA chain format. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader." },
