@@ -138,6 +138,7 @@ class DiffusersVAEFromComfy:
         """Pipeline passes (scaled/scale)+shift into decode. We convert to scaled then ComfyUI.decode.
         When return_dict=False, pipeline expects [0] to get the image tensor (Flux2KleinPipeline).
         Flux2: diffusers uses (B, 32, 2h, 2w); ComfyUI Flux2 VAE expects (B, 128, h, w) for BN, so we rearrange.
+        Supports VAE tiling for large images to reduce peak VRAM usage.
         """
         sf = self.config.scaling_factor
         shift = self.config.shift_factor
@@ -149,7 +150,18 @@ class DiffusersVAEFromComfy:
                 scaled = rearrange(scaled, "b c (i pi) (j pj) -> b (c pi pj) i j", pi=2, pj=2)
         else:
             scaled = (latents - shift) * sf
-        images = self._comfy_decode(scaled)
+
+        # VAE Tiling: decode in tiles for large images to reduce peak VRAM
+        # 检查是否应该使用 tiling（latent 大于 tile_size）
+        tile_size = 256  # 减小 tile_size 以获得更好的 VRAM 节省
+        tile_overlap = 32
+        should_tile = scaled.shape[-1] > tile_size or scaled.shape[-2] > tile_size
+
+        if should_tile:
+            images = self._decode_with_tiling(scaled, tile_size, tile_overlap)
+        else:
+            images = self._comfy_decode(scaled)
+
         # Diffusers pipeline postprocess expects (B, C, H, W) in [-1, 1]; ComfyUI often returns (B, H, W, C) in [0, 1]
         if images.dim() == 4 and images.shape[-1] in (3, 4):
             images = images.permute(0, 3, 1, 2)
@@ -160,6 +172,86 @@ class DiffusersVAEFromComfy:
         if return_dict:
             return _DecodeSample(images)
         return (images,)
+
+    def _decode_with_tiling(self, scaled_latents: torch.Tensor, tile_size: int = 256, tile_overlap: int = 32):
+        """Decode latents in tiles to reduce peak VRAM usage.
+        Args:
+            scaled_latents: Latent tensor in VAE's scaled space (B, C, H, W)
+            tile_size: Size of each tile (smaller = less VRAM but more tiles)
+            tile_overlap: Overlap between tiles for seamless blending
+        Returns:
+            Decoded image tensor (B, C, H, W) in [-1, 1]
+        """
+        import math
+
+        _, C, H, W = scaled_latents.shape
+
+        # 计算 tiles 数量
+        h_tiles = math.ceil((H - tile_overlap) / (tile_size - tile_overlap)) if H > tile_size else 1
+        w_tiles = math.ceil((W - tile_overlap) / (tile_size - tile_overlap)) if W > tile_size else 1
+
+        # 如果不需要 tiling，直接返回
+        if h_tiles == 1 and w_tiles == 1:
+            return self._comfy_decode(scaled_latents)
+
+        # 初始化输出
+        output = torch.zeros((1, 3, H * 8, W * 8), dtype=scaled_latents.dtype, device=scaled_latents.device)
+
+        # 创建权重图（边缘淡入淡出）
+        weight_map = torch.zeros_like(output)
+
+        # 处理每个 tile
+        for h_idx in range(h_tiles):
+            for w_idx in range(w_tiles):
+                # 计算当前 tile 的边界
+                h_start = max(0, h_idx * (tile_size - tile_overlap))
+                h_end = min(H, h_start + tile_size)
+                w_start = max(0, w_idx * (tile_size - tile_overlap))
+                w_end = min(W, w_start + tile_size)
+
+                # 提取 tile
+                tile = scaled_latents[:, :, h_start:h_end, w_start:w_end]
+
+                # 解码 tile
+                decoded_tile = self._comfy_decode(tile)
+
+                # 计算输出中对应的位置（VAE 通常是 8x 上采样）
+                out_h_start = h_start * 8
+                out_h_end = h_end * 8
+                out_w_start = w_start * 8
+                out_w_end = w_end * 8
+
+                # 创建当前 tile 的权重（边缘淡入淡出）
+                tile_weight = torch.ones_like(decoded_tile)
+                fade = tile_overlap * 8
+
+                # 淡入淡出
+                if fade > 0:
+                    # 顶部淡出
+                    if h_idx > 0:
+                        for i in range(min(fade, tile_weight.shape[2])):
+                            tile_weight[:, :, i, :] *= i / fade
+                    # 底部淡出
+                    if h_idx < h_tiles - 1:
+                        for i in range(max(0, tile_weight.shape[2] - fade), tile_weight.shape[2]):
+                            tile_weight[:, :, i, :] *= (tile_weight.shape[2] - i) / fade
+                    # 左侧淡出
+                    if w_idx > 0:
+                        for i in range(min(fade, tile_weight.shape[3])):
+                            tile_weight[:, :, :, i] *= i / fade
+                    # 右侧淡出
+                    if w_idx < w_tiles - 1:
+                        for i in range(max(0, tile_weight.shape[3] - fade), tile_weight.shape[3]):
+                            tile_weight[:, :, :, i] *= (tile_weight.shape[3] - i) / fade
+
+                # 累加 tile 和权重
+                output[:, :, out_h_start:out_h_end, out_w_start:out_w_end] += decoded_tile * tile_weight
+                weight_map[:, :, out_h_start:out_h_end, out_w_start:out_w_end] += tile_weight
+
+        # 归一化
+        output = output / (weight_map + 1e-8)
+
+        return output
 
 
 class SDNQModelWrapper:

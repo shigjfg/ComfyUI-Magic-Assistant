@@ -273,6 +273,7 @@ class MagicPowerLoraLoader:
             "hidden": {
                 "int8_mode": ("STRING", {"default": "none"}),
                 "sdnq_mode": ("STRING", {"default": "none"}),
+                "adaptive_mode": ("BOOLEAN", {"default": False}),  # 自适应模式：自动检测模型类型选择合适模式
                 "lora串输出已连接": ("BOOLEAN", {"default": True}),  # 由前端根据图连接注入：未连接=链末端
             }
         }
@@ -363,13 +364,18 @@ class MagicPowerLoraLoader:
         except Exception:
             return None
 
-    def apply_loras(self, lora_stack, model=None, clip=None, int8_mode="none", sdnq_mode="none", **kwargs):
+    def apply_loras(self, lora_stack, model=None, clip=None, adaptive_mode=False, int8_mode="none", sdnq_mode="none", **kwargs):
         """
         应用 LoRA
         int8_mode: "none" (默认), "stochastic" (静态), "dynamic" (动态)
         sdnq_mode: "none" (默认), "sdnq" (SDNQ 模式，用于 DiffusionPipeline)
         链末端由「lora串输出」是否被连接判定：未连接则为末端，末端才加载 LoRA 并需连接 model/clip。
         """
+        # 确保 adaptive_mode 是正确的布尔值（处理 JavaScript 传递的字符串 "false"）
+        if isinstance(adaptive_mode, str):
+            adaptive_mode = adaptive_mode.lower() == "true"
+        adaptive_mode = bool(adaptive_mode)
+
         # 前端根据图连接注入 lora串输出已连接；未注入时默认 True（视为非末端，不加载，避免误加载）
         lora_output_connected = kwargs.get("lora串输出已连接", True)
         chain_end = not lora_output_connected
@@ -428,6 +434,23 @@ class MagicPowerLoraLoader:
         is_int8 = self.is_int8_model(out_model)
         is_sdnq = self.is_sdnq_model(out_model)
 
+        # ========== 自适应模式检测 ==========
+        if adaptive_mode:
+            print(f"🔄 [MagicPowerLora] 自适应模式：检测到 SDNQ={is_sdnq}, INT8={is_int8}")
+            if is_sdnq:
+                sdnq_mode = "sdnq"
+                int8_mode = "none"
+                print(f"   → 自动切换到 SDNQ 模式")
+            elif is_int8:
+                int8_mode = "dynamic"
+                sdnq_mode = "none"
+                print(f"   → 自动切换到 INT8 动态模式")
+            else:
+                int8_mode = "none"
+                sdnq_mode = "none"
+                print(f"   → 自动切换到标准模式")
+        # ====================================
+
         if sdnq_mode == "sdnq" and not is_sdnq:
             print(f"⚠️ [MagicPowerLora] SDNQ 模式已启用，但模型似乎不是 SDNQ 模型（DiffusionPipeline），将回退到标准模式")
             sdnq_mode = "none"
@@ -442,7 +465,16 @@ class MagicPowerLoraLoader:
                 print(f"💡 [MagicPowerLora] 检测到 INT8 模型，建议在设置中启用 INT8 模式以获得更好的兼容性")
 
         mode_str = f"{int8_mode}" if int8_mode != "none" else (f"{sdnq_mode}" if sdnq_mode != "none" else "standard")
-        print(f"🚀 [MagicPowerLora] 链末端：加载 {len(items_to_process)} 个 LoRA（含串接）... (Mode: {mode_str})")
+        adaptive_str = f" (Adaptive)" if adaptive_mode else ""
+        
+        # 如果没有LoRA需要加载，直接返回（不做任何加载尝试）
+        if not items_to_process:
+            print(f"🚀 [MagicPowerLora] 链末端：无 LoRA 需要加载")
+            if not preview_images:
+                preview_images = [torch.zeros((1, 64, 64, 3), dtype=torch.float32, device="cpu")]
+            return (out_model, out_clip, preview_images, "", lora_chain_out)
+        
+        print(f"🚀 [MagicPowerLora] 链末端：加载 {len(items_to_process)} 个 LoRA（含串接）... (Mode: {mode_str}{adaptive_str})")
 
         # 根据模式选择加载方式
         if int8_mode == "stochastic" and INT8_AVAILABLE:

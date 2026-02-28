@@ -66,20 +66,24 @@ class MagicSDNQLoader:
                 "model_selection": (model_options, {
                     "default": model_options[1] if len(model_options) > 1 else model_options[0],
                 }),
+                "custom_repo_or_path": ("STRING", {"default": "", "multiline": False}),
                 "dtype": (["bfloat16", "float16", "float32"], {"default": "bfloat16"}),
                 "memory_mode": (["gpu", "balanced", "lowvram"], {
                     "default": "balanced",
                     "tooltip": "gpu=全显存(24GB+), balanced=CPU卸载(12-16GB), lowvram=顺序卸载(8GB)"
                 }),
+                "auto_download": ("BOOLEAN", {"default": True, "tooltip": "模型未缓存时自动从 HuggingFace 下载"}),
+                "enable_vae_tiling": ("BOOLEAN", {"default": True, "tooltip": "大图时 VAE 分块处理省显存"}),
                 "use_quantized_matmul": ("BOOLEAN", {"default": True}),
+                "use_torch_compile": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "首次编译需30-60秒但后续快2-3倍。12GB显存建议关闭以避免OOM"
+                }),
+                "use_xformers": ("BOOLEAN", {"default": True, "tooltip": "xFormers 注意力 (10-45% 加速)。未安装时回退到 SDPA"}),
             },
             "optional": {
                 "clip": ("CLIP", {"tooltip": "连接后仅加载模型本体(~5GB)，使用此外部 CLIP，省显存"}),
                 "vae": ("VAE", {"tooltip": "连接后仅加载模型本体(~5GB)，使用此外部 VAE，省显存"}),
-                "custom_repo_or_path": ("STRING", {"default": "", "multiline": False}),
-                "auto_download": ("BOOLEAN", {"default": True, "tooltip": "模型未缓存时自动从 HuggingFace 下载"}),
-                "use_xformers": ("BOOLEAN", {"default": True, "tooltip": "xFormers 注意力 (10-45% 加速)。未安装时回退到 SDPA"}),
-                "enable_vae_tiling": ("BOOLEAN", {"default": False, "tooltip": "大图时 VAE 分块处理省显存"}),
             }
         }
 
@@ -91,15 +95,16 @@ class MagicSDNQLoader:
     def load_model(
         self,
         model_selection: str,
+        custom_repo_or_path: str,
         dtype: str,
         memory_mode: str = "balanced",
+        auto_download: bool = True,
+        enable_vae_tiling: bool = True,
         use_quantized_matmul: bool = True,
+        use_torch_compile: bool = True,
+        use_xformers: bool = True,
         clip=None,
         vae=None,
-        custom_repo_or_path: str = "",
-        auto_download: bool = True,
-        use_xformers: bool = True,
-        enable_vae_tiling: bool = False,
     ) -> Tuple:
         if model_selection == "--Custom Model--":
             if not custom_repo_or_path or not custom_repo_or_path.strip():
@@ -207,6 +212,10 @@ class MagicSDNQLoader:
                     use_quantized_matmul=use_quantized_matmul,
                 )
                 if pipeline is not None:
+                    # 设置 torch.compile 标志（首次编译在采样时进行）
+                    pipeline._sdnq_use_torch_compile = use_torch_compile and torch.cuda.is_available()
+                    pipeline._sdnq_transformer_compiled = False
+
                     # Same post-processing as full load: xFormers, memory, VAE tiling
                     xformers_ok = False
                     if use_xformers:
@@ -237,7 +246,19 @@ class MagicSDNQLoader:
                         torch.cuda.empty_cache()
                         gc.collect()
                         print("[SDNQ] 已释放加载阶段显存碎片，便于首次采样")
-                    print(f"\n[SDNQ] ✓ 仅加载本体完成 (Body-only loaded). 使用外接 CLIP/VAE，显存占用更低。\n")
+
+                    # 显存警告
+                    if torch.cuda.is_available():
+                        try:
+                            total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                            used = torch.cuda.memory_allocated() / (1024**3)
+                            reserved = torch.cuda.memory_reserved() / (1024**3)
+                            print(f"[SDNQ] 📊 VRAM: {used:.1f}/{total:.1f} GB (reserved: {reserved:.1f} GB)")
+                        except Exception:
+                            pass
+
+                    print(f"\n[SDNQ] ✓ 仅加载本体完成 (Body-only loaded). 使用外接 CLIP/VAE，显存占用更低。")
+                    print(f"[SDNQ] torch.compile: {'已启用' if pipeline._sdnq_use_torch_compile else '未启用'}\n")
                     return (model_wrapper, clip, vae)
                 # 当前模型不支持 body-only：报错并阻止继续运行
                 display_name = model_selection if model_selection != "--Custom Model--" else (custom_repo_or_path.strip() or "当前自定义模型")
@@ -262,7 +283,8 @@ class MagicSDNQLoader:
             if use_quantized_matmul and torch.cuda.is_available():
                 try:
                     import sdnq.common
-                    sdnq.common.use_torch_compile = True  # 强制启用，与 comfyui-sdnq 的 _triton_available=True 等效
+                    # torch.compile 由用户控制，不强制启用
+                    sdnq.common.use_torch_compile = use_torch_compile
                     from sdnq.loader import apply_sdnq_options_to_model
                     print("[SDNQ] Applying Triton Quantized MatMul optimizations...")
                     if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
@@ -324,6 +346,10 @@ class MagicSDNQLoader:
                 print("[SDNQ] Using SDPA (scaled dot product attention, PyTorch 2.0+ default)")
 
             # Memory management
+            # 设置 use_torch_compile 标志（首次编译在采样时进行）
+            pipeline._sdnq_use_torch_compile = use_torch_compile and torch.cuda.is_available()
+            pipeline._sdnq_transformer_compiled = False
+
             if memory_mode == "gpu":
                 print("[SDNQ] Moving model to GPU (full GPU mode)...")
                 pipeline.to("cuda")
@@ -368,9 +394,21 @@ class MagicSDNQLoader:
             print(f"  当前模式: {memory_mode} ({mode_desc})")
             print(f"  注意力: {attn_desc}")
             print(f"  Quantized MatMul: {'已启用' if qmatmul_ok else '未启用'}")
+            print(f"  torch.compile: {'已启用' if pipeline._sdnq_use_torch_compile else '未启用'}")
             print(f"  VAE Tiling: {'已启用' if vae_tiling_ok else '未启用'}")
             print(f"  Pipeline: {type(pipeline).__name__}")
             print(f"{'='*50}\n")
+
+            # 显存信息
+            if torch.cuda.is_available():
+                try:
+                    total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    used = torch.cuda.memory_allocated() / (1024**3)
+                    reserved = torch.cuda.memory_reserved() / (1024**3)
+                    print(f"[SDNQ] 📊 VRAM: {used:.1f}/{total:.1f} GB (reserved: {reserved:.1f} GB)")
+                except Exception:
+                    pass
+
             return (model, clip, vae)
 
         except Exception as e:

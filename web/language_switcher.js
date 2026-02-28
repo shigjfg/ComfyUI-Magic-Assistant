@@ -136,6 +136,8 @@ const loraLoaderTranslations = {
     // 设置弹窗
     "设置": { zh: "设置", en: "Settings" },
     "LoRA 加载模式": { zh: "LoRA 加载模式", en: "LoRA Loading Mode" },
+    "自适应模式": { zh: "自适应模式", en: "Adaptive Mode" },
+    "自动检测模型类型并选择合适的加载模式（SDNQ→SDNQ，INT8→动态，普通→标准）": { zh: "自动检测模型类型并选择合适的加载模式（SDNQ→SDNQ，INT8→动态，普通→标准）", en: "Automatically detect model type and select appropriate loading mode (SDNQ→SDNQ, INT8→Dynamic, Normal→Standard)" },
     "INT8 LoRA 模式": { zh: "INT8 LoRA 模式", en: "INT8 LoRA Mode" },
     "选择 INT8 量化模型的 LoRA 加载方式": { zh: "选择 INT8 量化模型的 LoRA 加载方式", en: "Select INT8 quantized model LoRA loading method" },
     "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。": { zh: "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。", en: "Select INT8 quantized model LoRA loading method. If the model is not INT8 quantized, it is recommended to use the default mode." },
@@ -190,7 +192,26 @@ const sdnqTranslations = {
     "sampler_name": { zh: "采样器名称", en: "Sampler Name" },
     "comfy_scheduler": { zh: "官方调度器", en: "Comfy Scheduler" },
     "官方 KSampler 的采样器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）": { zh: "官方 KSampler 的采样器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）", en: "KSampler sampler (only used for non-SDNQ models in SDNQ + KSampler mode)" },
-    "官方 KSampler 的调度器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）": { zh: "官方 KSampler 的调度器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）", en: "KSampler scheduler (only used for non-SDNQ models in SDNQ + KSampler mode)" }
+    "官方 KSampler 的调度器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）": { zh: "官方 KSampler 的调度器（仅 SDNQ + KSampler 模式下对非 SDNQ 模型生效）", en: "KSampler scheduler (only used for non-SDNQ models in SDNQ + KSampler mode)" },
+    
+    // SDNQ Loader 新增文本
+    "首次编译需30-60秒但后续快2-3倍。12GB显存建议关闭以避免OOM": { zh: "首次编译需30-60秒但后续快2-3倍。12GB显存建议关闭以避免OOM", en: "First compilation takes 30-60s but 2-3x faster afterwards. 12GB VRAM users should disable to avoid OOM" },
+    
+    // SDNQ Sampler 新增文本
+    "分块计算注意力，减少峰值显存但会变慢。none=禁用(快), auto=自动, 1/2=一半一半算(最省显存)": { zh: "分块计算注意力，减少峰值显存但会变慢。none=禁用(快), auto=自动, 1/2=一半一半算(最省显存)", en: "Chunk attention computation to reduce peak VRAM but slower. none=disabled (fast), auto=auto, 1/2=half-by-half (most VRAM efficient)" },
+    "分块处理 KV Cache。disable=正常(快), 32=最省显存, 64=平衡, 128=较快": { zh: "分块处理 KV Cache。disable=正常(快), 32=最省显存, 64=平衡, 128=较快", en: "Chunk KV Cache processing. disable=normal (fast), 32=most VRAM efficient, 64=balanced, 128=faster" },
+    "当前采样模式为「SDNQ」，但接入的不是 SDNQ 模型。\n请使用 Magic SDNQ Loader 加载模型，或将采样模式切换为「SDNQ + KSampler」以兼容其他模型。": { zh: "当前采样模式为「SDNQ」，但接入的不是 SDNQ 模型。\n请使用 Magic SDNQ Loader 加载模型，或将采样模式切换为「SDNQ + KSampler」以兼容其他模型。", en: "Current sampling mode is 'SDNQ', but the connected model is not an SDNQ model.\nPlease use Magic SDNQ Loader to load the model, or switch sampling mode to 'SDNQ + KSampler' to support other models." },
+    "请连接 CLIP 文本编码到 positive 输入": { zh: "请连接 CLIP 文本编码到 positive 输入", en: "Please connect CLIP text encoding to positive input" },
+    "⚠️ 分辨率较大，生成耗时较长，可尝试降低分辨率以加快速度": { zh: "⚠️ 分辨率较大，生成耗时较长，可尝试降低分辨率以加快速度", en: "⚠️ Large resolution, generation will take longer. Try reducing resolution to speed up" },
+    "⚠️ 编译期间显存需求翻倍，如遇 OOM 请关闭 torch.compile": { zh: "⚠️ 编译期间显存需求翻倍，如遇 OOM 请关闭 torch.compile", en: "⚠️ VRAM requirement doubles during compilation. If OOM occurs, disable torch.compile" },
+    "💡 OOM 排查建议:": { zh: "💡 OOM 排查建议:", en: "💡 OOM Troubleshooting:" },
+    "1) 降低分辨率 (1024→768 或 512)": { zh: "1) 降低分辨率 (1024→768 或 512)", en: "1) Reduce resolution (1024→768 or 512)" },
+    "清理显存并重试...": { zh: "清理显存并重试...", en: "Clearing VRAM and retrying..." },
+    "❌ 重试后仍然 OOM": { zh: "❌ 重试后仍然 OOM", en: "❌ Still OOM after retry" },
+    "💡 请尝试降低分辨率": { zh: "💡 请尝试降低分辨率", en: "💡 Please try reducing resolution" },
+    "SDNQ 采样 OOM (Out of Memory)": { zh: "SDNQ 采样 OOM (Out of Memory)", en: "SDNQ Sampling OOM (Out of Memory)" },
+    "✓ 重试成功（torch.compile 编译已完成）": { zh: "✓ 重试成功（torch.compile 编译已完成）", en: "✓ Retry successful (torch.compile compilation completed)" },
+    "✓ 重试成功（显存已清理）": { zh: "✓ 重试成功（显存已清理）", en: "✓ Retry successful (VRAM cleared)" }
 };
 
 // 节点翻译映射表 - Magic Logic Compute
@@ -461,6 +482,113 @@ const promptReplaceTranslations = {
     "新内容 (New Content)": { zh: "新内容 (New Content)", en: "New Content" }
 };
 
+// 节点翻译映射表 - Magic Cache
+const cacheTranslations = {
+    // 新增支持提示框
+    "✨ 本节点新增支持（已修改源项目代码）：": { zh: "✨ 本节点新增支持（已修改源项目代码）：", en: "✨ New Support Added (Source Code Modified):" },
+    "flux2klein": { zh: "flux2klein", en: "flux2klein" },
+    "最新 Anima 模型": { zh: "最新 Anima 模型", en: "Latest Anima Model" },
+    "SDXL 模型": { zh: "SDXL 模型", en: "SDXL Model" },
+    "已支持": { zh: "已支持", en: "Supported" },
+    "原项目不支持": { zh: "原项目不支持", en: "Not supported in original project" },
+    " - 已支持": { zh: " - 已支持", en: " - Supported" },
+    " - 已支持（原项目不支持）": { zh: " - 已支持（原项目不支持）", en: " - Supported (Not supported in original project)" },
+    
+    // 按钮和控件
+    "⚙️ 设置": { zh: "⚙️ 设置", en: "⚙️ Settings" },
+    "📖 说明": { zh: "📖 说明", en: "📖 Help" },
+    "模式": { zh: "模式", en: "Mode" },
+    "取消": { zh: "取消", en: "Cancel" },
+    "保存": { zh: "保存", en: "Save" },
+    
+    // 设置弹窗
+    "⚡ Magic Cache 设置": { zh: "⚡ Magic Cache 设置", en: "⚡ Magic Cache Settings" },
+    "TeaCache 设置": { zh: "TeaCache 设置", en: "TeaCache Settings" },
+    "FBCache 设置": { zh: "FBCache 设置", en: "FBCache Settings" },
+    "模型类型": { zh: "模型类型", en: "Model Type" },
+    "缓存强度阈值": { zh: "缓存强度阈值", en: "Cache Strength Threshold" },
+    "开始百分比": { zh: "开始百分比", en: "Start Percentage" },
+    "结束百分比": { zh: "结束百分比", en: "End Percentage" },
+    "缓存设备": { zh: "缓存设备", en: "Cache Device" },
+    "对象名称": { zh: "对象名称", en: "Object Name" },
+    "残差差异阈值": { zh: "残差差异阈值", en: "Residual Difference Threshold" },
+    "最大连续缓存命中": { zh: "最大连续缓存命中", en: "Max Consecutive Cache Hits" },
+    
+    // 说明弹窗
+    "📖 Magic Cache 使用说明": { zh: "📖 Magic Cache 使用说明", en: "📖 Magic Cache User Guide" },
+    "☕ TeaCache 模式说明": { zh: "☕ TeaCache 模式说明", en: "☕ TeaCache Mode Guide" },
+    "⚡ FBCache 模式说明": { zh: "⚡ FBCache 模式说明", en: "⚡ FBCache Mode Guide" },
+    "🚀 Both 模式（组合模式）说明": { zh: "🚀 Both 模式（组合模式）说明", en: "🚀 Both Mode (Combined) Guide" },
+    "工作原理": { zh: "工作原理", en: "How It Works" },
+    "核心机制": { zh: "核心机制", en: "Core Mechanism" },
+    "主要参数": { zh: "主要参数", en: "Main Parameters" },
+    "性能表现": { zh: "性能表现", en: "Performance" },
+    "支持的模型": { zh: "支持的模型", en: "Supported Models" },
+    "执行流程": { zh: "执行流程", en: "Execution Flow" },
+    "参数设置建议": { zh: "参数设置建议", en: "Parameter Settings Recommendations" },
+    "原作者：": { zh: "原作者：", en: "Original Author: " },
+    "参考来源：": { zh: "参考来源：", en: "References: " },
+    "✨ 新功能：": { zh: "✨ 新功能：", en: "✨ New Feature: " },
+    
+    // TeaCache 说明内容
+    "TeaCache 通过监测相邻时间步的输出差异，当差异低于设定阈值时，跳过计算并复用前一步的缓存结果，从而实现推理加速。": { zh: "TeaCache 通过监测相邻时间步的输出差异，当差异低于设定阈值时，跳过计算并复用前一步的缓存结果，从而实现推理加速。", en: "TeaCache monitors output differences between adjacent time steps. When the difference is below the set threshold, it skips computation and reuses the cached result from the previous step, achieving inference acceleration." },
+    "监测相邻时间步的输出波动（相对 L1 距离）": { zh: "监测相邻时间步的输出波动（相对 L1 距离）", en: "Monitor output fluctuations between adjacent time steps (relative L1 distance)" },
+    "当波动低于": { zh: "当波动低于", en: "When fluctuation is below" },
+    "阈值时，跳过计算": { zh: "阈值时，跳过计算", en: " threshold, skip computation" },
+    "复用前一步的缓存结果，减少计算量": { zh: "复用前一步的缓存结果，减少计算量", en: "Reuse cached result from previous step, reducing computation" },
+    "早期步骤稳定性高，更适合缓存复用": { zh: "早期步骤稳定性高，更适合缓存复用", en: "Early steps are more stable, better suited for cache reuse" },
+    "相对 L1 阈值，控制缓存激进程度（值越大越激进，速度越快但可能影响质量）": { zh: "相对 L1 阈值，控制缓存激进程度（值越大越激进，速度越快但可能影响质量）", en: "Relative L1 threshold, controls cache aggressiveness (higher value = more aggressive, faster but may affect quality)" },
+    "缓存应用的步数范围（0.0-1.0）": { zh: "缓存应用的步数范围（0.0-1.0）", en: "Step range for cache application (0.0-1.0)" },
+    "缓存存储设备（cuda 更快但占用显存，cpu 不占显存但稍慢）": { zh: "缓存存储设备（cuda 更快但占用显存，cpu 不占显存但稍慢）", en: "Cache storage device (cuda is faster but uses VRAM, cpu doesn't use VRAM but is slower)" },
+    "模型类型，需与使用的模型匹配": { zh: "模型类型，需与使用的模型匹配", en: "Model type, must match the model being used" },
+    "通常可实现": { zh: "通常可实现", en: "Typically achieves" },
+    "的推理加速，具体取决于模型类型和参数设置。": { zh: "的推理加速，具体取决于模型类型和参数设置。", en: " inference acceleration, depending on model type and parameter settings." },
+    "对于 FLUX 模型，推荐": { zh: "对于 FLUX 模型，推荐", en: "For FLUX models, recommended" },
+    "，可实现约 2x 加速。": { zh: "，可实现约 2x 加速。", en: ", can achieve approximately 2x acceleration." },
+    "FLUX、PuLID-FLUX、FLUX-Kontext、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、SDXL、SD1.5 等。": { zh: "FLUX、PuLID-FLUX、FLUX-Kontext、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、SDXL、SD1.5 等。", en: "FLUX, PuLID-FLUX, FLUX-Kontext, HiDream-I1, Lumina-Image-2.0, HunyuanVideo, LTX-Video, CogVideoX, Wan2.1, SDXL, SD1.5, etc." },
+    
+    // FBCache 说明内容
+    "FBCache（Feature Block Cache）通过在指定步数范围内重用前一步的特征表示，跳过重复的特征计算，从而加速推理过程。": { zh: "FBCache（Feature Block Cache）通过在指定步数范围内重用前一步的特征表示，跳过重复的特征计算，从而加速推理过程。", en: "FBCache (Feature Block Cache) reuses feature representations from the previous step within a specified step range, skipping redundant feature computations to accelerate inference." },
+    "在": { zh: "在", en: "Within" },
+    "到": { zh: "到", en: " to " },
+    "步数范围内启用特征缓存": { zh: "步数范围内启用特征缓存", en: " step range, enable feature caching" },
+    "通过": { zh: "通过", en: "Control feature reuse sensitivity via" },
+    "控制特征重用灵敏度": { zh: "控制特征重用灵敏度", en: "" },
+    "当残差差异低于阈值时，重用前一步的特征块": { zh: "当残差差异低于阈值时，重用前一步的特征块", en: "When residual difference is below threshold, reuse feature blocks from previous step" },
+    "支持限制最大连续缓存命中次数（": { zh: "支持限制最大连续缓存命中次数（", en: "Supports limiting maximum consecutive cache hits (" },
+    "）": { zh: "）", en: ")" },
+    "残差差异阈值，控制特征重用灵敏度（值越大越激进）": { zh: "残差差异阈值，控制特征重用灵敏度（值越大越激进）", en: "Residual difference threshold, controls feature reuse sensitivity (higher value = more aggressive)" },
+    "最大连续缓存命中次数（-1 表示无限制）": { zh: "最大连续缓存命中次数（-1 表示无限制）", en: "Maximum consecutive cache hits (-1 means unlimited)" },
+    "要打补丁的对象名称（通常为 \"diffusion_model\"）": { zh: "要打补丁的对象名称（通常为 \"diffusion_model\"）", en: "Object name to patch (usually \"diffusion_model\")" },
+    "在合适的参数设置下，FBCache 可以实现显著的推理加速，特别是在中间步骤（如 20%-85% 范围）效果最佳。": { zh: "在合适的参数设置下，FBCache 可以实现显著的推理加速，特别是在中间步骤（如 20%-85% 范围）效果最佳。", en: "With appropriate parameter settings, FBCache can achieve significant inference acceleration, especially effective in middle steps (e.g., 20%-85% range)." },
+    "支持 UNetModel（SDXL、SD3.5 等）、Flux、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。": { zh: "支持 UNetModel（SDXL、SD3.5 等）、Flux、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。", en: "Supports UNetModel (SDXL, SD3.5, etc.), Flux, LTXV, HunyuanVideo, Anima, and other Transformer-based models." },
+    
+    // Both 模式说明内容
+    "Both 模式同时启用 TeaCache 和 FBCache 两种缓存优化技术，通过组合使用实现更快的推理速度。": { zh: "Both 模式同时启用 TeaCache 和 FBCache 两种缓存优化技术，通过组合使用实现更快的推理速度。", en: "Both mode simultaneously enables TeaCache and FBCache caching optimizations, achieving faster inference through combined usage." },
+    "两层缓存逻辑按顺序组合执行": { zh: "两层缓存逻辑按顺序组合执行", en: "Two-layer cache logic executed in sequence" },
+    "TeaCache 包装在 FBCache 外层，形成嵌套结构：": { zh: "TeaCache 包装在 FBCache 外层，形成嵌套结构：", en: "TeaCache wraps FBCache, forming nested structure: " },
+    "在设定的步数范围内，两种缓存优化同时生效": { zh: "在设定的步数范围内，两种缓存优化同时生效", en: "Both cache optimizations are active within the set step range" },
+    "TeaCache 负责时间步级别的缓存跳过，FBCache 负责特征块级别的缓存重用": { zh: "TeaCache 负责时间步级别的缓存跳过，FBCache 负责特征块级别的缓存重用", en: "TeaCache handles time-step level cache skipping, FBCache handles feature-block level cache reuse" },
+    "首先应用 FBCache，在模型上设置特征块缓存逻辑": { zh: "首先应用 FBCache，在模型上设置特征块缓存逻辑", en: "First apply FBCache, setting feature block cache logic on the model" },
+    "然后应用 TeaCache，将时间步缓存逻辑包装在外层": { zh: "然后应用 TeaCache，将时间步缓存逻辑包装在外层", en: "Then apply TeaCache, wrapping time-step cache logic on the outer layer" },
+    "推理时，先经过 TeaCache 的时间步判断，再经过 FBCache 的特征块判断": { zh: "推理时，先经过 TeaCache 的时间步判断，再经过 FBCache 的特征块判断", en: "During inference, first pass through TeaCache's time-step judgment, then FBCache's feature-block judgment" },
+    "两层缓存都会在各自设定的范围内生效": { zh: "两层缓存都会在各自设定的范围内生效", en: "Both cache layers are active within their respective set ranges" },
+    "相比单独使用任意一种方法，组合模式通常提供": { zh: "相比单独使用任意一种方法，组合模式通常提供", en: "Compared to using either method alone, combined mode typically provides" },
+    "更快的推理速度": { zh: "更快的推理速度", en: " faster inference speed" },
+    "两种优化技术互补，可以在保持较好视觉质量的前提下实现更高的加速比。": { zh: "两种优化技术互补，可以在保持较好视觉质量的前提下实现更高的加速比。", en: "The two optimization techniques complement each other, achieving higher acceleration ratios while maintaining good visual quality." },
+    "和": { zh: "和", en: " and " },
+    "可以分别调整": { zh: "可以分别调整", en: " can be adjusted separately" },
+    "建议先单独测试两种模式的效果，再组合使用": { zh: "建议先单独测试两种模式的效果，再组合使用", en: "Recommend testing each mode separately first, then combine" },
+    "如果图像质量下降，可以适当降低阈值参数": { zh: "如果图像质量下降，可以适当降低阈值参数", en: "If image quality degrades, appropriately reduce threshold parameters" },
+    "两种模式的步数范围（start/end）可以设置不同，实现更精细的控制": { zh: "两种模式的步数范围（start/end）可以设置不同，实现更精细的控制", en: "Step ranges (start/end) for both modes can be set differently for finer control" },
+    "这是 Magic Cache 节点的新增功能，将两种缓存优化技术整合在一起，方便用户一键启用组合优化。": { zh: "这是 Magic Cache 节点的新增功能，将两种缓存优化技术整合在一起，方便用户一键启用组合优化。", en: "This is a new feature of the Magic Cache node, integrating both cache optimization techniques for one-click combined optimization." },
+    
+    // 侧边栏按钮
+    "☕ TeaCache 模式": { zh: "☕ TeaCache 模式", en: "☕ TeaCache Mode" },
+    "⚡ FBCache 模式": { zh: "⚡ FBCache 模式", en: "⚡ FBCache Mode" },
+    "🚀 Both 模式（组合）": { zh: "🚀 Both 模式（组合）", en: "🚀 Both Mode (Combined)" }
+};
+
 // 所有翻译映射（按节点分类）
 const allTranslations = {
     "MagicPowerLoraLoader": loraLoaderTranslations,
@@ -470,7 +598,8 @@ const allTranslations = {
     "MagicResolution": resizeTranslations,
     "MagicPromptReplace": promptReplaceTranslations,
     "MagicSDNQLoader": sdnqTranslations,
-    "MagicSDNQSampler": sdnqTranslations
+    "MagicSDNQSampler": sdnqTranslations,
+    "MagicCache": cacheTranslations
 };
 
 // 翻译缓存（避免重复查找）
@@ -1394,6 +1523,9 @@ function interceptAppendChild() {
                                     } else if (parentText.includes('SDNQ') || parentText.includes('降噪') || parentText.includes('预览方式') ||
                                               parentText.includes('SDNQ Model') || parentText.includes('SDNQ Sampler')) {
                                         detectedNodeType = parentText.includes('Sampler') || parentText.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+                                    } else if (parentText.includes('Magic Cache') || parentText.includes('TeaCache') || parentText.includes('FBCache') ||
+                                              parentText.includes('本节点新增支持') || parentText.includes('已修改源项目代码')) {
+                                        detectedNodeType = "MagicCache";
                                     }
                                     
                                     Array.from(label.childNodes).forEach(node => {
@@ -1509,6 +1641,9 @@ function interceptAppendChild() {
                             } else if (parentText.includes('SDNQ') || parentText.includes('降噪') || parentText.includes('预览方式') ||
                                       parentText.includes('SDNQ Model') || parentText.includes('SDNQ Sampler')) {
                                 detectedNodeType = parentText.includes('Sampler') || parentText.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+                            } else if (parentText.includes('Magic Cache') || parentText.includes('TeaCache') || parentText.includes('FBCache') ||
+                                      parentText.includes('本节点新增支持') || parentText.includes('已修改源项目代码')) {
+                                detectedNodeType = "MagicCache";
                             }
                             
                             // 跳过URL和路径
@@ -1608,6 +1743,9 @@ function setupTranslationInterceptor() {
                                     nodeType = "MagicLogicCompute";
                                 } else if (text.includes('SDNQ') || text.includes('降噪') || text.includes('预览方式') || text.includes('正面条件') || text.includes('负面条件')) {
                                     nodeType = text.includes('Sampler') || text.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+                                } else if (text.includes('Magic Cache') || text.includes('TeaCache') || text.includes('FBCache') ||
+                                          text.includes('本节点新增支持') || text.includes('已修改源项目代码')) {
+                                    nodeType = "MagicCache";
                                 }
                                 
                                 if (target.textContent) {
@@ -1715,7 +1853,9 @@ function isLoraNodeElement(element) {
             '删除选中', 'Delete Selected', '退出编辑', 'Exit Edit Mode', '保存并发送', 'Save and Send',
             'Photopea', 'Magic Photopea', 'Magic Gallery',
             // SDNQ 相关
-            'SDNQ', 'SDNQ K Sampler', 'SDNQ K采样器', 'SDNQ模型', 'SDNQ采样', '降噪', '预览方式', '采样模式', 'Magic SDNQ', '正面条件', '负面条件'
+            'SDNQ', 'SDNQ K Sampler', 'SDNQ K采样器', 'SDNQ模型', 'SDNQ采样', '降噪', '预览方式', '采样模式', 'Magic SDNQ', '正面条件', '负面条件',
+            // Cache 相关
+            'Magic Cache', 'TeaCache', 'FBCache', '本节点新增支持', '已修改源项目代码', 'flux2klein', '最新 Anima 模型', 'SDXL 模型', '原项目不支持'
         ];
         return keywords.some(keyword => text.includes(keyword));
     };
@@ -1771,6 +1911,9 @@ function translateElementRecursive(element, lang, nodeType = null) {
                 nodeType = "MagicLogicCompute";
             } else if (text.includes('SDNQ') || text.includes('降噪') || text.includes('预览方式') || text.includes('正面条件') || text.includes('负面条件')) {
                 nodeType = text.includes('Sampler') || text.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+            } else if (text.includes('Magic Cache') || text.includes('TeaCache') || text.includes('FBCache') ||
+                      text.includes('本节点新增支持') || text.includes('已修改源项目代码')) {
+                nodeType = "MagicCache";
             } else {
                 // 默认是LoRA节点
                 nodeType = "MagicPowerLoraLoader";
@@ -2510,7 +2653,10 @@ function updateAllUITexts(lang) {
                         parent.textContent.includes('Download') ||
                         parent.textContent.includes('SDNQ') ||
                         parent.textContent.includes('降噪') ||
-                        parent.textContent.includes('预览方式')
+                        parent.textContent.includes('预览方式') ||
+                        parent.textContent.includes('Magic Cache') ||
+                        parent.textContent.includes('TeaCache') ||
+                        parent.textContent.includes('FBCache')
                     )) {
                         isRelevant = true;
                         break;
@@ -2530,6 +2676,9 @@ function updateAllUITexts(lang) {
                 detectedNodeType = "MagicLogicCompute";
             } else if (parentText.includes('SDNQ') || parentText.includes('降噪') || parentText.includes('预览方式') || parentText.includes('正面条件') || parentText.includes('负面条件')) {
                 detectedNodeType = parentText.includes('Sampler') || parentText.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+            } else if (parentText.includes('Magic Cache') || parentText.includes('TeaCache') || parentText.includes('FBCache') ||
+                      parentText.includes('本节点新增支持') || parentText.includes('已修改源项目代码')) {
+                detectedNodeType = "MagicCache";
             }
             
             // 翻译label内的文本节点
@@ -2557,6 +2706,12 @@ app.registerExtension({
     name: "Magic.Language.Switcher",
     async setup() {
         try {
+            // 将翻译函数暴露到全局，供其他节点使用
+            if (typeof window !== 'undefined') {
+                window.getCurrentLanguage = getCurrentLanguage;
+                window.translateText = translateText;
+                window.allTranslations = allTranslations;
+            }
             console.log("[Language Switcher] Extension setup started");
             // 等待ComfyUI完全加载后再创建悬浮球
             setTimeout(() => {

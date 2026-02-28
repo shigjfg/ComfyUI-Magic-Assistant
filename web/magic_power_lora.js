@@ -79,6 +79,15 @@ app.registerExtension({
                 sdnqModeWidget.computeSize = () => [0, 0];
                 this._sdnqModeWidget = sdnqModeWidget;
 
+                // 自适应模式设置（隐藏的 widget）
+                let adaptiveModeWidget = this.widgets.find(w => w.name === "adaptive_mode");
+                if (!adaptiveModeWidget) {
+                    adaptiveModeWidget = this.addWidget("text", "adaptive_mode", "false", () => {}, {});
+                }
+                adaptiveModeWidget.hidden = true;
+                adaptiveModeWidget.computeSize = () => [0, 0];
+                this._adaptiveModeWidget = adaptiveModeWidget;
+
                 // 初始化 INT8 模式（从属性中读取）
                 if (!this.int8Mode) {
                     this.int8Mode = this.properties["int8_mode"] || "none";
@@ -87,6 +96,11 @@ app.registerExtension({
                 // 初始化 SDNQ 模式（从属性中读取）
                 if (!this.sdnqMode) {
                     this.sdnqMode = this.properties["sdnq_mode"] || "none";
+                }
+
+                // 初始化自适应模式（从属性中读取）
+                if (!this.adaptiveMode) {
+                    this.adaptiveMode = this.properties["adaptive_mode"] === true || this.properties["adaptive_mode"] === "true";
                 }
 
                 this._stackWidget = stackWidget;
@@ -362,10 +376,21 @@ app.registerExtension({
                     const sdnqMode = this.sdnqMode || this.properties["sdnq_mode"] || "none";
                     this._sdnqModeWidget.value = sdnqMode;
                 }
-                
+
+                // 更新自适应模式 widget
+                if (!this._adaptiveModeWidget) {
+                    this._adaptiveModeWidget = this.widgets?.find(w => w.name === "adaptive_mode");
+                }
+                if (this._adaptiveModeWidget) {
+                    const adaptiveMode = this.adaptiveMode || this.properties["adaptive_mode"] || false;
+                    this._adaptiveModeWidget.value = String(adaptiveMode);
+                }
+
                 this.properties["lora_data_state"] = JSON.stringify(this.loraData);
                 this.properties["int8_mode"] = this.int8Mode || "none";
                 this.properties["sdnq_mode"] = this.sdnqMode || "none";
+                // 确保保存为布尔值 true/false，而不是字符串
+                this.properties["adaptive_mode"] = this.adaptiveMode === true;
             };
 
             const onConfigure = nodeType.prototype.onConfigure;
@@ -394,6 +419,11 @@ app.registerExtension({
                         sdnqModeWidget.hidden = true;
                         sdnqModeWidget.computeSize = () => [0, 0];
                     }
+                    const adaptiveModeWidget = this.widgets.find(w => w.name === "adaptive_mode");
+                    if (adaptiveModeWidget) {
+                        adaptiveModeWidget.hidden = true;
+                        adaptiveModeWidget.computeSize = () => [0, 0];
+                    }
                 }
                 
                 // 恢复 INT8 模式设置
@@ -410,6 +440,14 @@ app.registerExtension({
                 } else {
                     this.sdnqMode = "none";
                     this.properties["sdnq_mode"] = "none";
+                }
+
+                // 恢复自适应模式设置
+                if (this.properties["adaptive_mode"] !== undefined) {
+                    this.adaptiveMode = this.properties["adaptive_mode"] === true || this.properties["adaptive_mode"] === "true";
+                } else {
+                    this.adaptiveMode = false;
+                    this.properties["adaptive_mode"] = false;
                 }
                 
                 if (this.properties["lora_data_state"]) {
@@ -464,6 +502,12 @@ app.registerExtension({
                 if (this.widgets_values && this.widgets_values.length > 4 && this.widgets_values[4]) {
                     this.sdnqMode = this.widgets_values[4];
                     this.properties["sdnq_mode"] = this.sdnqMode;
+                }
+
+                // 从 widgets_values 恢复自适应模式（如果存在）
+                if (this.widgets_values && this.widgets_values.length > 5 && this.widgets_values[5]) {
+                    this.adaptiveMode = this.widgets_values[5] === "true" || this.widgets_values[5] === true;
+                    this.properties["adaptive_mode"] = this.adaptiveMode;
                 }
                 
                 setTimeout(() => { this.createDOMInterface(); this.renderEmbeddedList(); }, 100);
@@ -3799,10 +3843,10 @@ app.registerExtension({
                 const settingsContainer = document.createElement("div");
                 settingsContainer.style.cssText = "display: flex; flex-direction: column; gap: 20px;";
                 
-                // ========== 全局默认模式选项（放在最上面） ==========
+                // ========== LoRA 加载模式 ==========
                 const defaultSection = document.createElement("div");
                 defaultSection.style.cssText = "display: flex; flex-direction: column; gap: 12px; margin-bottom: 10px;";
-                
+
                 const defaultTitle = document.createElement("div");
                 defaultTitle.textContent = "LoRA 加载模式";
                 defaultTitle.style.cssText = `
@@ -3811,18 +3855,41 @@ app.registerExtension({
                     color: #fff;
                     margin-bottom: 8px;
                 `;
-                
+
                 const defaultModeContainer = document.createElement("div");
                 defaultModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
-                
-                // 默认模式（全局选项）
+
+                // 自适应模式（单选按钮，排在最前面）
+                const adaptiveMode = document.createElement("label");
+                adaptiveMode.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                const radioAdaptive = document.createElement("input");
+                radioAdaptive.type = "radio";
+                radioAdaptive.name = "global_mode";
+                radioAdaptive.value = "adaptive";
+                radioAdaptive.checked = this.adaptiveMode === true;
+                radioAdaptive.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                const labelAdaptive = document.createElement("div");
+                labelAdaptive.style.cssText = "flex: 1;";
+                const labelAdaptiveTitle = document.createElement("div");
+                labelAdaptiveTitle.textContent = "自适应模式";
+                labelAdaptiveTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                const labelAdaptiveDesc = document.createElement("div");
+                labelAdaptiveDesc.textContent = "自动检测模型类型并选择合适的加载模式（SDNQ→SDNQ，INT8→动态，普通→标准）";
+                labelAdaptiveDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelAdaptive.appendChild(labelAdaptiveTitle);
+                labelAdaptive.appendChild(labelAdaptiveDesc);
+                adaptiveMode.appendChild(radioAdaptive);
+                adaptiveMode.appendChild(labelAdaptive);
+                defaultModeContainer.appendChild(adaptiveMode);
+
+                // 默认模式（标准 LoRA）
                 const defaultMode = document.createElement("label");
                 defaultMode.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
                 const radioDefault = document.createElement("input");
                 radioDefault.type = "radio";
                 radioDefault.name = "global_mode";
                 radioDefault.value = "default";
-                radioDefault.checked = isDefaultMode;
+                radioDefault.checked = !this.adaptiveMode && isDefaultMode;
                 radioDefault.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 const labelDefault = document.createElement("div");
                 labelDefault.style.cssText = "flex: 1;";
@@ -3836,14 +3903,23 @@ app.registerExtension({
                 labelDefault.appendChild(labelDefaultDesc);
                 defaultMode.appendChild(radioDefault);
                 defaultMode.appendChild(labelDefault);
-                
                 defaultModeContainer.appendChild(defaultMode);
+
                 defaultSection.appendChild(defaultTitle);
                 defaultSection.appendChild(defaultModeContainer);
                 settingsContainer.appendChild(defaultSection);
-                
-                // 全局默认模式选中状态更新
-                const updateDefaultSelection = () => {
+
+                // 模式选中状态更新
+                const updateModeSelection = () => {
+                    // 自适应模式
+                    if (radioAdaptive.checked) {
+                        adaptiveMode.style.borderColor = "#4CAF50";
+                        adaptiveMode.style.background = "#2a3a2a";
+                    } else {
+                        adaptiveMode.style.borderColor = "transparent";
+                        adaptiveMode.style.background = "#333";
+                    }
+                    // 默认模式
                     if (radioDefault.checked) {
                         defaultMode.style.borderColor = "#2196F3";
                         defaultMode.style.background = "#2a3a4a";
@@ -3852,10 +3928,22 @@ app.registerExtension({
                         defaultMode.style.background = "#333";
                     }
                 };
-                
+
+                // 选中自适应模式时，取消其他模式
+                radioAdaptive.addEventListener("change", () => {
+                    updateModeSelection();
+                    if (radioAdaptive.checked) {
+                        radioStochastic.checked = false;
+                        radioDynamic.checked = false;
+                        radioSdnqSdnq.checked = false;
+                        updateInt8Selection();
+                        updateSdnqSelection();
+                    }
+                });
+
+                // 选中默认模式时，取消其他模式
                 radioDefault.addEventListener("change", () => {
-                    updateDefaultSelection();
-                    // 选择默认模式时，取消 INT8 和 SDNQ 的选中状态
+                    updateModeSelection();
                     if (radioDefault.checked) {
                         radioStochastic.checked = false;
                         radioDynamic.checked = false;
@@ -3864,12 +3952,16 @@ app.registerExtension({
                         updateSdnqSelection();
                     }
                 });
-                updateDefaultSelection();
-                
-                // ========== INT8 模式设置区域（移除默认模式选项） ==========
+                updateModeSelection();
+
+                defaultSection.appendChild(defaultTitle);
+                defaultSection.appendChild(defaultModeContainer);
+                settingsContainer.appendChild(defaultSection);
+
+                // ========== INT8 模式设置区域 ==========
                 const int8Section = document.createElement("div");
                 int8Section.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
-                
+
                 const int8Title = document.createElement("div");
                 int8Title.textContent = "INT8 LoRA 模式";
                 int8Title.style.cssText = `
@@ -3878,7 +3970,7 @@ app.registerExtension({
                     color: #fff;
                     margin-bottom: 8px;
                 `;
-                
+
                 const int8Desc = document.createElement("div");
                 int8Desc.textContent = "选择 INT8 量化模型的 LoRA 加载方式";
                 int8Desc.style.cssText = `
@@ -3887,11 +3979,11 @@ app.registerExtension({
                     margin-bottom: 12px;
                     line-height: 1.5;
                 `;
-                
+
                 // INT8 模式选择容器
                 const int8ModeContainer = document.createElement("div");
                 int8ModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
-                
+
                 // 静态模式（Stochastic）
                 const modeStochastic = document.createElement("label");
                 modeStochastic.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
@@ -3913,7 +4005,7 @@ app.registerExtension({
                 labelStochastic.appendChild(labelStochasticDesc);
                 modeStochastic.appendChild(radioStochastic);
                 modeStochastic.appendChild(labelStochastic);
-                
+
                 // 动态模式（Dynamic）
                 const modeDynamic = document.createElement("label");
                 modeDynamic.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
@@ -3935,7 +4027,7 @@ app.registerExtension({
                 labelDynamic.appendChild(labelDynamicDesc);
                 modeDynamic.appendChild(radioDynamic);
                 modeDynamic.appendChild(labelDynamic);
-                
+
                 // INT8 模式选中状态更新
                 const updateInt8Selection = () => {
                     [modeStochastic, modeDynamic].forEach(mode => {
@@ -3949,34 +4041,35 @@ app.registerExtension({
                         }
                     });
                 };
-                
+
                 [radioStochastic, radioDynamic].forEach(radio => {
                     radio.addEventListener("change", () => {
                         updateInt8Selection();
                         // 选择 INT8 模式时，取消默认模式和 SDNQ 模式
                         if (radio.checked) {
+                            radioAdaptive.checked = false;
                             radioDefault.checked = false;
                             radioSdnqSdnq.checked = false;
-                            updateDefaultSelection();
+                            updateModeSelection();
                             updateSdnqSelection();
                         }
                     });
                 });
                 updateInt8Selection();
-                
+
                 int8ModeContainer.appendChild(modeStochastic);
                 int8ModeContainer.appendChild(modeDynamic);
-                
+
                 int8Section.appendChild(int8Title);
                 int8Section.appendChild(int8Desc);
                 int8Section.appendChild(int8ModeContainer);
-                
+
                 settingsContainer.appendChild(int8Section);
-                
-                // ========== SDNQ 模式设置区域（移除默认模式选项） ==========
+
+                // ========== SDNQ 模式设置区域 ==========
                 const sdnqSection = document.createElement("div");
                 sdnqSection.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
-                
+
                 const sdnqTitle = document.createElement("div");
                 sdnqTitle.textContent = "SDNQ LoRA 模式";
                 sdnqTitle.style.cssText = `
@@ -3985,7 +4078,7 @@ app.registerExtension({
                     color: #fff;
                     margin-bottom: 8px;
                 `;
-                
+
                 const sdnqDesc = document.createElement("div");
                 sdnqDesc.textContent = "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式";
                 sdnqDesc.style.cssText = `
@@ -3994,11 +4087,11 @@ app.registerExtension({
                     margin-bottom: 12px;
                     line-height: 1.5;
                 `;
-                
+
                 // SDNQ 模式选择容器
                 const sdnqModeContainer = document.createElement("div");
                 sdnqModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
-                
+
                 // SDNQ 模式
                 const sdnqModeSdnq = document.createElement("label");
                 sdnqModeSdnq.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
@@ -4020,7 +4113,7 @@ app.registerExtension({
                 labelSdnqSdnq.appendChild(labelSdnqSdnqDesc);
                 sdnqModeSdnq.appendChild(radioSdnqSdnq);
                 sdnqModeSdnq.appendChild(labelSdnqSdnq);
-                
+
                 // SDNQ 模式选中状态更新
                 const updateSdnqSelection = () => {
                     [sdnqModeSdnq].forEach(mode => {
@@ -4034,27 +4127,29 @@ app.registerExtension({
                         }
                     });
                 };
-                
+
                 radioSdnqSdnq.addEventListener("change", () => {
                     updateSdnqSelection();
                     // 选择 SDNQ 模式时，取消默认模式和 INT8 模式
                     if (radioSdnqSdnq.checked) {
+                        radioAdaptive.checked = false;
                         radioDefault.checked = false;
                         radioStochastic.checked = false;
                         radioDynamic.checked = false;
-                        updateDefaultSelection();
+                        updateModeSelection();
                         updateInt8Selection();
                     }
                 });
                 updateSdnqSelection();
-                
+
                 sdnqModeContainer.appendChild(sdnqModeSdnq);
-                
+
                 sdnqSection.appendChild(sdnqTitle);
                 sdnqSection.appendChild(sdnqDesc);
                 sdnqSection.appendChild(sdnqModeContainer);
-                
+
                 settingsContainer.appendChild(sdnqSection);
+
                 content.appendChild(settingsContainer);
                 
                 // 按钮容器
@@ -4079,25 +4174,32 @@ app.registerExtension({
                     font-size: 13px;
                 `;
                 confirmBtn.onclick = () => {
+                    // 检查是否选择了自适应模式
+                    const isAdaptiveSelected = radioAdaptive.checked;
+
                     // 检查是否选择了全局默认模式
                     const isDefaultSelected = radioDefault.checked;
-                    
+
                     // 保存 INT8 模式设置
                     let selectedInt8Mode = "none";
-                    if (!isDefaultSelected) {
+                    if (!isDefaultSelected && !isAdaptiveSelected) {
                         selectedInt8Mode = document.querySelector('input[name="int8_mode"]:checked')?.value || "none";
                     }
                     this.int8Mode = selectedInt8Mode;
                     this.properties["int8_mode"] = selectedInt8Mode;
-                    
+
                     // 保存 SDNQ 模式设置
                     let selectedSdnqMode = "none";
-                    if (!isDefaultSelected) {
+                    if (!isDefaultSelected && !isAdaptiveSelected) {
                         selectedSdnqMode = document.querySelector('input[name="sdnq_mode"]:checked')?.value || "none";
                     }
                     this.sdnqMode = selectedSdnqMode;
                     this.properties["sdnq_mode"] = selectedSdnqMode;
-                    
+
+                    // 保存自适应模式设置
+                    this.adaptiveMode = isAdaptiveSelected;
+                    this.properties["adaptive_mode"] = isAdaptiveSelected;
+
                     // 更新隐藏的 widgets
                     if (this._int8ModeWidget) {
                         this._int8ModeWidget.value = selectedInt8Mode;
@@ -4105,10 +4207,13 @@ app.registerExtension({
                     if (this._sdnqModeWidget) {
                         this._sdnqModeWidget.value = selectedSdnqMode;
                     }
-                    
+                    if (this._adaptiveModeWidget) {
+                        this._adaptiveModeWidget.value = String(isAdaptiveSelected);
+                    }
+
                     // 触发更新
                     this.updateWidget();
-                    
+
                     document.body.removeChild(overlay);
                 };
                 confirmBtn.onmouseenter = () => confirmBtn.style.background = "#42A5F5";

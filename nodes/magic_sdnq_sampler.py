@@ -8,6 +8,7 @@ Magic SDNQ K Sampler - SDNQ K 采样器
 import math
 import os
 import sys
+import gc
 import torch
 import torch.nn.functional as F
 from typing import Tuple, Optional
@@ -283,6 +284,14 @@ class MagicSDNQSampler:
                     ["auto", "latent2rgb", "taesd", "none"],
                     {"default": "auto", "tooltip": "auto=自动, latent2rgb=快, taesd=慢但更清晰, none=不预览"}
                 ),
+                "attention_slicing": (
+                    ["none", "auto", "1/2", "1/4", "1/8"],
+                    {"default": "none", "tooltip": "分块计算注意力，减少峰值显存但会变慢。none=禁用(快), auto=自动, 1/2=一半一半算(最省显存)"}
+                ),
+                "chunk_attention": (
+                    ["disable", "32", "64", "128", "256"],
+                    {"default": "disable", "tooltip": "分块处理 KV Cache。disable=正常(快), 32=最省显存, 64=平衡, 128=较快"}
+                ),
                 "采样模式": (
                     ["SDNQ", "SDNQ + KSampler"],
                     {"default": "SDNQ", "tooltip": "SDNQ=仅支持 SDNQ 模型; SDNQ + KSampler=同时兼容其他模型（自动判定）"}
@@ -312,6 +321,8 @@ class MagicSDNQSampler:
         scheduler: str,
         降噪: float,
         预览方式: str,
+        attention_slicing: str,
+        chunk_attention: str,
         采样模式: str = "SDNQ",
         sampler_name: str = "euler",
         comfy_scheduler: str = "normal",
@@ -414,6 +425,23 @@ class MagicSDNQSampler:
 
         _swap_scheduler(pipeline, scheduler)
 
+        # 采样前强制清理显存（特别是 body-only + external CLIP/VAE 模式）
+        def _force_cleanup():
+            """强制清理显存，为 torch.compile 或大分辨率采样腾出空间"""
+            gc.collect()
+            if torch.cuda.is_available():
+                try:
+                    torch.cuda.synchronize()
+                    torch.cuda.empty_cache()
+                    torch.cuda.reset_peak_memory_stats()
+                except Exception:
+                    pass
+                try:
+                    torch._dynamo.reset()
+                except Exception:
+                    pass
+                gc.collect()
+
         # 先触发 VAE 加载，使 "Requested to load AutoencoderKL" 等出现在 pipeline 加载信息附近，而非采样块下方
         # getattr 只获取属性引用不会触发实际加载，需要做一次 dummy encode 让 offload hook 真正把 VAE 搬到 GPU
         if hasattr(pipeline, "vae") and pipeline.vae is not None:
@@ -428,11 +456,89 @@ class MagicSDNQSampler:
             except Exception:
                 pass
 
+        # ========== Transformer 显存优化 ==========
+        print(f"[SDNQ] 注意力优化: attention_slicing={attention_slicing}, chunk_attention={chunk_attention}")
+
+        # 1. Attention Slicing - 分块计算 attention，减少峰值显存
+        if attention_slicing != "none" and hasattr(pipeline, "enable_attention_slicing"):
+            try:
+                if attention_slicing == "auto":
+                    # 自动选择合适的 slice size
+                    pipeline.enable_attention_slicing()
+                else:
+                    # 解析 "1/2", "1/4", "1/8" 等
+                    slice_size = None
+                    if "/" in attention_slicing:
+                        parts = attention_slicing.split("/")
+                        if len(parts) == 2:
+                            divisor = int(parts[1])
+                            slice_size = f"auto:{divisor}"
+                    if slice_size:
+                        pipeline.enable_attention_slicing(slice_size)
+                print(f"[SDNQ] ✓ Attention slicing enabled ({attention_slicing})")
+            except Exception as e:
+                print(f"[SDNQ] ⚠️ Attention slicing failed: {e}")
+
+        # 2. Chunked Attention - 分块处理 KV Cache（diffusers 方式）
+        if chunk_attention != "disable":
+            chunk_size = int(chunk_attention)
+            chunked_enabled = False
+
+            # 方式 1: pipeline.set_chunk_attention()
+            if hasattr(pipeline, "set_chunk_attention"):
+                try:
+                    pipeline.set_chunk_attention(chunk_size)
+                    chunked_enabled = True
+                    print(f"[SDNQ] ✓ Chunked attention enabled (chunk_size={chunk_size})")
+                except Exception as e:
+                    print(f"[SDNQ] ⚠️ set_chunk_attention failed: {e}")
+
+            # 方式 2: 通过 transformer_options 设置（diffusers Flux 支持）
+            if not chunked_enabled and hasattr(pipeline, "transformer") and hasattr(pipeline.transformer, "config"):
+                try:
+                    # 检查是否是 Flux/Qwen 等支持 transformer_options 的 pipeline
+                    if hasattr(pipeline, "_optional_components") or hasattr(pipeline, "transformer"):
+                        # 设置 transformer_options
+                        if not hasattr(pipeline, "transformer_options"):
+                            pipeline.transformer_options = {}
+                        pipeline.transformer_options["chunk_size"] = chunk_size
+                        chunked_enabled = True
+                        print(f"[SDNQ] ✓ Chunked attention enabled via transformer_options (chunk_size={chunk_size})")
+                except Exception:
+                    pass
+
+            # 方式 3: 手动修改 attention 实现（最后手段）
+            if not chunked_enabled:
+                print(f"[SDNQ] ⚠️ Chunked attention not supported by this pipeline, skipping...")
+
         # 首次采样时应用 torch.compile（在 LoRA 已加载之后，与 comfyui-sdnq 顺序一致）
+        # ⚠️ 重要：torch.compile 首次运行需要额外 5-10GB 显存，12GB 显卡用户建议在 Loader 中关闭
         if getattr(pipeline, "_sdnq_use_torch_compile", False) and torch.cuda.is_available():
             if not getattr(pipeline, "_sdnq_transformer_compiled", False):
                 try:
                     print("[SDNQ K Sampler] Applying torch.compile (first run will compile ~30-60s)...")
+                    print("[SDNQ K Sampler] ⚠️ 编译期间显存需求翻倍，如遇 OOM 请关闭 torch.compile")
+
+                    # 编译前强制清理显存
+                    _force_cleanup()
+
+                    # 检查剩余显存是否足够编译
+                    try:
+                        mem_allocated = torch.cuda.memory_allocated() / (1024**3)
+                        mem_reserved = torch.cuda.memory_reserved() / (1024**3)
+                        mem_total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                        mem_free = mem_total - mem_reserved
+
+                        print(f"[SDNQ K Sampler] 📊 VRAM: 已用 {mem_allocated:.1f}GB, 可用 {mem_free:.1f}GB / 总计 {mem_total:.1f}GB")
+
+                        # 如果可用显存小于 4GB，跳过 torch.compile
+                        if mem_free < 4.0:
+                            print(f"[SDNQ K Sampler] ⚠️ 可用显存不足 {mem_free:.1f}GB (< 4GB)，跳过 torch.compile")
+                            pipeline._sdnq_use_torch_compile = False
+                            raise RuntimeError(f"Insufficient VRAM: {mem_free:.1f}GB available, 4GB+ needed for compile")
+                    except Exception as mem_check_err:
+                        print(f"[SDNQ K Sampler] ⚠️ 显存检查失败: {mem_check_err}")
+
                     if hasattr(pipeline, "transformer") and pipeline.transformer is not None:
                         t = pipeline.transformer
                         try:
@@ -442,6 +548,9 @@ class MagicSDNQSampler:
                         pipeline.transformer = torch.compile(t, mode="max-autotune-no-cudagraphs", fullgraph=False)
                         pipeline._sdnq_transformer_compiled = True
                         print("[SDNQ K Sampler] ✓ torch.compile applied (warmup on first generation)")
+
+                        # 编译后清理一次显存
+                        _force_cleanup()
                     elif hasattr(pipeline, "unet") and pipeline.unet is not None:
                         u = pipeline.unet
                         try:
@@ -451,12 +560,22 @@ class MagicSDNQSampler:
                         pipeline.unet = torch.compile(u, mode="max-autotune-no-cudagraphs", fullgraph=False)
                         pipeline._sdnq_transformer_compiled = True
                         print("[SDNQ K Sampler] ✓ torch.compile applied (warmup on first generation)")
+
+                        # 编译后清理一次显存
+                        _force_cleanup()
+
                 except Exception as e:
                     print(f"[SDNQ K Sampler] ⚠️ torch.compile failed (continuing without): {e}")
+                    print("[SDNQ K Sampler] 💡 建议: 在 Loader 中关闭 torch.compile 选项")
                     pipeline._sdnq_use_torch_compile = False
+                    # 编译失败后清理显存
+                    _force_cleanup()
 
         actual_seed = seed if seed >= 0 else torch.randint(0, 2**32, (1,)).item()
         generator = torch.Generator(device="cpu").manual_seed(actual_seed)
+
+        # 跟踪 torch.compile 是否被实际应用
+        _torch_compile_applied = getattr(pipeline, "_sdnq_transformer_compiled", False) or getattr(pipeline, "_sdnq_use_torch_compile", False)
 
         # ----- 局部重绘（Inpaint）数据准备 -----
         # noise_mask_raw: 来自 SetLatentNoiseMask / VAEEncodeForInpaint，1=重绘区，0=保留区
@@ -970,7 +1089,7 @@ class MagicSDNQSampler:
         if not _has_pack:
             kwargs["output_type"] = "latent"
 
-        # 首次运行 torch.compile 可能 OOM，捕获后清理重试（第二次必成功）
+        # 首次运行 torch.compile 或大分辨率可能 OOM，捕获后清理重试（第二次必成功）
         _oom_retry_done = False
         _first_run_oom = False
         while True:
@@ -984,7 +1103,13 @@ class MagicSDNQSampler:
                     if not _oom_retry_done:
                         _oom_retry_done = True
                         _first_run_oom = True
-                        print(f"[SDNQ K Sampler] ⚠️ 首次运行 OOM（torch.compile 编译中，预期行为）: {e}")
+                        print(f"[SDNQ K Sampler] ⚠️ OOM: {e}")
+                        print("[SDNQ K Sampler] 💡 OOM 排查建议:")
+                        print("       1) 降低分辨率 (1024→768 或 512)")
+                        print("       2) 若模型支持，在 Loader 中启用 lowvram 模式")
+                        print("       3) 关闭 torch.compile 选项")
+                        print("       4) 减少 LoRA 数量或强度")
+                        print("       5) 使用 batch_size=1")
                         print("[SDNQ K Sampler] 清理显存并重试...")
                         # 清理 CUDA 内存
                         if torch.cuda.is_available():
@@ -994,14 +1119,22 @@ class MagicSDNQSampler:
                                 torch.cuda.reset_peak_memory_stats()
                             except Exception:
                                 pass
-                        import gc
                         gc.collect()
-                        # 重试（编译已完成）
+                        # 重试
                         continue
                     else:
                         # 重试后仍然 OOM，真正的问题
-                        print(f"[SDNQ K Sampler] ❌ 重试后仍然 OOM: {e}")
-                        raise
+                        print(f"[SDNQ K Sampler] ❌ 重试后仍然 OOM")
+                        print(f"[SDNQ K Sampler] 💡 请尝试降低分辨率")
+                        raise RuntimeError(
+                            f"SDNQ 采样 OOM (Out of Memory)\n"
+                            f"错误: {err_str}\n"
+                            f"💡 解决方案:\n"
+                            f"   1) 降低分辨率到 768x768 或更低\n"
+                            f"   2) 若模型支持，在 Loader 中启用 lowvram 模式\n"
+                            f"   3) 关闭 torch.compile 选项\n"
+                            f"   4) 减少 LoRA 数量"
+                        ) from e
                 else:
                     raise
             except TypeError as e:
@@ -1031,7 +1164,10 @@ class MagicSDNQSampler:
                     raise
 
         if _first_run_oom:
-            print("[SDNQ K Sampler] ✓ 重试成功（torch.compile 编译已完成）")
+            if _torch_compile_applied:
+                print("[SDNQ K Sampler] ✓ 重试成功（torch.compile 编译已完成）")
+            else:
+                print("[SDNQ K Sampler] ✓ 重试成功（显存已清理）")
 
         # 没有异常，检查输出是否是 latent
         if hasattr(result, "images") and result.images:

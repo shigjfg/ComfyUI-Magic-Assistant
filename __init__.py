@@ -10,6 +10,7 @@ from .nodes.magic_power_lora import MagicPowerLoraLoader
 from .nodes.magic_resolution import MagicResolution
 from .nodes.magic_sdnq_loader import MagicSDNQLoader
 from .nodes.magic_sdnq_sampler import MagicSDNQSampler
+from .nodes.magic_cache import MagicCache
 
 # --- 节点映射 ---
 NODE_CLASS_MAPPINGS = {
@@ -22,7 +23,8 @@ NODE_CLASS_MAPPINGS = {
     "MagicPowerLoraLoader": MagicPowerLoraLoader,
     "MagicResolution": MagicResolution,
     "MagicSDNQLoader": MagicSDNQLoader,
-    "MagicSDNQSampler": MagicSDNQSampler
+    "MagicSDNQSampler": MagicSDNQSampler,
+    "MagicCache": MagicCache
 }
 
 # --- 节点显示名称 ---
@@ -37,13 +39,14 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicPowerLoraLoader": "🚀 强力lora加载器 Magic Power LoRA Loader",
     "MagicResolution": "📐 分辨率输出器 Magic Resolution Output",
     "MagicSDNQLoader": "📦 SDNQ模型加载器 Magic SDNQ Model Loader",
-    "MagicSDNQSampler": "🎲 SDNQ K采样器 Magic SDNQ K Sampler"
+    "MagicSDNQSampler": "🎲 SDNQ K采样器 Magic SDNQ K Sampler",
+    "MagicCache": "⚡ Magic Cache 缓存加速 (TeaCache + FBCache)"
 }
 
 # --- 指定 Web 目录 ---
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.2.1 - SDNQ Model Loader)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.2.4 - SDNQ Model Loader)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")

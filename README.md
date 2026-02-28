@@ -10,7 +10,47 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-02-12**
+> Latest Update / 最新更新：**2026-02-28**
+
+> **V1.2.4 版本介绍 / Version Introduction** 2026-02-28
+
+> 1. **✨ 优化**: Magic SDNQ Loader & Sampler - 模型加载和采样器优化
+>    * 继续优化了 SDNQ 模型加载和采样器，新增了一些参数且对节点 UI 进行了重新排版
+>    * 请重新加载节点使用，工作流图片也已更新，请到节点介绍处自取
+>    * Continued optimization of SDNQ model loading and sampler, added new parameters and redesigned node UI layout
+>    * Please reload nodes to use; workflow images have been updated, see node introduction section
+
+> 2. **🔄 更新**: Magic Power LoRA Loader - 自适应模式
+>    * 强力 LoRA 加载器在设置中更新了自适应模式
+>    * 当开启这个模式后会自动检测模型的类型后切换为相应的模式，不再需要每次切换模型的时候手动切换模式了
+>    * Magic Power LoRA Loader now includes adaptive mode in settings
+>    * When enabled, automatically detects model type and switches to the appropriate mode, no need to manually switch modes when changing models
+
+> 3. **⚡ 新增功能**: Magic Cache - 智能缓存加速节点 / Intelligent Caching Acceleration Node
+>    * 新增 Magic Cache 节点，通过智能缓存技术大幅加速图片生成速度
+>    * 支持三种优化模式：TeaCache、FBCache 和 Both 模式（推荐），可根据需求灵活选择
+>    * TeaCache 模式：监测生成过程变化，变化小时复用上一步结果，适合早期步骤，约 2 倍加速
+>    * FBCache 模式：在指定步数范围内重用前一步特征，适合中间步骤（20%-85%），效果最佳
+>    * Both 模式：同时使用两种缓存技术，提供最快的推理速度
+>    * 简单易用的设置界面，支持一键调整缓存参数，无需修改复杂代码
+>    * 广泛支持多种主流模型：FLUX、FLUX-Kontext、FLUX-Klein、PuLID-FLUX、SDXL、SD1.5、Anima 等
+>    * 本节点新增支持：flux2klein、最新 Anima 模型、SDXL 模型（FBCache 原项目不支持）
+>    * 通常可实现 1.5 倍到 3 倍的生成加速，同时保持图片质量
+>    * 智能缓存机制，自动跳过重复计算，在合适的时候复用缓存结果，节省时间
+>    * 支持选择缓存设备（CUDA 或 CPU），可根据设备情况灵活配置
+>    * 项目源代码来自 [Comfy-WaveSpeed](https://github.com/chengzeyi/Comfy-WaveSpeed) 和 [ComfyUI-TeaCache](https://github.com/welltop-cn/ComfyUI-TeaCache)
+>    * New Magic Cache node that significantly accelerates image generation through intelligent caching
+>    * Three optimization modes: TeaCache, FBCache, and Both (recommended)
+>    * TeaCache: Monitors generation process changes, reuses previous step results when changes are small, suitable for early steps, ~2x speedup
+>    * FBCache: Reuses previous step features within specified step range, best for middle steps (20%-85%)
+>    * Both mode: Combines both caching techniques for fastest inference speed
+>    * Easy-to-use settings interface, one-click parameter adjustment without code modification
+>    * Wide model support: FLUX, FLUX-Kontext, FLUX-Klein, PuLID-FLUX, SDXL, SD1.5, Anima, etc.
+>    * New support: flux2klein, latest Anima models, SDXL models (FBCache original project didn't support)
+>    * Typically achieves 1.5x to 3x generation speedup while maintaining image quality
+>    * Smart caching mechanism automatically skips redundant calculations and reuses cached results when appropriate
+>    * Supports cache device selection (CUDA or CPU) for flexible configuration
+>    * Source code from [Comfy-WaveSpeed](https://github.com/chengzeyi/Comfy-WaveSpeed) and [ComfyUI-TeaCache](https://github.com/welltop-cn/ComfyUI-TeaCache)
 
 > **V1.2.3 版本介绍 / Version Introduction** 2026-02-12
 
@@ -31,6 +71,26 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 减少了不必要的内存占用
 >    * 让系统运行更加流畅
 >    * Streamlined internal code for better performance and lower memory usage
+
+> **V1.2.1 版本介绍 / Version Introduction** 2026-02-11
+
+> 1. **Optimization / 优化**: 代码优化与 bug 修复
+>    * 与官方 K 采样器对齐的显存管理、全模型（文生图/图生图/图编辑）输出尺寸补偿等逻辑优化与修复
+>    * Code and bug fixes including VRAM handling alignment with official KSampler and output size compensation for all modes (txt2img, img2img, image edit)
+
+> 2. **New Feature / 新增功能**: SDNQ K 采样器局部重绘适配
+>    * 支持所有 SDNQ 模型（含 Flux2Klein）；使用 ComfyUI 的 InpaintModelConditioning + SetLatentNoiseMask 准备数据
+>    * 4D latent 模型（如 SDXL/GLM）采用 latent 空间混合；3D packed 模型（如 Flux/Flux2/QwenImage/Chroma）采用像素空间 composite
+>    * SDNQ node introduction includes an example inpainting workflow (download image to import into ComfyUI)
+>    * Inpainting support for all SDNQ models; use InpaintModelConditioning + SetLatentNoiseMask; 4D models use latent blending, 3D packed models use pixel-space composite
+
+> 3. **New Feature / 新增功能**: SDNQ K 采样器模式切换（SDNQ / SDNQ + KSampler）
+>    * 可切换「仅 SDNQ」与「SDNQ + KSampler」两种模式。「仅 SDNQ」下接入非 SDNQ 模型会报错；「SDNQ + KSampler」下根据接入模型自动选择采样方式
+>    * 在「SDNQ + KSampler」模式下，SDNQ 模型走 SDNQ 逻辑，其他模型（如 CheckpointLoader）走 ComfyUI 官方 KSampler，即可当作通用 K 采样器使用
+>    * Sampler mode switch: "SDNQ" (SDNQ models only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler)
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.2 版本介绍 / Version Introduction** 2026-02-11
 
@@ -58,23 +118,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 调整了 VAE 加载日志的输出顺序，使其出现在 pipeline 加载信息之后、采样信息之前
 >    * Optimized VAE loading log sequence to appear after pipeline loading info and before sampling info
 
-> **V1.2.1 版本介绍 / Version Introduction** 2026-02-11
-
-> 1. **Optimization / 优化**: 代码优化与 bug 修复
->    * 与官方 K 采样器对齐的显存管理、全模型（文生图/图生图/图编辑）输出尺寸补偿等逻辑优化与修复
->    * Code and bug fixes including VRAM handling alignment with official KSampler and output size compensation for all modes (txt2img, img2img, image edit)
-
-> 2. **New Feature / 新增功能**: SDNQ K 采样器局部重绘适配
->    * 支持所有 SDNQ 模型（含 Flux2Klein）；使用 ComfyUI 的 InpaintModelConditioning + SetLatentNoiseMask 准备数据
->    * 4D latent 模型（如 SDXL/GLM）采用 latent 空间混合；3D packed 模型（如 Flux/Flux2/QwenImage/Chroma）采用像素空间 composite
->    * SDNQ node introduction includes an example inpainting workflow (download image to import into ComfyUI)
->    * Inpainting support for all SDNQ models; use InpaintModelConditioning + SetLatentNoiseMask; 4D models use latent blending, 3D packed models use pixel-space composite
-
-> 3. **New Feature / 新增功能**: SDNQ K 采样器模式切换（SDNQ / SDNQ + KSampler）
->    * 可切换「仅 SDNQ」与「SDNQ + KSampler」两种模式。「仅 SDNQ」下接入非 SDNQ 模型会报错；「SDNQ + KSampler」下根据接入模型自动选择采样方式
->    * 在「SDNQ + KSampler」模式下，SDNQ 模型走 SDNQ 逻辑，其他模型（如 CheckpointLoader）走 ComfyUI 官方 KSampler，即可当作通用 K 采样器使用
->    * Sampler mode switch: "SDNQ" (SDNQ models only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler)
-
 > **V1.2.0 版本介绍 / Version Introduction** 2026-02-11
 
 > 1. **Optimization / 优化**: Magic SDNQ K Sampler - VRAM 处理逻辑与官方 K 采样器对齐
@@ -85,14 +128,11 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > 2. **New Feature / 新增功能**: Magic SDNQ Loader - FLUX 系列支持外接 CLIP/VAE（仅加载本体）
 >    * FLUX、FLUX.2（含 Flux2Klein）模型可**同时**连接外部的 CLIP 和 VAE，仅加载 SDNQ 目录下的 transformer 本体，省显存、可提升生成速度
->    * 必须同时连接 CLIP 与 VAE 才启用“仅加载本体”；只连其一将报错；两者都不连则整包加载
+>    * 必须同时连接 CLIP 与 VAE 才启用"仅加载本体"；只连其一将报错；两者都不连则整包加载
 >    * 当前仅 FLUX / FLUX.2 支持该模式；其他模型（如 Qwen、Z-Image）连接外接 CLIP/VAE 时会提示不支持
 >    * FLUX and FLUX.2 (including Flux2Klein) can use external CLIP + VAE and load only the transformer body from SDNQ for lower VRAM and faster generation
 >    * Both CLIP and VAE must be connected to enable body-only loading; connect neither for full-package load
 >    * Only FLUX/FLUX.2 support this mode; other model types will show an error if external CLIP/VAE are connected
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.1.9 版本介绍 / Version Introduction** 2026-02-08
 
@@ -425,7 +465,66 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 </details>
 
-### 9. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ K Sampler (SDNQ 模型加载器与 K 采样器)
+### 9. ⚡ Magic Cache (缓存加速节点)
+> **Speed up image generation with intelligent caching.** / **智能缓存加速，让图片生成更快。**
+>
+><details>
+><summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
+>
+>* **Three Optimization Modes**: Choose from TeaCache, FBCache, or Both modes to accelerate your image generation. Both mode combines both techniques for maximum speed.
+>* **Easy Configuration**: Simple settings dialog to adjust cache parameters without diving into complex code.
+>* **Wide Model Support**: Works with FLUX, SDXL, SD1.5, Anima, and many other popular models.
+>* **Performance Boost**: Typically achieves 1.5x to 3x faster generation speed while maintaining image quality.
+>* **Smart Caching**: Automatically skips redundant calculations by reusing cached results when appropriate.
+>* **三种优化模式**: 可选择 TeaCache、FBCache 或 Both 模式来加速图片生成。Both 模式同时使用两种技术，速度最快。
+>* **简单配置**: 通过设置弹窗轻松调整缓存参数，无需修改复杂代码。
+>* **广泛支持**: 支持 FLUX、SDXL、SD1.5、Anima 等多种主流模型。
+>* **性能提升**: 通常可实现 1.5 倍到 3 倍的生成加速，同时保持图片质量。
+>* **智能缓存**: 自动跳过重复计算，在合适的时候复用缓存结果，节省时间。
+>
+>#### 三种模式说明 / Three Modes Explained
+>
+>**☕ TeaCache 模式**：通过监测生成过程中的变化，当变化很小时直接复用上一步的结果，跳过不必要的计算。适合早期步骤，通常能实现约 2 倍加速。
+>
+>**⚡ FBCache 模式**：在指定的生成步数范围内，重用前一步的特征表示，跳过重复的特征计算。特别适合中间步骤（如 20%-85% 范围），效果最佳。
+>
+>**🚀 Both 模式（推荐）**：同时使用两种缓存技术，先经过 TeaCache 的时间步判断，再经过 FBCache 的特征块判断。相比单独使用任意一种方法，通常能提供更快的推理速度。
+>
+>#### 使用方法 / How to Use
+>
+>1. 将 Magic Cache 节点连接到您的模型输出
+>2. 在节点上选择缓存模式（TeaCache / FBCache / Both）
+>3. 点击「⚙️ 设置」按钮调整参数（可选，默认参数通常已足够）
+>4. 点击「📖 说明」查看详细的使用说明和参数解释
+>5. 连接输出到您的采样器，开始享受更快的生成速度
+>
+>#### 支持的模型 / Supported Models
+>
+>**TeaCache 支持**：FLUX、FLUX-Kontext、FLUX-Klein、PuLID-FLUX、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、SDXL、SD1.5 等。
+>
+>**FBCache 支持**：UNetModel（SDXL、SD3.5 等）、Flux、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。
+>
+>**本节点新增支持**：flux2klein、最新 Anima 模型、SDXL 模型（FBCache 原项目不支持）。
+>
+>#### 性能参考 / Performance Reference
+>
+>在合适的参数设置下，Magic Cache 通常可以实现：
+>* TeaCache：约 **1.5x - 3x** 加速（FLUX 模型推荐 `rel_l1_thresh=0.4`，约 2x 加速）
+>* FBCache：在中间步骤（20%-85% 范围）效果最佳
+>* Both 模式：相比单独使用，通常提供**更快的推理速度**
+>
+>具体加速效果取决于模型类型、参数设置和生成内容。如果发现图片质量下降，可以适当降低阈值参数。
+>
+>#### 注意事项 / Notes
+>
+>* 首次使用建议先测试默认参数，确认效果后再根据需求调整
+>* 如果图像质量下降，可以适当降低缓存阈值参数
+>* 两种模式的步数范围可以设置不同，实现更精细的控制
+>* 缓存会占用一定的显存或内存，可根据设备情况选择缓存设备（CUDA 或 CPU）
+>
+></details>
+>
+>### 10. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ K Sampler (SDNQ 模型加载器与 K 采样器)
 > **Standalone SDNQ model loading and sampling, ComfyUI-style workflow.** / **独立的 SDNQ 模型加载与采样，贴近 ComfyUI 官方工作流。**
 
 <details>
@@ -459,27 +558,33 @@ FLUX 系列模型（包括 FLUX.1、FLUX.2 及最新的 Flux2Klein）支持**同
 
 FLUX models (including FLUX.1, FLUX.2, and Flux2Klein) support **connecting both** external CLIP and VAE: only the transformer body (~5GB) is loaded from the SDNQ folder, using your connected CLIP and VAE. This saves VRAM, may improve quality, and speeds up generation. **Note**: You must connect **both** CLIP and VAE to enable body-only loading; connecting only one will raise an error; connecting neither loads the full package.
 
-**外接 CLIP/VAE 示例工作流 / Example Workflow (External CLIP + VAE)**（可直接下载图片导入 ComfyUI / Download image and import into ComfyUI）
+**外接 CLIP/VAE 示例工作流 / Example Workflow (External CLIP + VAE)**（节点更新，且配合新节点 Magic Cache 的示例 / Node updated, with Magic Cache example）（可直接下载图片导入 ComfyUI / Download image and import into ComfyUI）
 
-<img width="4286" height="2709" alt="SDNQ External CLIP VAE Workflow" src="https://github.com/user-attachments/assets/853a2ef1-a64d-42d9-84d1-8d11a027e2a1" />
+<img width="4286" height="2709" alt="SDNQ External CLIP VAE Workflow" src="https://github.com/user-attachments/assets/2906a45e-6ee6-4282-ba9e-835265adee38" />
 
 **运行结果 / Result**（RTX 3060 本次采样约 40.88s / RTX 3060, ~40.88s per sample）
 
 <img width="2048" height="1058" alt="SDNQ External CLIP VAE Result" src="https://github.com/user-attachments/assets/04a22e66-397b-47a9-b8c2-8359b4cfcb5a" />
 
-**性能参考 / Performance**: 在不超过 1024×1536 分辨率下，单图编辑或文生图时，采样可快至约 10–20 秒，速度与效率较高。其他模型（如 Qwen、Z-Image）的外接 CLIP/VAE 支持将在后续版本考虑。
+**性能参考 / Performance**: 在不超过 1024×1536 分辨率下，单图编辑或文生图时，采样可快至约 10–20 秒，速度与效率较高。配合 Magic Cache 节点使用后可以再提速 1.5 倍-2 倍的速度。如果不想要 Magic Cache 节点加速可以忽略该节点。其他模型（如 Qwen、Z-Image）的外接 CLIP/VAE 支持将在后续版本考虑。
 
-At 1024×1536 or below, single image editing or text-to-image can complete in about 10–20 seconds. Support for external CLIP/VAE on other model types (e.g. Qwen, Z-Image) may be added in future versions.
+At 1024×1536 or below, single image editing or text-to-image can complete in about 10–20 seconds. Using Magic Cache node can further speed up by 1.5x to 2x. You can bypass the Magic Cache node if you don't want the acceleration. Support for external CLIP/VAE on other model types (e.g. Qwen, Z-Image) may be added in future versions.
 
-#### 局部重绘工作流事例 / Inpainting Example Workflow
+#### 局部重绘+普通文生图切换使用工作流事例 / Inpainting + Text-to-Image Switch Workflow Example
+
+（节点更新，且配合新节点 Magic Cache 的示例 / Node updated, with Magic Cache example）
 
 可直接下载图片导入 ComfyUI 使用。You can download the image and import into ComfyUI.
 
-<img width="4995" height="2281" alt="SDNQ Inpainting Workflow" src="https://github.com/user-attachments/assets/8bec05e9-4de1-4674-ba47-fbc5cef2060c" />
+<img width="5998" height="2825" alt="SDNQ Inpainting + Text-to-Image Switch Workflow" src="https://github.com/user-attachments/assets/4e0b8b34-8deb-4b30-b965-254daf01c904" />
 
 **运行结果 / Result**
 
 <img width="2544" height="1060" alt="SDNQ Inpainting Result" src="https://github.com/user-attachments/assets/2ca3b26f-eefe-48e2-95c3-d75d4025f0f9" />
+
+**性能说明 / Performance Note**: 配合 Magic Cache 节点使用后可以再提速 1.5 倍-2 倍的速度。如果不想要 Magic Cache 节点加速可以忽略该节点。
+
+**Performance Note**: Using Magic Cache node can further speed up by 1.5x to 2x. You can bypass the Magic Cache node if you don't want the acceleration.
 
 #### ⚠️ 注意事项 / Notes
 
@@ -490,25 +595,9 @@ At 1024×1536 or below, single image editing or text-to-image can complete in ab
 * **当前仅支持图像**：因配置限制，暂未适配视频模型，仅支持图像生成和图像编辑模型。视频模型适配将在后续版本考虑。
 * **Image models only**: Video model support is not yet implemented; currently supports image generation and image editing models only.
 
-#### 简易文生图工作流参考 / Simple Text-to-Image Workflow
-
-可直接下载图片导入 ComfyUI 使用。You can download and import into ComfyUI.
-
-<img width="3398" height="2395" alt="SDNQ Text-to-Image Workflow" src="https://github.com/user-attachments/assets/7fa5b931-adde-4765-ab8c-2270c218bf9f" />
-
-**效果预览 / Result Preview**
-
-<img width="1437" height="898" alt="SDNQ Text-to-Image Result" src="https://github.com/user-attachments/assets/94e1d2f3-fc18-4527-9b15-a48a17b0bc55" />
-
-#### 简易图片编辑工作流参考 / Simple Image Editing Workflow
-
-可直接下载图片导入 ComfyUI 使用。You can download and import into ComfyUI.
-
-<img width="3870" height="2709" alt="SDNQ Image Editing Workflow" src="https://github.com/user-attachments/assets/173acf73-d075-4abd-b229-28bd23c60c97" />
-
-**效果预览 / Result Preview**
-
-<img width="2154" height="1078" alt="SDNQ Image Editing Result" src="https://github.com/user-attachments/assets/7cadf12c-3aac-45af-805a-ac40aefbdd21" />
+> **⚠️ 注意 / Note**: 原本的简易文生图和图片编辑工作流图片已无法下载，请使用上方更新的工作流图片。旧的工作流图片已移除。
+> 
+> **⚠️ Note**: The original simple text-to-image and image editing workflow images are no longer available for download. Please use the updated workflow images above. Old workflow images have been removed.
 
 </details>
 
