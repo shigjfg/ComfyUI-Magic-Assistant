@@ -72,28 +72,8 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 让系统运行更加流畅
 >    * Streamlined internal code for better performance and lower memory usage
 
-> **V1.2.1 版本介绍 / Version Introduction** 2026-02-11
-
-> 1. **Optimization / 优化**: 代码优化与 bug 修复
->    * 与官方 K 采样器对齐的显存管理、全模型（文生图/图生图/图编辑）输出尺寸补偿等逻辑优化与修复
->    * Code and bug fixes including VRAM handling alignment with official KSampler and output size compensation for all modes (txt2img, img2img, image edit)
-
-> 2. **New Feature / 新增功能**: SDNQ K 采样器局部重绘适配
->    * 支持所有 SDNQ 模型（含 Flux2Klein）；使用 ComfyUI 的 InpaintModelConditioning + SetLatentNoiseMask 准备数据
->    * 4D latent 模型（如 SDXL/GLM）采用 latent 空间混合；3D packed 模型（如 Flux/Flux2/QwenImage/Chroma）采用像素空间 composite
->    * SDNQ node introduction includes an example inpainting workflow (download image to import into ComfyUI)
->    * Inpainting support for all SDNQ models; use InpaintModelConditioning + SetLatentNoiseMask; 4D models use latent blending, 3D packed models use pixel-space composite
-
-> 3. **New Feature / 新增功能**: SDNQ K 采样器模式切换（SDNQ / SDNQ + KSampler）
->    * 可切换「仅 SDNQ」与「SDNQ + KSampler」两种模式。「仅 SDNQ」下接入非 SDNQ 模型会报错；「SDNQ + KSampler」下根据接入模型自动选择采样方式
->    * 在「SDNQ + KSampler」模式下，SDNQ 模型走 SDNQ 逻辑，其他模型（如 CheckpointLoader）走 ComfyUI 官方 KSampler，即可当作通用 K 采样器使用
->    * Sampler mode switch: "SDNQ" (SDNQ models only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler)
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
-
 > **V1.2.2 版本介绍 / Version Introduction** 2026-02-11
-
+>
 > 1. **New Feature / 新增功能**: Magic Power LoRA Loader - LoRA 串连功能
 >    * 新增 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连
 >    * 输出了 `lora串` 的 LoRA 加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器
@@ -109,14 +89,34 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * LoRA loaders that output `lora串` don't require model/clip connections
 >    * Fixed issue where bypassed nodes couldn't correctly pass through lora chains
 >    * Uses custom type MAGIC_LORA_CHAIN instead of STRING for proper ComfyUI connection handling and bypass passthrough
-
+>
 > 2. **Bug Fix / 错误修复**: Magic SDNQ K Sampler - 修复文生图图片过小的 bug
 >    * 修复了文生图模式下输出图片尺寸过小的问题
 >    * Fixed issue where generated images were too small in text-to-image mode
-
+>
 > 3. **Optimization / 优化**: Magic SDNQ K Sampler - VAE 加载日志顺序优化
 >    * 调整了 VAE 加载日志的输出顺序，使其出现在 pipeline 加载信息之后、采样信息之前
 >    * Optimized VAE loading log sequence to appear after pipeline loading info and before sampling info
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
+> **V1.2.1 版本介绍 / Version Introduction** 2026-02-11
+>
+> 1. **Optimization / 优化**: 代码优化与 bug 修复
+>    * 与官方 K 采样器对齐的显存管理、全模型（文生图/图生图/图编辑）输出尺寸补偿等逻辑优化与修复
+>    * Code and bug fixes including VRAM handling alignment with official KSampler and output size compensation for all modes (txt2img, img2img, image edit)
+>
+> 2. **New Feature / 新增功能**: SDNQ K 采样器局部重绘适配
+>    * 支持所有 SDNQ 模型（含 Flux2Klein）；使用 ComfyUI 的 InpaintModelConditioning + SetLatentNoiseMask 准备数据
+>    * 4D latent 模型（如 SDXL/GLM）采用 latent 空间混合；3D packed 模型（如 Flux/Flux2/QwenImage/Chroma）采用像素空间 composite
+>    * SDNQ node introduction includes an example inpainting workflow (download image to import into ComfyUI)
+>    * Inpainting support for all SDNQ models; use InpaintModelConditioning + SetLatentNoiseMask; 4D models use latent blending, 3D packed models use pixel-space composite
+>
+> 3. **New Feature / 新增功能**: SDNQ K 采样器模式切换（SDNQ / SDNQ + KSampler）
+>    * 可切换「仅 SDNQ」与「SDNQ + KSampler」两种模式。「仅 SDNQ」下接入非 SDNQ 模型会报错；「SDNQ + KSampler」下根据接入模型自动选择采样方式
+>    * 在「SDNQ + KSampler」模式下，SDNQ 模型走 SDNQ 逻辑，其他模型（如 CheckpointLoader）走 ComfyUI 官方 KSampler，即可当作通用 K 采样器使用
+>    * Sampler mode switch: "SDNQ" (SDNQ models only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler)
 
 > **V1.2.0 版本介绍 / Version Introduction** 2026-02-11
 
