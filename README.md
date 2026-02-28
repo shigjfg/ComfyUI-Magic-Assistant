@@ -522,9 +522,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >* 两种模式的步数范围可以设置不同，实现更精细的控制
 >* 缓存会占用一定的显存或内存，可根据设备情况选择缓存设备（CUDA 或 CPU）
 >
-></details>
->
->### 10. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ K Sampler (SDNQ 模型加载器与 K 采样器)
+</details>
+
+### 10. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ K Sampler (SDNQ 模型加载器与 K 采样器)
 > **Standalone SDNQ model loading and sampling, ComfyUI-style workflow.** / **独立的 SDNQ 模型加载与采样，贴近 ComfyUI 官方工作流。**
 
 <details>
