@@ -619,7 +619,9 @@ const magicPromptBoxTranslations = {
 
     // Tag预览区
     "Tag 预览": { zh: "Tag 预览", en: "Tag Preview" },
-    " · 主框有内容才显示 · ↵ 换行芯片 · 单击：编辑 tag · 双击：屏蔽 · 空白拖拽：框选多选 · 点击空白：取消选中 · 编辑时不可拖 · 悬停：权重/括号 · 框选后可整组拖拽（蓝线示左右落点）": { zh: " · 主框有内容才显示 · ↵ 换行芯片 · 单击：编辑 tag · 双击：屏蔽 · 空白拖拽：框选多选 · 点击空白：取消选中 · 编辑时不可拖 · 悬停：权重/括号 · 框选后可整组拖拽（蓝线示左右落点）", en: " · Shows when main box has content · ↵ Newline chip · Click: edit tag · Double-click: disable · Drag blank: multi-select · Click blank: clear selection · No drag while editing · Hover: weight/brackets · Drag selected group (blue line shows drop position)" },
+    " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（!），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）": { zh: " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（!），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）", en: " · Shows when main box has content · ↵ Newline chip · Click tag: lock & show weight bar (click top English area → inline edit; click bottom Chinese area → unlock) · Double-click bottom area only: toggle disable (!), avoids conflict with edit above · Click main input or blank: unlock · Drag on blank or margins: rubber-band select (no toolbar, live blue preview) · Hover chip: faint outline · Selected group draggable (blue line shows drop point)" },
+    "锁定后仅在此区域点击进入文字编辑": { zh: "锁定后仅在此区域点击进入文字编辑", en: "Click here to edit text after locking" },
+    "双击此区域切换屏蔽（!）；锁定后单击下方取消锁定": { zh: "双击此区域切换屏蔽（!）；锁定后单击下方取消锁定", en: "Double-click to toggle disable (!); click here when locked to unlock" },
     "解析结果为空": { zh: "解析结果为空", en: "No tags to parse" },
     "字符数: ": { zh: "字符数: ", en: "Chars: " },
     "Tag: ": { zh: "Tag: ", en: "Tag: " },

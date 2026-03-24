@@ -176,10 +176,10 @@ async function magicPostPromptHistory(body) {
 // 弹窗 UI 核心
 // ============================================================
 
-function preventConflict(element) {
+function preventConflict(element, { skipClick = false } = {}) {
     element.addEventListener("pointerdown", (e) => e.stopPropagation());
     element.addEventListener("mousedown", (e) => e.stopPropagation());
-    element.addEventListener("click", (e) => e.stopPropagation());
+    if (!skipClick) element.addEventListener("click", (e) => e.stopPropagation());
     element.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
 }
 
@@ -382,6 +382,14 @@ const THEME = {
     danger: "#f44336",
     success: "#4CAF50",
 };
+
+/** Tag 芯片：框选/多选/实时预览共用的高光（须与 refreshChipSelVisual 一致） */
+const MAGIC_CHIP_SELECTED_GLOW =
+    "0 0 0 2px #1890ff, 0 2px 10px rgba(24,144,255,0.35)";
+
+/** 单击锁定工具栏时：芯片描边（与框选蓝光区分） */
+const MAGIC_CHIP_TOOLBAR_PIN_OUTLINE = "2px solid rgba(186, 104, 200, 0.92)";
+const MAGIC_CHIP_TOOLBAR_PIN_OFFSET = "2px";
 
 /** 收藏列表变更后通知「编辑标签」弹窗刷新（若已打开） */
 const MAGIC_TAG_SETS_CHANGED = "magic-assistant-tag-sets-changed";
@@ -1880,7 +1888,7 @@ function createMagicTagToolbarBar({ THEME: T, preventConflict: pc, compact = fal
                 font-size: 11px; font-weight: 600;
                 padding: 0; cursor: pointer; opacity: 1;
             `;
-            pc(b);
+            pc(b, { skipClick: true });
             return b;
         };
         col.appendChild(mkMini("+", "add"));
@@ -2482,6 +2490,8 @@ async function showPromptEditorModal(node, nodeSeed) {
         shell._magicChipSelSet = null;
         shell._magicChipSelAnchor = null;
         shell._magicDragIndices = null;
+        shell._magicTagChipsRubberArmed = false;
+        shell._magicChipToolbarPinnedIndex = null;
         closeModal(shell);
     };
     shell._magicCloseEditor = closeEditorOverlay;
@@ -2925,25 +2935,36 @@ async function showPromptEditorModal(node, nodeSeed) {
 
         const tagStrip = document.createElement("div");
         tagStrip.style.cssText = `
-            margin-top: 10px; padding: 8px 10px;
+            margin-top: 10px; padding: 12px 14px 14px;
             background: ${THEME.bg2}; border: 1px solid ${THEME.border};
             border-radius: 6px; box-sizing: border-box;
         `;
         const tagStripTitle = document.createElement("div");
-        tagStripTitle.style.cssText = `font-size: 11px; color: ${THEME.text2}; margin-bottom: 8px; line-height: 1.45;`;
+        tagStripTitle.style.cssText = `font-size: 11px; color: ${THEME.text2}; margin-bottom: 10px; line-height: 1.45;`;
         tagStripTitle.innerHTML = `
             <b>${magicT("Tag 预览")}</b>
-            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击：编辑 tag · 双击：屏蔽 · 空白拖拽：框选多选 · 点击空白：取消选中 · 编辑时不可拖 · 悬停：权重/括号 · 框选后可整组拖拽（蓝线示左右落点）")}</span>
+            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（!），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）")}</span>
+        `;
+        const tagChipsHit = document.createElement("div");
+        tagChipsHit.setAttribute("data-magic-tag-chips-hit", "1");
+        tagChipsHit.style.cssText = `
+            min-height: 88px;
+            padding: 12px 14px 14px;
+            margin: -4px -6px -6px;
+            box-sizing: border-box;
+            border-radius: 6px;
         `;
         const tagChipsRow = document.createElement("div");
         tagChipsRow.setAttribute("data-magic-tag-chips-row", "1");
         /** 纵向堆叠多行；每行内 flex 横排（↵ 固定在本行末尾，下一行另起一行，对齐 WeiLin） */
         tagChipsRow.style.cssText = `
-            display: flex; flex-direction: column; align-items: stretch; gap: 6px;
-            min-height: 72px;
+            display: flex; flex-direction: column; align-items: stretch; gap: 12px;
+            min-height: 64px;
         `;
         tagStrip.appendChild(tagStripTitle);
-        tagStrip.appendChild(tagChipsRow);
+        tagChipsHit.appendChild(tagChipsRow);
+        tagStrip.appendChild(tagChipsHit);
+        shell._magicTagChipsRubberArmed = false;
 
         /** Tag 悬停浮层：挂在 shell 上（避免 dialog 的 transform 影响 fixed） */
         const tagFloat = createMagicTagToolbarBar({
@@ -3011,30 +3032,38 @@ async function showPromptEditorModal(node, nodeSeed) {
         floatBar.style.pointerEvents = "auto";
         floatBar.style.boxShadow = "0 10px 28px rgba(0,0,0,0.52)";
         preventConflict(floatBar);
+        // 阻止 pointerdown/mousedown，避免用户在浮动条上拖拽时误选中文本
+        floatBar.addEventListener("pointerdown", (e) => e.preventDefault());
+        floatBar.addEventListener("mousedown", (e) => e.preventDefault());
         shell.appendChild(floatBar);
         shell._magicTagFloatBar = floatBar;
+        // 预测量占位（实际尺寸在首次 positionTagFloatBar 时测量并缓存，hidden 时测不到准确值）
+        shell._magicTagFloatBarSize = { w: 0, h: 0, _initialized: false };
 
+        /** 单次 RAF 定位（复用预测量尺寸，无需触发布局重排） */
         const positionTagFloatBar = (chip) => {
             if (!chip || !chip.isConnected || !floatBar.isConnected) return;
-            floatBar.style.display = "flex";
-            floatBar.style.visibility = "hidden";
+            const sz = shell._magicTagFloatBarSize;
+            const margin = 8;
             requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    if (!chip.isConnected || !floatBar.isConnected) return;
-                    const r = chip.getBoundingClientRect();
-                    const bw = floatBar.offsetWidth;
-                    const bh = floatBar.offsetHeight;
-                    const margin = 6;
-                    let top = r.top - bh - margin;
-                    if (top < 8) top = r.bottom + margin;
-                    let cx = r.left + r.width / 2;
-                    const half = bw / 2;
-                    cx = Math.max(8 + half, Math.min(cx, window.innerWidth - 8 - half));
-                    floatBar.style.left = `${Math.round(cx)}px`;
-                    floatBar.style.top = `${Math.round(top)}px`;
-                    floatBar.style.transform = "translateX(-50%)";
-                    floatBar.style.visibility = "visible";
-                });
+                if (!chip.isConnected || !floatBar.isConnected) return;
+                const r = chip.getBoundingClientRect();
+                let top = r.top - sz.h - margin;
+                if (top < 8) top = r.bottom + margin;
+                let cx = r.left + r.width / 2;
+                const half = sz.w / 2;
+                cx = Math.max(8 + half, Math.min(cx, window.innerWidth - 8 - half));
+                floatBar.style.left = Math.round(cx) + "px";
+                floatBar.style.top = Math.round(top) + "px";
+                floatBar.style.transform = "translateX(-50%)";
+                floatBar.style.display = "flex";
+                floatBar.style.visibility = "visible";
+                // 首次出现时测量实际尺寸并缓存（hidden 时测不到准确值）
+                if (!sz._initialized) {
+                    sz._initialized = true;
+                    sz.w = floatBar.offsetWidth;
+                    sz.h = floatBar.offsetHeight;
+                }
             });
         };
 
@@ -3063,12 +3092,46 @@ async function showPromptEditorModal(node, nodeSeed) {
         };
 
         floatBar.addEventListener("mouseenter", cancelHideTagFloatBar);
-        floatBar.addEventListener("mouseleave", scheduleHideTagFloatBar);
+        floatBar.addEventListener("mouseleave", () => {
+            if (shell._magicChipToolbarPinnedIndex != null) return;
+            scheduleHideTagFloatBar();
+        });
+
+        /** 取消「单击锁定」并隐藏权重条（主输入框聚焦、点空白等） */
+        const clearPinnedToolbar = () => {
+            shell._magicChipToolbarPinnedIndex = null;
+            cancelHideTagFloatBar();
+            hideTagFloatBar();
+            if (tagChipsRow) {
+                tagChipsRow.querySelectorAll("[data-magic-tag-index][data-magic-toolbar-pin='1']").forEach((el) => {
+                    el.removeAttribute("data-magic-toolbar-pin");
+                    el.style.outline = "";
+                    el.style.outlineOffset = "";
+                });
+            }
+        };
+
+        textarea.addEventListener(
+            "focusin",
+            () => {
+                if (shell._magicChipToolbarPinnedIndex != null) {
+                    clearPinnedToolbar();
+                }
+            },
+            { signal: caretSaveAc.signal },
+        );
 
         const onScrollReposition = () => {
-            const ch = shell._magicTagFloatChip;
+            let ch = shell._magicTagFloatChip;
+            if ((!ch || !ch.isConnected) && shell._magicChipToolbarPinnedIndex != null && tagChipsRow) {
+                ch = tagChipsRow.querySelector(
+                    `[data-magic-tag-index="${shell._magicChipToolbarPinnedIndex}"]`,
+                );
+            }
             if (ch && ch.isConnected && floatBar.style.display !== "none") {
-                positionTagFloatBar(ch);
+                const chipEl =
+                    tagChipsRow && tagChipsRow.querySelector(`[data-magic-tag-index="${ch.dataset.magicTagIndex}"]`);
+                positionTagFloatBar(chipEl || ch);
             }
             positionSelPopup();
         };
@@ -3079,6 +3142,7 @@ async function showPromptEditorModal(node, nodeSeed) {
 
         const cnHintCache = new Map();
         shell._magicRebuildPreserveIdx = null;
+        shell._magicChipToolbarPinnedIndex = null;
 
         shell.querySelectorAll("[data-magic-tag-sel-popup], [data-magic-tag-drop-line]").forEach((el) => el.remove());
         shell._magicChipSelSet = new Set();
@@ -3296,10 +3360,32 @@ async function showPromptEditorModal(node, nodeSeed) {
             tagChipsRow.querySelectorAll("[data-magic-tag-index]").forEach((el) => {
                 const idx = parseInt(el.dataset.magicTagIndex, 10);
                 if (set.has(idx)) {
-                    el.style.boxShadow = "0 0 0 2px #1890ff, 0 2px 10px rgba(24,144,255,0.35)";
+                    el.style.boxShadow = MAGIC_CHIP_SELECTED_GLOW;
                 } else {
                     el.style.boxShadow = "";
                 }
+            });
+        }
+
+        /** 框选拖拽中：与最终选中相同蓝光，实时标示当前矩形覆盖到的芯片 */
+        function updateRubberBandChipPreview(r) {
+            if (!tagChipsRow || !r) return;
+            tagChipsRow.querySelectorAll("[data-magic-tag-index]").forEach((el) => {
+                const er = el.getBoundingClientRect();
+                const hit = !(
+                    er.right < r.left ||
+                    er.left > r.right ||
+                    er.bottom < r.top ||
+                    er.top > r.bottom
+                );
+                el.style.boxShadow = hit ? MAGIC_CHIP_SELECTED_GLOW : "";
+            });
+        }
+
+        function clearRubberBandChipPreview() {
+            if (!tagChipsRow) return;
+            tagChipsRow.querySelectorAll("[data-magic-tag-index]").forEach((el) => {
+                el.style.boxShadow = "";
             });
         }
 
@@ -3348,11 +3434,15 @@ async function showPromptEditorModal(node, nodeSeed) {
         }
 
         function clearChipSelection() {
-            if (!shell._magicChipSelSet) return;
-            shell._magicChipSelSet.clear();
-            shell._magicChipSelAnchor = null;
-            selPopup.style.display = "none";
-            refreshChipSelVisual();
+            if (shell._magicChipSelSet) {
+                shell._magicChipSelSet.clear();
+                shell._magicChipSelAnchor = null;
+                selPopup.style.display = "none";
+                refreshChipSelVisual();
+            }
+            if (shell._magicChipToolbarPinnedIndex != null) {
+                clearPinnedToolbar();
+            }
         }
 
         const attachChipDragHandlers = (chip, index) => {
@@ -3361,8 +3451,16 @@ async function showPromptEditorModal(node, nodeSeed) {
                     e.preventDefault();
                     return;
                 }
+                shell._magicChipToolbarPinnedIndex = null;
                 cancelHideTagFloatBar();
                 hideTagFloatBar();
+                if (tagChipsRow) {
+                    tagChipsRow.querySelectorAll("[data-magic-tag-index][data-magic-toolbar-pin='1']").forEach((el) => {
+                        el.removeAttribute("data-magic-toolbar-pin");
+                        el.style.outline = "";
+                        el.style.outlineOffset = "";
+                    });
+                }
                 if (shell._magicTagUiTimer) {
                     clearTimeout(shell._magicTagUiTimer);
                     shell._magicTagUiTimer = null;
@@ -3411,7 +3509,14 @@ async function showPromptEditorModal(node, nodeSeed) {
             });
             chip.addEventListener("dragleave", (e) => {
                 const rt = e.relatedTarget;
-                if (rt && (chip.contains(rt) || (tagChipsRow && tagChipsRow.contains(rt)))) return;
+                if (
+                    rt &&
+                    (chip.contains(rt) ||
+                        (tagChipsRow && tagChipsRow.contains(rt)) ||
+                        (tagChipsHit && tagChipsHit.contains(rt)))
+                ) {
+                    return;
+                }
                 hideDropLineEl();
             });
             chip.addEventListener("drop", (e) => {
@@ -3442,12 +3547,19 @@ async function showPromptEditorModal(node, nodeSeed) {
 
         const chipRowAc = new AbortController();
         shell._magicChipRowAbort = chipRowAc;
-        tagChipsRow.addEventListener(
+        tagChipsHit.addEventListener(
             "mousedown",
             (e) => {
                 if (e.button !== 0) return;
                 if (e.target.closest("[data-magic-tag-index]")) return;
                 if (e.target.closest("[data-magic-tag-sel-popup]")) return;
+                e.preventDefault();
+                shell._magicTagChipsRubberArmed = true;
+                if (shell._magicTagUiTimer) {
+                    clearTimeout(shell._magicTagUiTimer);
+                    shell._magicTagUiTimer = null;
+                }
+                clearPinnedToolbar();
                 const x0 = e.clientX;
                 const y0 = e.clientY;
                 let moved = false;
@@ -3469,11 +3581,16 @@ async function showPromptEditorModal(node, nodeSeed) {
                     rb.style.top = `${r.t}px`;
                     rb.style.width = `${r.w}px`;
                     rb.style.height = `${r.h}px`;
+                    if (moved) {
+                        updateRubberBandChipPreview(r);
+                    }
                 };
                 const onUp = (ev) => {
+                    shell._magicTagChipsRubberArmed = false;
                     document.removeEventListener("mousemove", onMove);
                     document.removeEventListener("mouseup", onUp);
                     if (rb.parentNode) rb.parentNode.removeChild(rb);
+                    clearRubberBandChipPreview();
                     if (!moved) {
                         clearChipSelection();
                         return;
@@ -3529,6 +3646,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 cancelHideTagFloatBar();
                 hideTagFloatBar();
                 shell._magicRebuildPreserveIdx = null;
+                shell._magicChipToolbarPinnedIndex = null;
             } else {
                 const preserveIdx = shell._magicRebuildPreserveIdx;
                 shell._magicRebuildPreserveIdx = null;
@@ -3549,6 +3667,7 @@ async function showPromptEditorModal(node, nodeSeed) {
             hideTagFloatBar();
             tagChipsRow.innerHTML = "";
             if (!tags.length) {
+                shell._magicChipToolbarPinnedIndex = null;
                 clearChipSelection();
                 const ph = document.createElement("div");
                 ph.style.cssText = `font-size: 12px; color: ${THEME.text2}; font-style: italic;`;
@@ -3562,7 +3681,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 currentLine = document.createElement("div");
                 currentLine.setAttribute("data-magic-tag-line", "1");
                 currentLine.style.cssText =
-                    "display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;min-height:0;";
+                    "display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;min-height:0;";
                 tagChipsRow.appendChild(currentLine);
             };
 
@@ -3581,6 +3700,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                         background: ${THEME.bg3}; border: 1px solid ${THEME.border}; border-radius: 6px;
                         display: flex; flex-direction: column; align-items: center; justify-content: center;
                         font-size: 18px; color: #ccc; user-select: none; padding: 4px 0;
+                        transition: box-shadow 0.14s ease, outline 0.14s ease;
                     `;
                     const sym = document.createElement("span");
                     sym.textContent = "↵";
@@ -3604,8 +3724,19 @@ async function showPromptEditorModal(node, nodeSeed) {
                     chip.appendChild(del);
                     preventConflict(chip);
                     if (shell._magicChipSelSet && shell._magicChipSelSet.has(index)) {
-                        chip.style.boxShadow = "0 0 0 2px #1890ff, 0 2px 10px rgba(24,144,255,0.35)";
+                        chip.style.boxShadow = MAGIC_CHIP_SELECTED_GLOW;
                     }
+                    chip.addEventListener("mouseenter", () => {
+                        if (shell._magicTagChipsRubberArmed) return;
+                        if (!shell._magicChipSelSet || !shell._magicChipSelSet.has(index)) {
+                            chip.style.outline = "1px solid rgba(230, 230, 230, 0.42)";
+                            chip.style.outlineOffset = "2px";
+                        }
+                    });
+                    chip.addEventListener("mouseleave", () => {
+                        chip.style.outline = "";
+                        chip.style.outlineOffset = "";
+                    });
                     attachChipDragHandlers(chip, index);
                     currentLine.appendChild(chip);
                     currentLine = null;
@@ -3620,21 +3751,32 @@ async function showPromptEditorModal(node, nodeSeed) {
                     flex: 0 0 auto; max-width: 220px; cursor: grab;
                     background: ${tagItem.disabled ? THEME.bg3 : "rgba(93, 64, 55, 0.72)"};
                     border: 1px solid ${THEME.border}; border-radius: 6px;
-                    overflow: hidden; font-size: 11px; user-select: none;
+                    overflow: hidden; font-size: 12px; user-select: none;
+                    transition: box-shadow 0.14s ease, outline 0.14s ease, filter 0.14s ease;
                     ${tagItem.disabled ? "opacity:0.58;" : ""}
                     ${
                         shell._magicChipSelSet && shell._magicChipSelSet.has(index)
-                            ? "box-shadow:0 0 0 2px #1890ff,0 2px 10px rgba(24,144,255,0.35);"
+                            ? `box-shadow:${MAGIC_CHIP_SELECTED_GLOW};`
+                            : ""
+                    }
+                    ${
+                        shell._magicChipToolbarPinnedIndex === index
+                            ? `outline:${MAGIC_CHIP_TOOLBAR_PIN_OUTLINE};outline-offset:${MAGIC_CHIP_TOOLBAR_PIN_OFFSET};`
                             : ""
                     }
                 `;
+                if (shell._magicChipToolbarPinnedIndex === index) {
+                    chip.setAttribute("data-magic-toolbar-pin", "1");
+                }
 
                 const top = document.createElement("div");
+                top.setAttribute("data-magic-tag-top", "1");
+                top.title = magicT("锁定后仅在此区域点击进入文字编辑");
                 top.style.cssText =
-                    "display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 7px;border-bottom:1px solid rgba(0,0,0,0.25);";
+                    "display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(0,0,0,0.25);cursor:text;";
                 const tspan = document.createElement("span");
                 tspan.textContent = tagItem.text || " ";
-                tspan.style.cssText = `flex:1;min-width:0;word-break:break-word;color:#eee;${
+                tspan.style.cssText = `flex:1;min-width:0;word-break:break-word;font-size:12px;line-height:1.45;color:#f2f2f2;${
                     tagItem.disabled ? "text-decoration:line-through;" : ""
                 }`;
                 const del = document.createElement("button");
@@ -3643,7 +3785,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 del.textContent = "✕";
                 del.title = magicT("删除");
                 del.style.cssText =
-                    "flex-shrink:0;border:none;background:transparent;color:#c62828;cursor:pointer;font-size:12px;line-height:1;padding:0 2px;";
+                    "flex-shrink:0;border:none;background:transparent;color:#c62828;cursor:pointer;font-size:13px;line-height:1;padding:0 2px;";
                 preventConflict(del);
                 del.addEventListener("click", (e) => {
                     e.stopPropagation();
@@ -3656,8 +3798,10 @@ async function showPromptEditorModal(node, nodeSeed) {
                 top.appendChild(del);
 
                 const bottom = document.createElement("div");
+                bottom.setAttribute("data-magic-tag-bottom", "1");
+                bottom.title = magicT("双击此区域切换屏蔽（!）；锁定后单击下方取消锁定");
                 bottom.style.cssText =
-                    "display:flex;align-items:center;gap:5px;padding:4px 7px;color:#9a9a9a;font-size:10px;";
+                    "display:flex;align-items:center;gap:5px;padding:5px 8px;color:#d8d8d8;font-size:11px;";
                 const llmBtn = document.createElement("button");
                 llmBtn.type = "button";
                 llmBtn.dataset.magicCnLlm = "1";
@@ -3665,13 +3809,14 @@ async function showPromptEditorModal(node, nodeSeed) {
                 llmBtn.title = magicT("单独补全/刷新此 tag 的中文：默认先查 LLM 磁盘缓存（省 token）；在「设置 → 翻译」选「强制翻译」时才会无视缓存重请求。按点击顺序排队。");
                 llmBtn.style.cssText = `
                     flex-shrink: 0; border: none; padding: 1px 4px; margin: 0;
-                    border-radius: 4px; cursor: pointer; font-size: 10px; line-height: 1.2;
-                    background: rgba(255,255,255,0.08); color: #bdbdbd;
+                    border-radius: 4px; cursor: pointer; font-size: 11px; line-height: 1.25;
+                    background: rgba(255,255,255,0.12); color: #e0e0e0;
                 `;
                 preventConflict(llmBtn);
                 const sub = document.createElement("span");
                 sub.setAttribute("data-magic-cn-hint", "1");
-                sub.style.cssText = "flex:1;min-width:0;word-break:break-word;";
+                sub.style.cssText =
+                    "flex:1;min-width:0;word-break:break-word;font-size:11px;line-height:1.4;color:#ececec;";
                 sub.textContent = "…";
                 bottom.appendChild(llmBtn);
                 bottom.appendChild(sub);
@@ -3681,26 +3826,36 @@ async function showPromptEditorModal(node, nodeSeed) {
                 preventConflict(chip);
 
                 chip.addEventListener("mouseenter", () => {
-                    cancelHideTagFloatBar();
-                    shell._magicTagFloatChip = chip;
-                    floatBar.dataset.tagIndex = String(index);
-                    const fk = shell._magicFavoriteEnKeys;
-                    const inFav = fk && fk.has(magicTagEnKey(tagItem.text || ""));
-                    tagFloat.setFavOn(!!inFav);
-                    tagFloat.weightInp.value = String(findMagicTagInnerWeight(tagItem.text || ""));
-                    positionTagFloatBar(chip);
+                    if (shell._magicTagChipsRubberArmed) return;
+                    const chipEl = tagChipsRow.querySelector(`[data-magic-tag-index="${index}"]`);
+                    if (!chipEl) return;
+                    if (shell._magicChipToolbarPinnedIndex === index) return;
+                    if (!shell._magicChipSelSet || !shell._magicChipSelSet.has(index)) {
+                        chipEl.style.outline = "1px solid rgba(230, 230, 230, 0.42)";
+                        chipEl.style.outlineOffset = "2px";
+                    }
                 });
                 chip.addEventListener("mouseleave", () => {
-                    scheduleHideTagFloatBar();
+                    const chipEl = tagChipsRow && tagChipsRow.querySelector(`[data-magic-tag-index="${index}"]`);
+                    if (!chipEl) return;
+                    if (shell._magicChipToolbarPinnedIndex === index) {
+                        chipEl.style.outline = MAGIC_CHIP_TOOLBAR_PIN_OUTLINE;
+                        chipEl.style.outlineOffset = MAGIC_CHIP_TOOLBAR_PIN_OFFSET;
+                    } else {
+                        chipEl.style.outline = "";
+                        chipEl.style.outlineOffset = "";
+                    }
                 });
 
                 const startEdit = () => {
                     if (chip.querySelector("input")) return;
+                    cancelHideTagFloatBar();
+                    hideTagFloatBar();
                     chip.draggable = false;
                     const inp = document.createElement("input");
                     inp.type = "text";
                     inp.value = tagItem.text;
-                    inp.style.cssText = `width:100%;box-sizing:border-box;padding:3px 5px;font-size:11px;background:${THEME.bg};color:${THEME.text};border:1px solid ${THEME.accent};border-radius:4px;`;
+                    inp.style.cssText = `width:100%;box-sizing:border-box;padding:3px 5px;font-size:12px;background:${THEME.bg};color:${THEME.text};border:1px solid ${THEME.accent};border-radius:4px;`;
                     preventConflict(inp);
                     top.innerHTML = "";
                     top.appendChild(inp);
@@ -3751,6 +3906,12 @@ async function showPromptEditorModal(node, nodeSeed) {
 
                 chip.addEventListener("dblclick", (e) => {
                     if (e.target.closest("button[data-del]")) return;
+                    // 仅下方区域双击切换屏蔽，避免上方英文区双击与行内编辑/选字冲突
+                    if (!bottom.contains(e.target)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
                     e.preventDefault();
                     e.stopPropagation();
                     if (shell._magicTagUiTimer) {
@@ -3761,15 +3922,54 @@ async function showPromptEditorModal(node, nodeSeed) {
                 });
 
                 chip.addEventListener("click", (e) => {
+                    // detail===2 留给 dblclick（屏蔽，且仅下方区域会生效）
+                    if (e.detail === 2) return;
                     if (e.target.closest("button[data-del]")) return;
                     if (e.target.closest("button[data-magic-cn-llm]")) return;
                     if (e.target.closest("input")) return;
                     e.stopPropagation();
-                    if (shell._magicTagUiTimer) clearTimeout(shell._magicTagUiTimer);
-                    shell._magicTagUiTimer = setTimeout(() => {
+                    if (shell._magicTagUiTimer) {
+                        clearTimeout(shell._magicTagUiTimer);
                         shell._magicTagUiTimer = null;
-                        startEdit();
-                    }, 280);
+                    }
+                    const chipEl = tagChipsRow.querySelector(`[data-magic-tag-index="${index}"]`);
+                    if (!chipEl) return;
+                    const clickInTop = top.contains(e.target);
+                    const clickInBottom = bottom.contains(e.target);
+                    if (shell._magicChipToolbarPinnedIndex === index) {
+                        if (clickInTop) {
+                            startEdit();
+                            return;
+                        }
+                        if (clickInBottom) {
+                            clearPinnedToolbar();
+                            refreshChipSelVisual();
+                            return;
+                        }
+                        return;
+                    }
+                    clearChipSelection();
+                    shell._magicChipToolbarPinnedIndex = index;
+                    tagChipsRow.querySelectorAll("[data-magic-tag-index]").forEach((el) => {
+                        const i = parseInt(el.dataset.magicTagIndex, 10);
+                        el.removeAttribute("data-magic-toolbar-pin");
+                        if (i === index) {
+                            el.setAttribute("data-magic-toolbar-pin", "1");
+                            el.style.outline = MAGIC_CHIP_TOOLBAR_PIN_OUTLINE;
+                            el.style.outlineOffset = MAGIC_CHIP_TOOLBAR_PIN_OFFSET;
+                        } else {
+                            el.style.outline = "";
+                            el.style.outlineOffset = "";
+                        }
+                    });
+                    refreshChipSelVisual();
+                    shell._magicTagFloatChip = chipEl;
+                    floatBar.dataset.tagIndex = String(index);
+                    const fk = shell._magicFavoriteEnKeys;
+                    tagFloat.setFavOn(!!(fk && fk.has(magicTagEnKey(tagItem.text || ""))));
+                    tagFloat.weightInp.value = String(findMagicTagInnerWeight(tagItem.text || ""));
+                    cancelHideTagFloatBar();
+                    positionTagFloatBar(chipEl);
                 });
 
                 attachChipDragHandlers(chip, index);
@@ -3854,31 +4054,44 @@ async function showPromptEditorModal(node, nodeSeed) {
                 }
             }
 
+            const fkRestore = shell._magicFavoriteEnKeys;
+            let restoreIdx = null;
+            const pinI = shell._magicChipToolbarPinnedIndex;
             if (
+                pinI != null &&
+                pinI >= 0 &&
+                pinI < tags.length &&
+                floatBar.isConnected &&
+                !tags[pinI].isNewline
+            ) {
+                restoreIdx = pinI;
+            } else if (pinI != null) {
+                shell._magicChipToolbarPinnedIndex = null;
+            }
+            if (
+                restoreIdx == null &&
                 preserveFloatIndex != null &&
                 preserveFloatIndex >= 0 &&
                 preserveFloatIndex < tags.length &&
                 floatBar.isConnected &&
                 !tags[preserveFloatIndex].isNewline
             ) {
+                restoreIdx = preserveFloatIndex;
+            }
+            if (restoreIdx != null) {
                 const chipEl = tagChipsRow.querySelector(
-                    `[data-magic-tag-index="${preserveFloatIndex}"]`,
+                    `[data-magic-tag-index="${restoreIdx}"]`,
                 );
                 if (chipEl) {
                     shell._magicTagFloatChip = chipEl;
-                    floatBar.dataset.tagIndex = String(preserveFloatIndex);
-                    const fk = shell._magicFavoriteEnKeys;
-                    const ttxt = tags[preserveFloatIndex].text || "";
-                    tagFloat.setFavOn(!!(fk && fk.has(magicTagEnKey(ttxt))));
+                    floatBar.dataset.tagIndex = String(restoreIdx);
+                    const ttxt = tags[restoreIdx].text || "";
+                    tagFloat.setFavOn(!!(fkRestore && fkRestore.has(magicTagEnKey(ttxt))));
                     tagFloat.weightInp.value = String(
                         findMagicTagInnerWeight(ttxt),
                     );
                     cancelHideTagFloatBar();
-                    floatBar.style.display = "flex";
-                    floatBar.style.visibility = "hidden";
-                    requestAnimationFrame(() =>
-                        requestAnimationFrame(() => positionTagFloatBar(chipEl)),
-                    );
+                    positionTagFloatBar(chipEl);
                 }
             }
         }
@@ -3902,6 +4115,7 @@ async function showPromptEditorModal(node, nodeSeed) {
         tagFloat.weightInp.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
                 e.preventDefault();
+                e.stopPropagation();
                 commitFloatBarWeight();
                 tagFloat.weightInp.blur();
             }

@@ -80,11 +80,9 @@ class MagicPromptBox:
 
         # 2. CLIP 编码逻辑 (可选)
         # 如果用户连了 CLIP，我们就顺便把文本编码了，省得再接一个 CLIP Text Encode
+        # 完全复刻官方 CLIPTextEncode 的编码流程
         conditioning = None
         if clip is not None:
-            # ComfyUI 标准编码流程
             tokens = clip.tokenize(result_text)
-            cond, pooled = clip.encode_from_tokens(tokens, return_pooled=True)
-            conditioning = [[cond, {"pooled_output": pooled}]]
-        
+            conditioning = clip.encode_from_tokens_scheduled(tokens)
         return (result_text, conditioning, clip)

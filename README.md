@@ -10,7 +10,26 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-03-24**
+> Latest Update / 最新更新：**2026-03-25**
+
+> **V1.2.6 版本介绍 / Version Introduction** 2026-03-25
+
+> 1. **🎨 交互优化**: Tag 编辑弹窗 - Tag 预览区重构 ⭐
+>    * 优化了提示词编辑框节点中编辑弹窗下 tag 区的使用体验
+>    * 增加了框选时的实时高亮效果
+>    * 优化了权重/括号工具栏的定位逻辑，放大了 tag 预览区的显示效果
+>    * 调整了 tag 芯片之间的间距，视觉效果更舒适
+>    * 修复了增减括号功能不可用的问题
+>    * 优化交互模式：改为**点击锁定 tag 进行修改**（不再依赖悬停出工具条）
+>    * 锁定后**点击上方英文文本区域**可直接进入行内编辑
+>    * **双击切换屏蔽/恢复 tag**改为**仅在下方翻译区域**触发，避免与上方编辑冲突
+>    * 修复conditioning的问题
+>    * Optimized the Tag Preview area in the editing popup: added real-time highlight for rubber-band select, improved float bar positioning, enlarged chip display, adjusted chip spacing, and fixed bracket add/remove buttons
+>    * New interaction: click to lock a tag (toolbar stays fixed on that chip only; no hover conflicts)
+>    * When locked, click the top English text area to inline edit; double-click the bottom Chinese area to toggle disable, avoiding conflict with text editing above
+>    * Fix the conditioning issue.
+>   
+>    <img width="1375" height="1037" alt="Image" src="https://github.com/user-attachments/assets/3af2f79d-56bd-4b31-863c-94480e5ac9f2" />
 
 > **V1.2.5 版本介绍 / Version Introduction** 2026-03-24
 
@@ -64,6 +83,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 新增文本接入功能，可以自行选择是接入文本框还是接入文本点
 >    * Added text input option; can choose between text box input or text point input
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.2.4 版本介绍 / Version Introduction** 2026-02-28
 
 > 1. **✨ 优化**: Magic SDNQ Loader & Sampler - 模型加载和采样器优化
@@ -103,9 +125,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * Smart caching mechanism automatically skips redundant calculations and reuses cached results when appropriate
 >    * Supports cache device selection (CUDA or CPU) for flexible configuration
 >    * Source code from [Comfy-WaveSpeed](https://github.com/chengzeyi/Comfy-WaveSpeed) and [ComfyUI-TeaCache](https://github.com/welltop-cn/ComfyUI-TeaCache)
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.3 版本介绍 / Version Introduction** 2026-02-12
 
@@ -461,10 +480,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 Click the **"📝 编辑提示词"** button at the bottom of the node to open the **Magic Prompt Editor** modal. The node supports `prepend_text` input, `clip` input, and outputs `final_text`, `conditioning`, and `clip`. Segments starting with `!` are "masked": kept in the node but excluded from encoding and output.
 
-<p align="center">
-  <img src="assets/magic_prompt_node.png" alt="Magic Multi-Function Prompt Box Node" width="600"/>
-</p>
-
 #### 编辑 Tab / Edit Tab
 
 * **工具栏**: 格式化、去重、清空全部、清空屏蔽、复制、编辑标签、一键翻译所有 Tag
@@ -477,10 +492,6 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Tag Chips**: Parsed into draggable cards; adjust weight, add `()` / `[]` / `{}`, delete, sort, double-click to mask, translate to Chinese
 * **Inline Translate**: Type Chinese or concepts, press Enter to LLM-translate to English tags and insert
 
-<p align="center">
-  <img src="assets/magic_prompt_edit.png" alt="Magic Prompt Editor - Edit Tab" width="700"/>
-</p>
-
 #### 编辑标签 / Edit Tags Modal
 
 * **标签组管理**: 新建标签组、收藏标签组，分组管理常用 tag 集合
@@ -491,10 +502,6 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Tag Search**: Bilingual search (case-insensitive); custom groups prioritized; one-click add to prompt
 * **Data Sources**: Preset library (220k+ entries) + user-created tag groups + favorite tag groups
 
-<p align="center">
-  <img src="assets/magic_prompt_edit_tags.png" alt="Magic Prompt Editor - Edit Tags" width="600"/>
-</p>
-
 #### 历史 Tab / History Tab
 
 * **运行历史**: 工作流**完整执行成功**后，自动将画布上所有「多功能提示词框」的文本写入 `userdata/magic_prompt_history.json`，按内容去重
@@ -504,10 +511,6 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Run History**: After workflow **completes successfully**, all Magic Prompt Box texts are saved to `userdata/magic_prompt_history.json` with content deduplication
 * **History Favorites**: Click ☆ on run history items to add to favorites; name and edit content for reuse
 * **Actions**: Delete, edit, favorite, apply to current node with one click
-
-<p align="center">
-  <img src="assets/magic_prompt_history.png" alt="Magic Prompt Editor - History Tab" width="600"/>
-</p>
 
 #### 设置 Tab / Settings Tab
 
@@ -520,10 +523,6 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Format Options**: Clean commas, fix brackets (always); advanced: underscores, weight syntax, bracket escaping
 * **Translation**: Shares `userdata/llm_settings.txt` with Manage LLM and AI Prompt Replace; normal/force translate modes
 * **Completion & History**: Autocomplete limit, history max entries, LLM cache size
-
-<p align="center">
-  <img src="assets/magic_prompt_settings.png" alt="Magic Prompt Editor - Settings Tab" width="600"/>
-</p>
 
 #### 核心功能速览 / Feature Summary
 
