@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { refreshMagicPromptReplaceNodes } from "./magic_llm_shared.js";
 
 // 必须与 __init__.py 和 nodes.py 中的类名完全一致
 const NODE_NAME = "MagicPromptReplace";
@@ -8,16 +9,47 @@ app.registerExtension({
     name: "Magic.Assistant", // 插件注册名
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === NODE_NAME) {
-            
+            const reorderOriginalPromptInput = function (node) {
+                const list = node.inputs;
+                if (!list || !list.length) return;
+                const ix = list.findIndex((i) => i.name === "original_prompt_in");
+                if (ix <= 0) return;
+                const [inp] = list.splice(ix, 1);
+                list.unshift(inp);
+                // 显示名与 Python 侧语义一致：外接点表示「原始提示词」
+                if (inp) {
+                    if (Object.prototype.hasOwnProperty.call(inp, "localized_name")) {
+                        inp.localized_name = "original_prompt";
+                    }
+                    if (Object.prototype.hasOwnProperty.call(inp, "label")) {
+                        inp.label = "original_prompt";
+                    }
+                }
+            };
+
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
-                
+
+                // 将 optional 的 original_prompt_in 插槽移到最上方（默认会在所有 required 之后）
+                const scheduleReorder = () => {
+                    queueMicrotask(() => reorderOriginalPromptInput(this));
+                    setTimeout(() => reorderOriginalPromptInput(this), 0);
+                };
+                scheduleReorder();
+
+                const onConfigure = this.onConfigure;
+                this.onConfigure = function (info) {
+                    const cr = onConfigure ? onConfigure.apply(this, arguments) : undefined;
+                    scheduleReorder.call(this);
+                    return cr;
+                };
+
                 // 添加设置按钮
                 this.addWidget("button", "⚙️ 配置中心 / Settings", null, () => {
                     showSettingsModal(this);
                 });
-                
+
                 // 初始化配置对象 (改名为 ma_config)
                 this.ma_config = { rules: {}, llm: {} };
                 updateNodeDropdowns(this);
@@ -59,7 +91,7 @@ async function updateNodeDropdowns(node) {
     }
 }
 
-// 保存配置到服务器
+// 保存配置到服务器（与 magic_llm_shared 共用刷新逻辑，保证与多功能提示词框的 LLM 列表同步）
 async function saveConfigToServer(data) {
     try {
         await api.fetchApi("/ma/save_config", {
@@ -67,9 +99,7 @@ async function saveConfigToServer(data) {
             body: JSON.stringify(data),
             headers: { "Content-Type": "application/json" }
         });
-        // 刷新所有同类节点
-        const allNodes = app.graph.findNodesByType(NODE_NAME);
-        allNodes.forEach(n => updateNodeDropdowns(n));
+        await refreshMagicPromptReplaceNodes();
     } catch (e) {
         alert("保存失败 / Save Failed: " + e);
     }

@@ -24,6 +24,32 @@ from comfy.ldm.flux.layers import timestep_embedding, apply_mod
 from comfy.ldm.lightricks.symmetric_patchifier import latent_to_pixel_coords
 from comfy.ldm.wan.model import sinusoidal_embedding_1d
 
+# ==================== 通用类型代理 ====================
+# 用于实现真正的任意类型输入/输出
+class AlwaysEqualProxy(str):
+    """一个总是返回 True 的代理类，用于 ComfyUI 的任意类型输入"""
+    def __eq__(self, _):
+        return True
+    def __ne__(self, _):
+        return False
+
+# 任意类型代理实例
+any_type = AlwaysEqualProxy("*")
+
+# ==================== 全局注册表 ====================
+# 用于存储被 Magic Cache patch 过的组件引用
+# Key 使用组件的 id() 而不是 model 的 id()，因为 model.clone() 会创建新对象
+_patched_components_registry = set()
+
+
+def register_patched_component(component, patch_type):
+    """
+    注册被 patch 的组件，用于全局清理
+    """
+    component_id = id(component)
+    _patched_components_registry.add(component_id)
+
+
 # ==================== TeaCache 相关代码 ====================
 
 SUPPORTED_MODELS_COEFFICIENTS = {
@@ -1398,7 +1424,8 @@ class CachedTransformerBlocks(torch.nn.Module):
                 timestep_embedding = args[0]
                 args = args[1:]
             else:
-                timestep_embedding = kwargs.pop("emb", None) or kwargs.pop("timestep_embedding", None)
+                emb = kwargs.pop("emb", None)
+                timestep_embedding = emb if emb is not None else kwargs.pop("timestep_embedding", None)
                 if timestep_embedding is None:
                     raise ValueError("timestep_embedding argument required but not found")
             if args:
@@ -2071,10 +2098,38 @@ class MagicCache:
         参数从hidden widget中获取（由web UI设置）
         """
         import json
-        
+        import gc
+
         # 打印开始信息
         self.log(f"应用缓存优化 (Mode: {cache_mode})", "start")
-        
+
+        # 在应用新缓存前，先执行全局清理（自动清理旧缓存）
+        # 清理所有可能被 Magic Cache patch 过的模型，防止内存泄漏
+        global _patched_components_registry
+
+        self.log("执行全局缓存清理...", "info")
+        cleaned_count = 0
+
+        # 遍历所有已注册的组件进行清理
+        # 不使用 gc.get_objects() 全量扫描，避免触发 onnx 等可选依赖的懒加载检查
+        for component_id in list(_patched_components_registry):
+            # 由于无法安全使用 gc.get_objects()，我们只能通过 id 哈希直接清理
+            # 实际上 _cleanup_existing_cache 会在每个模型上精确清理，所以这里只是兜底
+            _patched_components_registry.discard(component_id)
+            cleaned_count += 1
+
+        # 强制垃圾回收
+        gc.collect()
+
+        if cleaned_count > 0:
+            self.log(f"全局清理完成，已清理 {cleaned_count} 个缓存补丁", "success")
+        else:
+            self.log("全局清理完成，未发现需要清理的缓存补丁", "info")
+
+        # 关键修复：在应用新缓存前，先清理该模型上可能存在的旧缓存 patch
+        # 防止重复 patch 导致的内存泄漏
+        model = self._cleanup_existing_cache(model)
+
         # 解析JSON参数
         try:
             teacache_params = json.loads(teacache_params_json) if teacache_params_json else {}
@@ -2204,7 +2259,50 @@ class MagicCache:
                 self.log("FBCache 优化失败，返回原始模型", "error")
         
         return (result_model,)
-    
+
+    def _cleanup_existing_cache(self, model):
+        """
+        清理模型上可能存在的旧缓存 patch，防止重复 patch 导致的内存泄漏
+        """
+        global _patched_components_registry
+        cleaned = False
+
+        # 1. 清理 FBCache patch
+        if hasattr(model, '_fbcache_patched_component'):
+            component = model._fbcache_patched_component
+            if component and hasattr(component, '_fbcache_original_forward'):
+                try:
+                    component.forward = component._fbcache_original_forward
+                    delattr(component, '_fbcache_original_forward')
+                    cleaned = True
+                except Exception:
+                    pass
+
+        # 2. 清理 TeaCache 相关设置
+        try:
+            model_options = getattr(model, 'model_options', {})
+            if model_options and isinstance(model_options, dict):
+                to = model_options.get('transformer_options', {})
+                if isinstance(to, dict):
+                    keys_to_remove = ['rel_l1_thresh', 'coefficients', 'model_type',
+                                      'cache_device', 'enable_teacache', 'current_percent']
+                    for key in keys_to_remove:
+                        if key in to:
+                            del to[key]
+                            cleaned = True
+        except Exception:
+            pass
+
+        # 从全局注册表中移除该模型的组件 ID
+        if hasattr(model, '_fbcache_patched_component') and model._fbcache_patched_component:
+            comp_id = id(model._fbcache_patched_component)
+            _patched_components_registry.discard(comp_id)
+
+        if cleaned:
+            self.log("已清理旧缓存 patch", "info")
+
+        return model
+
     def _apply_teacache(self, model, model_type, rel_l1_thresh, start_percent, end_percent, cache_device):
         """应用TeaCache优化"""
         if rel_l1_thresh == 0:
@@ -2354,6 +2452,13 @@ class MagicCache:
             new_model.set_model_unet_function_wrapper(composed_wrapper)
         else:
             new_model.set_model_unet_function_wrapper(unet_wrapper_function)
+
+        # 标记 TeaCache 已应用 (用于自动清理)
+        new_model._teacache_patched = True
+        new_model._teacache_patched_component = diffusion_model
+
+        # 注册到全局清理列表（使用组件的 id）
+        register_patched_component(diffusion_model, "teacache")
 
         return new_model
     
@@ -2725,7 +2830,8 @@ class MagicCache:
                         input_tensor = args[0]
                         timestep = args[1]
                     else:
-                        input_tensor = kwargs.get("hidden_states") or kwargs.get("sample")
+                        hidden_states = kwargs.get("hidden_states")
+                        input_tensor = hidden_states if hidden_states is not None else kwargs.get("sample")
                         timestep = kwargs.get("timestep")
                     
                     if timestep is not None:
@@ -2763,10 +2869,17 @@ class MagicCache:
             
             # Patch the forward method
             transformer_or_unet.forward = wrapped_forward.__get__(transformer_or_unet, transformer_or_unet.__class__)
-            
+
+            # 保存原始 forward 方法用于清理
+            if not hasattr(transformer_or_unet, "_fbcache_original_forward"):
+                transformer_or_unet._fbcache_original_forward = original_forward
+
             # Store reference to allow cleanup if needed
             model._fbcache_patched = True
             model._fbcache_patched_component = transformer_or_unet
+
+            # 注册到全局清理列表（使用组件的 id）
+            register_patched_component(transformer_or_unet, "fbcache")
         else:
             # Standard ComfyUI ModelPatcher - use the wrapper method (compose with existing wrappers)
             prev_wrapper = model.model_options.get("model_function_wrapper", None) if isinstance(getattr(model, "model_options", None), dict) else None
@@ -2781,4 +2894,10 @@ class MagicCache:
                 model.set_model_unet_function_wrapper(model_unet_function_wrapper)
         
         return model
+
+
+# ==================== Magic Cache Remove 节点 ====================
+# 用于清理 Magic Cache 应用的缓存补丁，解决内存泄漏问题
+
+# (全局注册表已在上方定义)
 

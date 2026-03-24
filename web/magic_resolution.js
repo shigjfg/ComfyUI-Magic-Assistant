@@ -14,7 +14,8 @@ app.registerExtension({
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
                 
                 if (!this.res_config) {
-                    this.res_config = { dimensions: [] };
+                    // 与 Resize 节点共用 resolutions.txt：必须保留 presets，否则保存 dimensions 时会用空数组覆盖长边预设
+                    this.res_config = { presets: [], dimensions: [] };
                 }
                 
                 // 只在首次创建时设置
@@ -130,8 +131,10 @@ async function updateResDropdown(node) {
         const response = await api.fetchApi("/ma/get_config");
         const data = await response.json();
         
+        const presets = data.resolutions?.presets || [];
         const dims = data.resolutions?.dimensions || [];
-        
+
+        node.res_config.presets = presets;
         node.res_config.dimensions = dims;
 
         const w = node.widgets.find(w => w.name === "dim_preset");
@@ -142,18 +145,22 @@ async function updateResDropdown(node) {
 
 async function saveResToServer(node) {
     try {
-        const payload = { 
-            resolutions: { 
-                presets: node.res_config.presets || [],
-                dimensions: node.res_config.dimensions
-            } 
+        // 本节点 UI 只改 dimensions；presets 始终从服务端读取再写入，避免用内存里的 [] 覆盖长边列表
+        const fresh = await (await api.fetchApi("/ma/get_config")).json();
+        const presets = fresh.resolutions?.presets || [];
+        const payload = {
+            resolutions: {
+                presets,
+                dimensions: node.res_config.dimensions || []
+            }
         };
         await api.fetchApi("/ma/save_config", {
             method: "POST", body: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" }
         });
-        const allNodes = app.graph.findNodesByType(NODE_NAME);
-        allNodes.forEach(n => updateResDropdown(n));
+        const allResNodes = app.graph.findNodesByType("MagicResolution");
+        const allResizeNodes = app.graph.findNodesByType("MagicResolutionResize");
+        [...allResNodes, ...allResizeNodes].forEach(n => updateResDropdown(n));
     } catch (e) { alert("保存失败: " + e); }
 }
 
@@ -329,23 +336,80 @@ function showResModal(node) {
         sorted.forEach(val => {
             const row = document.createElement("div");
             row.style.cssText = "display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #333; border-radius: 4px;";
-            const label = document.createElement("span"); 
+            const label = document.createElement("span");
             label.textContent = val;
-            
-            const delBtn = document.createElement("button"); 
+            label.style.cssText = "flex: 1; cursor: pointer; padding: 2px 5px; border-radius: 3px;";
+            label.title = "双击编辑";
+            preventConflict(label);
+
+            let isEditing = false;
+
+            const startEdit = () => {
+                if (isEditing) return;
+                isEditing = true;
+
+                const input = document.createElement("input");
+                input.type = "text";
+                input.value = val;
+                input.style.cssText = "flex: 1; padding: 4px 5px; background: #111; color: #fff; border: 1px solid #2196F3; border-radius: 3px; font-size: 13px;";
+
+                const finishEdit = (save) => {
+                    if (!isEditing) return;
+                    isEditing = false;
+                    if (save && input.value.trim()) {
+                        const newVal = input.value.trim();
+                        if (newVal !== val) {
+                            node.res_config.dimensions = node.res_config.dimensions.filter(p => p !== val);
+                            node.res_config.dimensions.push(newVal);
+                            saveResToServer(node);
+                            renderContent();
+                            return;
+                        }
+                    }
+                    label.textContent = val;
+                    row.innerHTML = "";
+                    row.appendChild(label);
+                    row.appendChild(delBtn);
+                    attachEvents();
+                };
+
+                input.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") { e.preventDefault(); finishEdit(true); }
+                    if (e.key === "Escape") { e.preventDefault(); finishEdit(false); }
+                });
+                input.addEventListener("blur", () => finishEdit(true));
+                preventConflict(input);
+
+                row.innerHTML = "";
+                row.appendChild(input);
+                row.style.justifyContent = "flex-start";
+                row.style.gap = "8px";
+                input.focus();
+                input.select();
+            };
+
+            label.addEventListener("dblclick", startEdit);
+
+            const delBtn = document.createElement("button");
             delBtn.textContent = "🗑️";
             delBtn.style.cssText = "background: none; border: none; cursor: pointer; color: #f44336;";
             preventConflict(delBtn);
-            
+
             delBtn.onclick = () => {
                 if(confirm(`删除 ${val}?`)) {
                     node.res_config.dimensions = node.res_config.dimensions.filter(p => p !== val);
-                    saveResToServer(node); 
+                    saveResToServer(node);
                     renderContent();
                 }
             };
-            row.appendChild(label); 
-            row.appendChild(delBtn); 
+
+            const attachEvents = () => {
+                label.addEventListener("dblclick", startEdit);
+            };
+            attachEvents();
+
+            row.appendChild(label);
+            row.appendChild(delBtn);
             listDiv.appendChild(row);
         });
         content.appendChild(listDiv);

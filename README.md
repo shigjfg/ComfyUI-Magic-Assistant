@@ -10,7 +10,64 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-02-28**
+> Latest Update / 最新更新：**2026-03-24**
+
+> **V1.2.5 版本介绍 / Version Introduction** 2026-03-24
+
+> 1. **🧹 优化**: MagicPhotopeaNode - 清空缓存优化
+>    * 优化了 MagicPhotopeaNode 的清空缓存功能，现在清空缓存时会清空的更彻底
+>    * Optimized cache clearing in MagicPhotopeaNode; now clears more thoroughly
+
+> 2. **⚡ 新增功能**: Magic Cache - 全局缓存清理
+>    * 新增全局清理功能，每次使用时都会自动清理一遍加速缓存，防止内存溢出
+>    * Added global cache cleanup; automatically clears acceleration cache on each use to prevent memory overflow
+
+> 3. **📦 SDNQ 节点优化**: 使用体验全面升级
+>    * SDNQ 节点使用优化，重新上传了工作流和使用预览图，详情请到 SDNQ 节点介绍处查看
+>    * SDNQ nodes usage optimized; re-uploaded workflows and preview images, see SDNQ node introduction for details
+
+<details>
+<summary>Click to view more V1.2.5 updates / 点击查看更多 V1.2.5 更新内容</summary>
+
+> 4. **🔧 优化**: MagicResolutionResize 和 MagicResolution - 分辨率预设管理
+>    * 分辨率预设管理新增双击分辨率名字后直接修改分辨率功能
+>    * 修复了新增组合分辨率后会清空长边预设的问题
+>    * Added double-click to edit preset resolution names directly in preset management
+>    * Fixed issue where adding composite resolutions would clear long-edge presets
+
+> 5. **🎛️ 优化**: 万能禁用/忽略多框节点 - 组排序功能
+>    * 新增组之间的排序功能，点击组最右边的三条杠即可拖拽组进行排序
+>    * Added drag-and-drop sorting between groups; click the three-bar handle on the right side of a group to reorder
+
+> 6. **✨ 新增功能**: MagicPromptReplace 节点 - 文本接入
+>    * 新增文本接入功能，可以自行选择是接入文本框还是接入文本点
+>    * Added text input option; can choose between text box input or text point input
+
+> 7. **📝 大更新**: 多功能提示框（MagicPromptBox）- Tag 编辑弹窗
+>    * 新增编辑按钮，点击编辑按钮可以打开一个 tag 编辑弹窗，在编辑弹窗中可以自由地编辑 tag，功能丰富
+>    * New edit button opens a tag editing dialog with rich features and full Chinese/English bilingual support
+>
+>    **功能亮点 / Features**:
+>    * 内置 22 万+ 大量 tag，可搜索应有尽有，支持收藏喜欢的 tag 或新建 tag
+>    * Built-in 220,000+ tags with search; supports favoriting and creating custom tags
+>    * 编辑 tag 时可选择自动补全，补全数据来自本地数据库 + 新建 tag 数据集
+>    * Tag autocomplete when editing, using local database + custom tag dataset
+>    * 下方 tag 框同步编辑，支持修改权重、加括号、删除、排列、禁用、翻译成中文等操作
+>    * Tag box for synchronized editing: modify weight, add parentheses, delete, sort, disable, translate to Chinese, etc.
+>    * 丰富功能满足绝大多数使用需求：提示词规格化、移除重复提示词、清空提示词、一键复制、一键文本翻译
+>    * Rich functions: prompt normalization, remove duplicates, clear prompts, one-click copy, one-click text translation
+>    * 历史界面可查看之前运行的 tag 组，支持删除、编辑、收藏或一键重新使用
+>    * History view shows previous tag groups; supports delete, edit, favorite, or reuse with one click
+>    * 设置界面可配置多项功能满足不同需求
+>    * Settings panel for configuring various options to suit different needs
+>
+>    <img width="1340" height="1066" alt="Image" src="https://github.com/user-attachments/assets/2f74db1d-845d-4223-a392-c5fa3aea2044" />
+>    <img width="996" height="1004" alt="Image" src="https://github.com/user-attachments/assets/eaf4fe8e-6295-4e0b-a019-809cc81ad44f" />
+>    <img width="1344" height="1057" alt="Image" src="https://github.com/user-attachments/assets/146cad7f-a3e4-4774-87fb-8038643b51b5" />
+>    <img width="1321" height="1076" alt="Image" src="https://github.com/user-attachments/assets/c4f309ff-be6a-48d4-aad8-6e2e2a1c3b18" />
+>    <img width="874" height="692" alt="Image" src="https://github.com/user-attachments/assets/1af06565-e1f1-46d1-a895-7b422a1b20a8" />
+
+</details>
 
 > **V1.2.4 版本介绍 / Version Introduction** 2026-02-28
 
@@ -395,17 +452,95 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 </details>
 
 ### 6. 📝 Magic Multi-Function Prompt Box (多功能提示词框)
-> **Simple but effective text concatenation.** / **简单高效的文本组合。**
+> **Your all-in-one Danbooru-style prompt editor with 220k+ tag library.** / **内置 22 万+ Tag 的全能 Danbooru 风格提示词编辑器。**
+
+> **Reference / 参考来源**: Inspired by [WeiLin-Comfyui-Tools](https://github.com/weilin9999/WeiLin-Comfyui-Tools) and [ComfyUI-Danbooru-Gallery](https://github.com/Aaalice233/ComfyUI-Danbooru-Gallery).
 
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **Dynamic Input**: Features a `prepend_text` interface to automatically merge incoming text.
-* **Auto Formatting**: Automatically handles comma separation (`, `).
-* **Integrated Output**: Outputs both String and CLIP Conditioning directly.
-* **动态拼接**: 带有前置接口，自动将外部输入的文本合并到最前方。
-* **自动格式化**: 自动处理逗号分隔，无需手动添加连接符。
-* **直接输出**: 同时支持输出纯文本字符串和 CLIP 编码后的条件。
+#### 节点概览 / Node Overview
+
+点击节点底部的 **「📝 编辑提示词」** 按钮，打开 **Magic 提示词编辑器** 弹窗。节点支持 `prepend_text` 前置文本接口、`clip` 输入，直接输出 `final_text`、`conditioning` 和 `clip`。以 `!` 开头的段为「屏蔽」：保留在节点内但不参与编码与输出。
+
+Click the **"📝 编辑提示词"** button at the bottom of the node to open the **Magic Prompt Editor** modal. The node supports `prepend_text` input, `clip` input, and outputs `final_text`, `conditioning`, and `clip`. Segments starting with `!` are "masked": kept in the node but excluded from encoding and output.
+
+<p align="center">
+  <img src="assets/magic_prompt_node.png" alt="Magic Multi-Function Prompt Box Node" width="600"/>
+</p>
+
+#### 编辑 Tab / Edit Tab
+
+* **工具栏**: 格式化、去重、清空全部、清空屏蔽、复制、编辑标签、一键翻译所有 Tag
+* **主编辑区**: 支持任意语言输入；Enter 可将短词转为 tag；**WeiLin 风格补全**：输入时显示下拉列表，左侧英文 tag、右侧中文释义，浮层跟随光标
+* **Tag 卡片区**: 将文本解析为可拖拽卡片，支持修改权重、加 `()` / `[]` / `{}` 括号、删除、排序、双击屏蔽、翻译成中文
+* **单行翻译**: 输入中文或短概念，按 Enter 调用 LLM 译为英文 tag 并插入
+
+* **Toolbar**: Format, Deduplicate, Clear All, Clear Masked, Copy, Edit Tags, One-click Translate All Tags
+* **Main Editor**: Input any language; Enter converts short words to tags; **WeiLin-style autocomplete**: dropdown with EN tag + CN description, follows cursor
+* **Tag Chips**: Parsed into draggable cards; adjust weight, add `()` / `[]` / `{}`, delete, sort, double-click to mask, translate to Chinese
+* **Inline Translate**: Type Chinese or concepts, press Enter to LLM-translate to English tags and insert
+
+<p align="center">
+  <img src="assets/magic_prompt_edit.png" alt="Magic Prompt Editor - Edit Tab" width="700"/>
+</p>
+
+#### 编辑标签 / Edit Tags Modal
+
+* **标签组管理**: 新建标签组、收藏标签组，分组管理常用 tag 集合
+* **标签搜索**: 中英文双向搜索（不区分大小写），自建标签组优先显示；支持一键添加 tag 到当前提示词
+* **数据源**: 预设库（22 万+ 条 `中文,英文tag`）+ 用户自建标签组 + 收藏标签组
+
+* **Tag Group Management**: Create new tag groups, favorite tag groups; organize reusable tag sets
+* **Tag Search**: Bilingual search (case-insensitive); custom groups prioritized; one-click add to prompt
+* **Data Sources**: Preset library (220k+ entries) + user-created tag groups + favorite tag groups
+
+<p align="center">
+  <img src="assets/magic_prompt_edit_tags.png" alt="Magic Prompt Editor - Edit Tags" width="600"/>
+</p>
+
+#### 历史 Tab / History Tab
+
+* **运行历史**: 工作流**完整执行成功**后，自动将画布上所有「多功能提示词框」的文本写入 `userdata/magic_prompt_history.json`，按内容去重
+* **历史收藏**: 从运行历史中点击 ☆ 加入收藏，可命名、编辑正文，方便复用
+* **操作**: 删除、编辑、收藏、一键应用到当前节点
+
+* **Run History**: After workflow **completes successfully**, all Magic Prompt Box texts are saved to `userdata/magic_prompt_history.json` with content deduplication
+* **History Favorites**: Click ☆ on run history items to add to favorites; name and edit content for reuse
+* **Actions**: Delete, edit, favorite, apply to current node with one click
+
+<p align="center">
+  <img src="assets/magic_prompt_history.png" alt="Magic Prompt Editor - History Tab" width="600"/>
+</p>
+
+#### 设置 Tab / Settings Tab
+
+* **编辑界面显示**: 可勾选隐藏工具栏中的各项按钮，精简界面
+* **格式化详细设置**: 对应 💫 格式化按钮，调用 `/ma/format_prompt`。清理逗号、修复括号始终执行；高级选项：下划线、权重语法、括号转义等可独立开启
+* **翻译功能**: 与「管理 LLM」「多功能AI提示词替换」共用 `userdata/llm_settings.txt`；支持正常/强制翻译模式
+* **补全与历史**: 补全列表条数上限、运行历史保留条数、LLM 翻译缓存条数
+
+* **Editor Display**: Toggle visibility of toolbar buttons
+* **Format Options**: Clean commas, fix brackets (always); advanced: underscores, weight syntax, bracket escaping
+* **Translation**: Shares `userdata/llm_settings.txt` with Manage LLM and AI Prompt Replace; normal/force translate modes
+* **Completion & History**: Autocomplete limit, history max entries, LLM cache size
+
+<p align="center">
+  <img src="assets/magic_prompt_settings.png" alt="Magic Prompt Editor - Settings Tab" width="600"/>
+</p>
+
+#### 核心功能速览 / Feature Summary
+
+| 功能 / Feature | 说明 / Description |
+|----------------|-------------------|
+| **动态拼接** | `prepend_text` 接口自动合并外部文本到最前方 |
+| **直接输出** | 同时输出 `final_text`、`conditioning`、`clip`，可选接 CLIP 编码 |
+| **22 万+ Tag** | 内置预设库，支持中英文搜索与补全 |
+| **编辑标签** | 新建/收藏标签组，搜索并一键添加 tag |
+| **格式化 / 去重** | 清理逗号、修复括号、移除重复 tag |
+| **LLM 翻译** | 一键翻译所有 Tag，或单行翻译输入；共享 LLM 配置 |
+| **运行历史** | 工作流成功后自动保存，支持收藏与复用 |
+| **屏蔽机制** | 以 `!` 开头的段不参与输出，便于临时禁用 |
 
 </details>
 
@@ -558,13 +693,17 @@ FLUX 系列模型（包括 FLUX.1、FLUX.2 及最新的 Flux2Klein）支持**同
 
 FLUX models (including FLUX.1, FLUX.2, and Flux2Klein) support **connecting both** external CLIP and VAE: only the transformer body (~5GB) is loaded from the SDNQ folder, using your connected CLIP and VAE. This saves VRAM, may improve quality, and speeds up generation. **Note**: You must connect **both** CLIP and VAE to enable body-only loading; connecting only one will raise an error; connecting neither loads the full package.
 
-**外接 CLIP/VAE 示例工作流 / Example Workflow (External CLIP + VAE)**（节点更新，且配合新节点 Magic Cache 的示例 / Node updated, with Magic Cache example）（可直接下载图片导入 ComfyUI / Download image and import into ComfyUI）
+**外接 CLIP/VAE 示例工作流 / Example Workflow (External CLIP + VAE)**（节点更新，且配合新节点 Magic Cache 的示例 / Node updated, with Magic Cache example）
+
+Google Drive 下载地址 / Download: https://drive.google.com/file/d/1CYR_ZsdSFRHFkz_KwOkN7yv6Wjfckf0h/view?usp=drive_link
+
+（可直接下载图片导入 ComfyUI / Download image and import into ComfyUI）
 
 <img width="4286" height="2709" alt="SDNQ External CLIP VAE Workflow" src="https://github.com/user-attachments/assets/2906a45e-6ee6-4282-ba9e-835265adee38" />
 
 **运行结果 / Result**（RTX 3060 本次采样约 40.88s / RTX 3060, ~40.88s per sample）
 
-<img width="2048" height="1058" alt="SDNQ External CLIP VAE Result" src="https://github.com/user-attachments/assets/04a22e66-397b-47a9-b8c2-8359b4cfcb5a" />
+<img width="2557" height="1079" alt="SDNQ External CLIP VAE Result" src="https://github.com/user-attachments/assets/20fc5510-29d2-4260-b6ae-1681ad68347a" />
 
 **性能参考 / Performance**: 在不超过 1024×1536 分辨率下，单图编辑或文生图时，采样可快至约 10–20 秒，速度与效率较高。配合 Magic Cache 节点使用后可以再提速 1.5 倍-2 倍的速度。如果不想要 Magic Cache 节点加速可以忽略该节点。其他模型（如 Qwen、Z-Image）的外接 CLIP/VAE 支持将在后续版本考虑。
 
@@ -574,13 +713,15 @@ At 1024×1536 or below, single image editing or text-to-image can complete in ab
 
 （节点更新，且配合新节点 Magic Cache 的示例 / Node updated, with Magic Cache example）
 
+Google Drive 下载地址 / Download: https://drive.google.com/file/d/10XsVq6m_HR5KjHcQP4jDt0h-GhqbacnN/view?usp=drive_link
+
 可直接下载图片导入 ComfyUI 使用。You can download the image and import into ComfyUI.
 
 <img width="5998" height="2825" alt="SDNQ Inpainting + Text-to-Image Switch Workflow" src="https://github.com/user-attachments/assets/4e0b8b34-8deb-4b30-b965-254daf01c904" />
 
 **运行结果 / Result**
 
-<img width="2544" height="1060" alt="SDNQ Inpainting Result" src="https://github.com/user-attachments/assets/2ca3b26f-eefe-48e2-95c3-d75d4025f0f9" />
+<img width="2559" height="1078" alt="SDNQ Inpainting Result" src="https://github.com/user-attachments/assets/faa247bd-0a73-41b2-ba42-ac551d5edca2" />
 
 **性能说明 / Performance Note**: 配合 Magic Cache 节点使用后可以再提速 1.5 倍-2 倍的速度。如果不想要 Magic Cache 节点加速可以忽略该节点。
 

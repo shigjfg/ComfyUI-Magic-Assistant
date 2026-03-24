@@ -84,6 +84,9 @@ function showGalleryModal(node) {
     let isEditMode = false;
     let selectedFiles = new Set();
     let pinnedFiles = getPinnedFiles(); // 🌟 加载固定列表
+    // 过滤掉 clipspace 文件（历史遗留数据兼容）
+    pinnedFiles = new Set([...pinnedFiles].filter(f => !f.startsWith("clipspace/")));
+    savePinnedFiles(pinnedFiles);
 
     // --- DOM 结构 ---
     const modal = document.createElement("div");
@@ -259,12 +262,12 @@ function showGalleryModal(node) {
             clearCacheBtn.innerHTML = "🧹 清空缓存";
             clearCacheBtn.className = "mp-btn-warning";
             clearCacheBtn.onclick = async () => {
-                if (!confirm("确定要清空 clipspace 缓存吗？")) return;
+                if (!confirm("确定要清空 clipspace 和 pasted 缓存吗？")) return;
                 clearCacheBtn.textContent = "⏳...";
                 const res = await clearClipspaceAPI();
                 if (res.status === "success") {
-                    alert(`✅ 清理完成！`);
-                    fetchFileList(); 
+                    alert(`✅ 清理完成！\n\n🗂️ clipspace: ${res.clipspace_count} 张\n📋 pasted: ${res.pasted_count} 张\n📦 共计: ${res.total_count} 张`);
+                    fetchFileList();
                 }
                 clearCacheBtn.innerHTML = "🧹 清空缓存";
             };
@@ -336,7 +339,7 @@ function showGalleryModal(node) {
             card.appendChild(imgContainer);
 
             // 🌟 编辑模式下的按钮逻辑
-            if (isEditMode) {
+            if (isEditMode && !filename.startsWith("clipspace/")) {
                 // 1. 固定按钮 (Pin Button)
                 const pinBtn = document.createElement("button");
                 pinBtn.className = isPinned ? "mp-card-pin active" : "mp-card-pin";
@@ -348,26 +351,25 @@ function showGalleryModal(node) {
                         pinnedFiles.delete(filename);
                     } else {
                         pinnedFiles.add(filename);
-                        // 如果固定时它正被选中，取消选中
                         selectedFiles.delete(filename);
                     }
-                    savePinnedFiles(pinnedFiles); // 保存状态
-                    renderAll(); // 刷新界面
+                    savePinnedFiles(pinnedFiles);
+                    renderAll();
                 };
                 card.appendChild(pinBtn);
 
-                // 2. 删除按钮 (Delete Button) - 仅在未固定时显示
+                // 2. 删除按钮 (Delete Button)
                 if (!isPinned) {
                     const delBtn = document.createElement("button");
                     delBtn.className = "mp-card-del";
                     delBtn.innerHTML = "×";
                     delBtn.onclick = async (e) => {
-                        e.stopPropagation(); 
+                        e.stopPropagation();
                         if (!confirm(`确定删除 ${filename} 吗？`)) return;
                         if (await deleteFileAPI(filename)) {
                             fileList = fileList.filter(f => f !== filename);
                             selectedFiles.delete(filename);
-                            renderAll(); 
+                            renderAll();
                         }
                     };
                     card.appendChild(delBtn);
@@ -493,7 +495,7 @@ function showPhotopeaModal(node) {
     // Header
     const header = document.createElement("div");
     header.style.cssText = "height: 36px; background: #2d2d2d; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid #333; user-select: none; flex-shrink: 0;";
-    header.innerHTML = `<div><b>🎨 Magic Photopea Studio</b> <span style="font-size:11px;color:#888;">(v4.3 Pin)</span></div>`;
+    header.innerHTML = `<div><b>🎨 Magic Photopea Studio</b> <span style="font-size:11px;color:#888;">(v4.4 PasteClean)</span></div>`;
     
     const btnGroup = document.createElement("div"); btnGroup.style.display = "flex"; btnGroup.style.gap = "8px";
     const btnStyle = "background:none; border:none; color:#bbb; font-size:14px; cursor:pointer; padding:4px 8px; border-radius:4px;";

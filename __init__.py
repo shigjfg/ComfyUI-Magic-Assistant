@@ -1,3 +1,8 @@
+# 屏蔽 kornia 的可选依赖提示（必须在任何导入之前设置）
+import os
+os.environ["KORNIA_INSTALLATION_MODE"] = "skip"
+os.environ["KORNIA_AUTOINSTALL"] = "0"
+
 from .utils import BASE_DIR
 from .nodes.magic_prompt import MagicPromptReplace
 from .nodes.magic_resize import MagicResolutionResize
@@ -24,7 +29,7 @@ NODE_CLASS_MAPPINGS = {
     "MagicResolution": MagicResolution,
     "MagicSDNQLoader": MagicSDNQLoader,
     "MagicSDNQSampler": MagicSDNQSampler,
-    "MagicCache": MagicCache
+    "MagicCache": MagicCache,
 }
 
 # --- 节点显示名称 ---
@@ -40,13 +45,13 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicResolution": "📐 分辨率输出器 Magic Resolution Output",
     "MagicSDNQLoader": "📦 SDNQ模型加载器 Magic SDNQ Model Loader",
     "MagicSDNQSampler": "🎲 SDNQ K采样器 Magic SDNQ K Sampler",
-    "MagicCache": "⚡ Magic Cache 缓存加速 (TeaCache + FBCache)"
+    "MagicCache": "⚡ Magic Cache 缓存加速 (TeaCache + FBCache)",
 }
 
 # --- 指定 Web 目录 ---
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.2.4 - SDNQ Model Loader)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.2.5)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")

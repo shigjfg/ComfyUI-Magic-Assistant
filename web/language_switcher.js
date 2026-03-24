@@ -589,6 +589,312 @@ const cacheTranslations = {
     "🚀 Both 模式（组合）": { zh: "🚀 Both 模式（组合）", en: "🚀 Both Mode (Combined)" }
 };
 
+// 节点翻译映射表 - Magic Prompt Box (提示词编辑器)
+const magicPromptBoxTranslations = {
+    // 主编辑按钮
+    "✏️ 编辑提示词": { zh: "✏️ 编辑提示词", en: "✏️ Edit Prompt" },
+    "🔮 Magic 提示词编辑器": { zh: "🔮 Magic 提示词编辑器", en: "🔮 Magic Prompt Editor" },
+    "✕ 关闭编辑器": { zh: "✕ 关闭编辑器", en: "✕ Close Editor" },
+
+    // Tab标签
+    "✒️ 编辑": { zh: "✒️ 编辑", en: "✒️ Edit" },
+    "📜 历史": { zh: "📜 历史", en: "📜 History" },
+    "⚙️ 设置": { zh: "⚙️ 设置", en: "⚙️ Settings" },
+
+    // 编辑工具栏按钮
+    "💫 格式化": { zh: "💫 格式化", en: "💫 Format" },
+    "🔄 去重": { zh: "🔄 去重", en: "🔄 Dedup" },
+    "🗑️ 清空全部": { zh: "🗑️ 清空全部", en: "🗑️ Clear All" },
+    "🚫 清空屏蔽": { zh: "🚫 清空屏蔽", en: "🚫 Clear Disabled" },
+    "删除所有以 ! 屏蔽的 tag（保留未屏蔽内容）": { zh: "删除所有以 ! 屏蔽的 tag（保留未屏蔽内容）", en: "Remove all !-disabled tags (keep enabled content)" },
+    "📋 复制": { zh: "📋 复制", en: "📋 Copy" },
+    "🏷️ 编辑标签": { zh: "🏷️ 编辑标签", en: "🏷️ Edit Tags" },
+    "🌐 一键翻译所有Tag": { zh: "🌐 一键翻译所有Tag", en: "🌐 Translate All Tags" },
+    "打开标签编辑窗口": { zh: "打开标签编辑窗口", en: "Open tag edit window" },
+    "与「批量译 tag」不同：短并列概念可译成逗号分隔的英文 tag；完整长句译成一整句自然英文（少用逗号以免被拆成多个芯片）。插入后仅在与原文分段对齐或整句单段时写入翻译缓存。": { zh: "与「批量译 tag」不同：短并列概念可译成逗号分隔的英文 tag；完整长句译成一整句自然英文（少用逗号以免被拆成多个芯片）。插入后仅在与原文分段对齐或整句单段时写入翻译缓存。", en: "Unlike batch translate: short concepts → comma-separated tags; long sentences → one natural English sentence (fewer commas = fewer chips). Translation cache written only when aligned with source segments." },
+    "找出词库未命中中文的芯片（A/文 为 —），一次性打包请求 LLM；也可点芯片左下角「A/文」按钮单条排队翻译（设置 → 翻译 中选模型）": { zh: "找出词库未命中中文的芯片（A/文 为 —），一次性打包请求 LLM；也可点芯片左下角「A/文」按钮单条排队翻译（设置 → 翻译 中选模型）", en: "Find chips without Chinese (A/CN shows —), batch request LLM; or click A/CN on each chip to queue single translations (select model in Settings → Translation)" },
+
+    // 编辑提示
+    "输入任意语言，Enter：短词→tag，长句→一句自然英文": { zh: "输入任意语言，Enter：短词→tag，长句→一句自然英文", en: "Enter any language, Enter: short phrases→tag, long sentences→natural English" },
+
+    // Tag预览区
+    "Tag 预览": { zh: "Tag 预览", en: "Tag Preview" },
+    " · 主框有内容才显示 · ↵ 换行芯片 · 单击：编辑 tag · 双击：屏蔽 · 空白拖拽：框选多选 · 点击空白：取消选中 · 编辑时不可拖 · 悬停：权重/括号 · 框选后可整组拖拽（蓝线示左右落点）": { zh: " · 主框有内容才显示 · ↵ 换行芯片 · 单击：编辑 tag · 双击：屏蔽 · 空白拖拽：框选多选 · 点击空白：取消选中 · 编辑时不可拖 · 悬停：权重/括号 · 框选后可整组拖拽（蓝线示左右落点）", en: " · Shows when main box has content · ↵ Newline chip · Click: edit tag · Double-click: disable · Drag blank: multi-select · Click blank: clear selection · No drag while editing · Hover: weight/brackets · Drag selected group (blue line shows drop position)" },
+    "解析结果为空": { zh: "解析结果为空", en: "No tags to parse" },
+    "字符数: ": { zh: "字符数: ", en: "Chars: " },
+    "Tag: ": { zh: "Tag: ", en: "Tag: " },
+    "（启用 ": { zh: "（启用 ", en: "(Active " },
+    "）": { zh: "）", en: ")" },
+    " · 换行 ": { zh: " · 换行 ", en: " · Newline " },
+
+    // Tag悬浮工具栏
+    "权重": { zh: "权重", en: "Weight" },
+    "收藏": { zh: "收藏", en: "Favorite" },
+    "收藏 / 取消收藏（与「编辑标签」中收藏区同步）": { zh: "收藏 / 取消收藏（与「编辑标签」中收藏区同步）", en: "Add/Remove favorite (syncs with favorites in Edit Tags)" },
+    "圆括号（WebUI 加权常用）": { zh: "圆括号（WebUI 加权常用）", en: "Parentheses (common for weighting in WebUI)" },
+    "方括号": { zh: "方括号", en: "Square brackets" },
+    "花括号": { zh: "花括号", en: "Curly brackets" },
+    "外包一层 ": { zh: "外包一层 ", en: "Wrap with " },
+    "去掉最外层 ": { zh: "去掉最外层 ", en: "Remove outer " },
+    "换行": { zh: "换行", en: "Newline" },
+    "在此 Tag 后换行（下一段用换行与当前段分开）": { zh: "在此 Tag 后换行（下一段用换行与当前段分开）", en: "Insert newline after this tag (next segment separated by newline)" },
+
+    // Tag悬浮提示
+    "Tag 权重（改后失焦或按回车生效；1 可去掉权重标记，参考 WeiLin）": { zh: "Tag 权重（改后失焦或按回车生效；1 可去掉权重标记，参考 WeiLin）", en: "Tag weight (takes effect on blur or Enter; 1 removes weight marker, ref WeiLin)" },
+    "删除": { zh: "删除", en: "Delete" },
+    "无法解析为有效 tag": { zh: "无法解析为有效 tag", en: "Cannot parse as valid tag" },
+    "A/文": { zh: "A/文", en: "A/CN" },
+    "单独补全/刷新此 tag 的中文：默认先查 LLM 磁盘缓存（省 token）；在「设置 → 翻译」选「强制翻译」时才会无视缓存重请求。按点击顺序排队。": { zh: "单独补全/刷新此 tag 的中文：默认先查 LLM 磁盘缓存（省 token）；在「设置 → 翻译」选「强制翻译」时才会无视缓存重请求。按点击顺序排队。", en: "Add/refresh Chinese for this tag: defaults to LLM disk cache (saves tokens); only ignores cache with 'Force Translate' in Settings. Queued in order of clicks." },
+
+    // 换行芯片
+    "换行（可删除；无权重条）": { zh: "换行（可删除；无权重条）", en: "Newline (can delete; no weight bar)" },
+    "删除此换行": { zh: "删除此换行", en: "Delete this newline" },
+
+    // 选中弹窗
+    "选中 0 个标签": { zh: "选中 0 个标签", en: "0 tags selected" },
+    "选中 ": { zh: "选中 ", en: "" },
+    " 个标签": { zh: " 个标签", en: " tags selected" },
+    "一键复制": { zh: "一键复制", en: "Copy All" },
+    "一键屏蔽（!）": { zh: "一键屏蔽（!）", en: "Disable All (!)" },
+    "一键启用": { zh: "一键启用", en: "Enable All" },
+    "一键删除": { zh: "一键删除", en: "Delete All" },
+
+    // Toast消息
+    "✅ 已复制到剪贴板": { zh: "✅ 已复制到剪贴板", en: "✅ Copied to clipboard" },
+    "❌ 复制失败（请检查浏览器权限）": { zh: "❌ 复制失败（请检查浏览器权限）", en: "❌ Copy failed (check browser permissions)" },
+    "已排队 ": { zh: "已排队 ", en: "Queued " },
+    " 条（按顺序翻译）": { zh: " 条（按顺序翻译）", en: " items (translating in order)" },
+    "✅ 已命中 LLM 缓存（未请求 API）": { zh: "✅ 已命中 LLM 缓存（未请求 API）", en: "✅ LLM cache hit (no API request)" },
+    "❌ ": { zh: "❌ ", en: "❌ " },
+    "✅ 已插入（": { zh: "✅ 已插入（", en: "✅ Inserted (" },
+    "）· 已写入翻译缓存 ": { zh: "）· 已写入翻译缓存 ", en: ") · Translation cache written " },
+    " 条": { zh: " 条", en: " items" },
+    "✅ 词库已覆盖，无需 AI 翻译": { zh: "✅ 词库已覆盖，无需 AI 翻译", en: "✅ Lexicon covered, no AI translation needed" },
+    "当前没有可送 LLM 的 tag": { zh: "当前没有可送 LLM 的 tag", en: "No tags to send to LLM" },
+    "翻译 ": { zh: "翻译 ", en: "Translating " },
+    " 条…": { zh: " 条…", en: " items..." },
+    "✅ 已更新 ": { zh: "✅ 已更新 ", en: "✅ Updated " },
+    " 条中文": { zh: " 条中文", en: " Chinese translations" },
+    "【强制翻译】本次 LLM ": { zh: "【强制翻译】本次 LLM ", en: "[Force Translate] LLM " },
+    " 条": { zh: " 条", en: " items" },
+    "（其中 ": { zh: "（其中 ", en: "(of which " },
+    " 条命中 LLM 缓存，已覆盖）": { zh: " 条命中 LLM 缓存，已覆盖）", en: " items hit LLM cache, overwritten)" },
+    " | LLM 缓存命中 ": { zh: " | LLM 缓存命中 ", en: " | LLM cache hits " },
+    " 条（跳过 API）": { zh: " 条（跳过 API）", en: " items (API skipped)" },
+    " | 缓存累计 ": { zh: " | 缓存累计 ", en: " | Cache total " },
+    "/": { zh: "/", en: "/" },
+    "✅ 已自动保存": { zh: "✅ 已自动保存", en: "✅ Auto-saved" },
+    "自动保存失败：": { zh: "自动保存失败：", en: "Auto-save failed: " },
+
+    // 格式化按钮状态
+    "⏳ 格式化中…": { zh: "⏳ 格式化中…", en: "⏳ Formatting..." },
+    "✅ 已完成": { zh: "✅ 已完成", en: "✅ Done" },
+    "✅ 已复制!": { zh: "✅ 已复制!", en: "✅ Copied!" },
+    "格式化失败：请确认已重启 ComfyUI，且扩展已加载。": { zh: "格式化失败：请确认已重启 ComfyUI，且扩展已加载。", en: "Format failed: Make sure to restart ComfyUI and the extension is loaded." },
+
+    // 编辑提示
+    "💡 提示：输入提示词，用英文逗号 ": { zh: "💡 提示：输入提示词，用英文逗号 ", en: "💡 Hint: Enter prompts, separate with comma " },
+    " 或换行分隔。": { zh: " 或换行分隔。", en: " or newline." },
+    "主框为空（无换行、无有效字符）时下方 Tag 区会隐藏；换行在预览里显示为 ": { zh: "主框为空（无换行、无有效字符）时下方 Tag 区会隐藏；换行在预览里显示为 ", en: "Tag area hides when main box is empty (no newline/valid chars); newlines show as " },
+    " 芯片。": { zh: " 芯片。", en: " chips." },
+    "↵ 芯片": { zh: "↵ 芯片", en: "↵ chip" },
+    " 写入，节点编码时": { zh: " 写入，节点编码时", en: " written, during node encoding" },
+    "会忽略输出这些tag到final_text与conditioning。": { zh: "会忽略输出这些tag到final_text与conditioning。", en: "will ignore outputting these tags to final_text and conditioning." },
+
+    // 补全面板
+    "英文 tag": { zh: "英文 tag", en: "English tag" },
+    "中文": { zh: "中文", en: "Chinese" },
+    "关闭补全": { zh: "关闭补全", en: "Close autocomplete" },
+    "单次最多 ": { zh: "单次最多 ", en: "Max " },
+    " 条 · 自建标签组优先 · 词太短时预设结果多，可打全名缩小范围": { zh: " 条 · 自建标签组优先 · 词太短时预设结果多，可打全名缩小范围", en: " items · Custom tagsets prioritized · Short queries return many results, type full name to narrow" },
+    "没有找到包含 \"": { zh: "没有找到包含 \"", en: "No results for \"" },
+    "\" 的 tag": { zh: "\" 的 tag", en: "\"" },
+    "已显示 ": { zh: "已显示 ", en: "Showing " },
+    " 条（已达上限），可能还有更多 · 自建标签已优先 · 请输入更长关键词或至编辑标签处搜索": { zh: " 条（已达上限），可能还有更多 · 自建标签已优先 · 请输入更长关键词或至编辑标签处搜索", en: " items (at limit), more may exist · Custom tagsets prioritized · Try longer keywords or search in Edit Tags" },
+    "用户": { zh: "用户", en: "User" },
+    "标签组「": { zh: "标签组「", en: "Tagset \"" },
+    "」· 添加为整段": { zh: "」· 添加为整段", en: "\"\n· Add as full segment" },
+    "来自「": { zh: "来自「", en: "From \"" },
+    "」": { zh: "」", en: "\"" },
+
+    // 编辑标签弹窗
+    "🏷️ 编辑标签": { zh: "🏷️ 编辑标签", en: "🏷️ Edit Tags" },
+    "关闭": { zh: "关闭", en: "Close" },
+    "➕ 新建标签组": { zh: "➕ 新建标签组", en: "➕ New Tagset" },
+    "中文名称": { zh: "中文名称", en: "Chinese Name" },
+    "可选，如：我的画质组": { zh: "可选，如：我的画质组", en: "Optional, e.g.: My Quality Group" },
+    "英文 tag 组合（逗号分隔，可多枚）": { zh: "英文 tag 组合（逗号分隔，可多枚）", en: "English tag combo (comma-separated, multiple allowed)" },
+    "如：masterpiece, best quality, absurdres": { zh: "如：masterpiece, best quality, absurdres", en: "e.g.: masterpiece, best quality, absurdres" },
+    "保存到本地": { zh: "保存到本地", en: "Save to local" },
+    "保存修改": { zh: "保存修改", en: "Save changes" },
+    "取消": { zh: "取消", en: "Cancel" },
+    "➖ 收起新建表单": { zh: "➖ 收起新建表单", en: "➖ Collapse form" },
+    "新建标签": { zh: "新建标签", en: "New Tags" },
+    "收藏的标签": { zh: "收藏的标签", en: "Favorite Tags" },
+    "暂无标签，后续可在此管理。": { zh: "暂无标签，后续可在此管理。", en: "No tags yet, manage them here later." },
+    " 组": { zh: " 组", en: " groups" },
+    "点击卡片（除右上角按钮）将英文 tag 整组插入到主编辑区（不关闭本窗口）": { zh: "点击卡片（除右上角按钮）将英文 tag 整组插入到主编辑区（不关闭本窗口）", en: "Click card (except top-right button) to insert all English tags into editor (window stays open)" },
+    "未命名": { zh: "未命名", en: "Unnamed" },
+    "修改中文名与英文 tag 组合": { zh: "修改中文名与英文 tag 组合", en: "Edit Chinese name and English tag combo" },
+    "删除此标签组": { zh: "删除此标签组", en: "Delete this tagset" },
+    "确定删除标签组「": { zh: "确定删除标签组「", en: "Confirm delete tagset \"" },
+    "」？\n删除后不可恢复。": { zh: "」？\n删除后不可恢复。", en: "\"?\nCannot be undone." },
+    "删除失败。请检查 userdata 是否可写或是否已重启 ComfyUI。": { zh: "删除失败。请检查 userdata 是否可写或是否已重启 ComfyUI。", en: "Delete failed. Check if userdata is writable or restart ComfyUI." },
+    "从收藏中删除": { zh: "从收藏中删除", en: "Remove from favorites" },
+    "收藏": { zh: "收藏", en: "Favorite" },
+    "确定从收藏中删除「": { zh: "确定从收藏中删除「", en: "Confirm remove from favorites \"" },
+    "」？": { zh: "」？", en: "\"" },
+    "请填写英文 tag 组合。": { zh: "请填写英文 tag 组合。", en: "Please fill in English tag combo." },
+    "保存失败。请检查：1) 已重启 ComfyUI；2) 插件目录下 userdata 可写；3) 浏览器 Network 里 POST /ma/tag_sets 的状态码。": { zh: "保存失败。请检查：1) 已重启 ComfyUI；2) 插件目录下 userdata 可写；3) 浏览器 Network 里 POST /ma/tag_sets 的状态码。", en: "Save failed. Check: 1) ComfyUI restarted; 2) userdata writable; 3) POST /ma/tag_sets status in browser Network." },
+
+    // 标签搜索
+    "标签搜索": { zh: "标签搜索", en: "Tag Search" },
+    "输入英文 tag 或中文关键词…": { zh: "输入英文 tag 或中文关键词…", en: "Enter English tag or Chinese keyword..." },
+    "搜索": { zh: "搜索", en: "Search" },
+    "Tag": { zh: "Tag", en: "Tag" },
+    "中文": { zh: "中文", en: "Chinese" },
+    "操作": { zh: "操作", en: "Actions" },
+    "匹配方式与提示词补全相同：英文 ": { zh: "匹配方式与提示词补全相同：英文 ", en: "Match mode same as autocomplete: English " },
+    "（不区分大小写），中文 ": { zh: "（不区分大小写），中文 ", en: " (case-insensitive), Chinese " },
+    "。": { zh: "。", en: "." },
+    "显示全部": { zh: "显示全部", en: "Show all" },
+    "包含": { zh: "包含", en: "contains" },
+    "匹配结果（无条数上限）；自建标签组优先列出。关键词过短时结果可能很多，建议打全名缩小范围。": { zh: "匹配结果（无条数上限）；自建标签组优先列出。关键词过短时结果可能很多，建议打全名缩小范围。", en: " matches (no limit); custom tagsets prioritized. Short keywords return many results, type full name to narrow." },
+    "无结果，请更换关键词。": { zh: "无结果，请更换关键词。", en: "No results, try different keywords." },
+    "添加": { zh: "添加", en: "Add" },
+    "搜索中…": { zh: "搜索中…", en: "Searching..." },
+    "请输入关键词后点击搜索。": { zh: "请输入关键词后点击搜索。", en: "Enter keywords then click Search." },
+    "搜索失败，请稍后重试。": { zh: "搜索失败，请稍后重试。", en: "Search failed, try again later." },
+
+    // 历史记录
+    "📜 工作流": { zh: "📜 工作流", en: "📜 Workflow" },
+    "完整执行成功": { zh: "完整执行成功", en: "completed successfully" },
+    "后，会将画布上所有「多功能提示词框」的文本写入本地；写入前与已有记录": { zh: "后，会将画布上所有「多功能提示词框」的文本写入本地；写入前与已有记录", en: "after completion, will write all 'Magic Prompt Box' texts on canvas to local; dedupes by content against existing records" },
+    "按内容去重": { zh: "按内容去重", en: "deduplicates by content" },
+    "。": { zh: "。", en: "." },
+    "📋 运行历史": { zh: "📋 运行历史", en: "📋 Run History" },
+    "⭐ 历史收藏": { zh: "⭐ 历史收藏", en: "⭐ Favorites" },
+    "追加到当前提示词末尾": { zh: "追加到当前提示词末尾", en: "Append to current prompt end" },
+    "点击正文区域：追加到当前提示词末尾": { zh: "点击正文区域：追加到当前提示词末尾", en: "Click content area: append to current prompt end" },
+    "标签组「": { zh: "标签组「", en: "Tagset \"" },
+    "」· 点击插入整段英文": { zh: "」· 点击插入整段英文", en: "\" · Click to insert full segment" },
+    "自定义": { zh: "自定义", en: "Custom" },
+    "追加到当前提示词": { zh: "追加到当前提示词", en: "Append to current prompt" },
+    "覆盖写入（替换编辑器全文）": { zh: "覆盖写入（替换编辑器全文）", en: "Overwrite (replace all editor content)" },
+    "覆盖写入": { zh: "覆盖写入", en: "Overwrite" },
+    "加入历史收藏（可命名）": { zh: "加入历史收藏（可命名）", en: "Add to favorites (can name)" },
+    "收藏名称": { zh: "收藏名称", en: "Favorite name" },
+    "从运行历史中删除": { zh: "从运行历史中删除", en: "Delete from run history" },
+    "编辑名称与 tag 正文": { zh: "编辑名称与 tag 正文", en: "Edit name and tag content" },
+    "删除收藏": { zh: "删除收藏", en: "Delete favorite" },
+    "确定用本条覆盖当前编辑器中的全部提示词？": { zh: "确定用本条覆盖当前编辑器中的全部提示词？", en: "Confirm overwriting all editor content with this item?" },
+    "从运行历史中删除此项？": { zh: "从运行历史中删除此项？", en: "Delete this item from run history?" },
+    "确定覆盖当前编辑器？": { zh: "确定覆盖当前编辑器？", en: "Confirm overwriting current editor?" },
+    "删除这条收藏？": { zh: "删除这条收藏？", en: "Delete this favorite?" },
+    "加载中…": { zh: "加载中…", en: "Loading..." },
+    "加载失败，请确认已重启 ComfyUI。": { zh: "加载失败，请确认已重启 ComfyUI。", en: "Load failed, make sure to restart ComfyUI." },
+    "暂无记录。成功跑完一次工作流后，会自动保存画布上各提示词框内容。": { zh: "暂无记录。成功跑完一次工作流后，会自动保存画布上各提示词框内容。", en: "No records yet. After a successful workflow run, all prompt box contents on canvas will be auto-saved." },
+    "当前最多保留 ": { zh: "当前最多保留 ", en: "Currently keeping max " },
+    " 条（超出丢弃最旧；可在「设置」修改并立即裁剪）。": { zh: " 条（超出丢弃最旧；可在「设置」修改并立即裁剪）。", en: " items (oldest dropped when exceeded; modify in Settings to cut immediately)." },
+    "暂无收藏。在「运行历史」左侧点击 ☆ 可加入此处，并可命名、编辑正文。": { zh: "暂无收藏。在「运行历史」左侧点击 ☆ 可加入此处，并可命名、编辑正文。", en: "No favorites yet. Click ☆ on the left in Run History to add here, can name and edit content." },
+    "正文不能为空。": { zh: "正文不能为空。", en: "Content cannot be empty." },
+
+    // 收藏编辑器
+    "✎ 编辑收藏": { zh: "✎ 编辑收藏", en: "✎ Edit Favorite" },
+    "名称": { zh: "名称", en: "Name" },
+    "英文 tag（逗号或换行分隔）": { zh: "英文 tag（逗号或换行分隔）", en: "English tags (comma or newline separated)" },
+    "未命名收藏": { zh: "未命名收藏", en: "Unnamed Favorite" },
+    "保存": { zh: "保存", en: "Save" },
+
+    // 时间格式化
+    "刚刚": { zh: "刚刚", en: "Just now" },
+    " 分钟前": { zh: " 分钟前", en: " min ago" },
+    " 小时前": { zh: " 小时前", en: " hr ago" },
+    " 天前": { zh: " 天前", en: " days ago" },
+
+    // 设置 Tab
+    "以下选项写入 userdata/settings.txt（与弹窗尺寸等共用）。修改任意项后会自动保存；返回「编辑」Tab 可看到工具栏等变化。": { zh: "以下选项写入 userdata/settings.txt（与弹窗尺寸等共用）。修改任意项后会自动保存；返回「编辑」Tab 可看到工具栏等变化。", en: "Options written to userdata/settings.txt (shared with dialog size etc). Auto-saves on any change; return to Edit Tab to see toolbar changes." },
+
+    // 设置项标题
+    "1 · 编辑界面显示设置": { zh: "1 · 编辑界面显示设置", en: "1 · Editor Display Settings" },
+    "控制「编辑」Tab 顶部工具栏：默认全部显示，关闭后对应按钮或输入框将隐藏。": { zh: "控制「编辑」Tab 顶部工具栏：默认全部显示，关闭后对应按钮或输入框将隐藏。", en: "Controls Edit Tab top toolbar: all shown by default, hidden when toggled off." },
+    "单行翻译输入框（按 Enter）": { zh: "单行翻译输入框（按 Enter）", en: "Single-line translate input (Press Enter)" },
+
+    // 格式化设置
+    "2 · 格式化详细设置": { zh: "2 · 格式化详细设置", en: "2 · Format Detailed Settings" },
+    "对应「编辑」Tab 的 💫 格式化按钮；调用后端 /ma/format_prompt。各选项独立生效，勾哪个跑哪个。「清理逗号」「修复括号」始终独立执行；高级步骤（下划线/权重/括号转义）按勾选各自处理；全部高级子项关闭时后端直接返回原文本。": { zh: "对应「编辑」Tab 的 💫 格式化按钮；调用后端 /ma/format_prompt。各选项独立生效，勾哪个跑哪个。「清理逗号」「修复括号」始终独立执行；高级步骤（下划线/权重/括号转义）按勾选各自处理；全部高级子项关闭时后端直接返回原文本。", en: "Corresponds to Edit Tab 💫 Format button; calls backend /ma/format_prompt. Each option runs independently. 'Cleanup commas' and 'Fix brackets' always run; advanced steps (underscore/weight/bracket escaping) run per selection; all advanced off = backend returns original." },
+    "选项来自 ": { zh: "选项来自 ", en: "Options from " },
+    " 的 ": { zh: " 的 ", en: "'s " },
+    "。修改后自动写入；返回「编辑」再点格式化即生效。": { zh: "。修改后自动写入；返回「编辑」再点格式化即生效。", en: ". Auto-written on change; return to Edit and click Format to apply." },
+    "清理逗号（cleanup_commas）": { zh: "清理逗号（cleanup_commas）", en: "Cleanup commas (cleanup_commas)" },
+    "删除首尾逗号、连续逗号": { zh: "删除首尾逗号、连续逗号", en: "Remove leading/trailing/duplicate commas" },
+    "清理空白（cleanup_whitespace）": { zh: "清理空白（cleanup_whitespace）", en: "Cleanup whitespace (cleanup_whitespace)" },
+    "首尾空白、重复空格、逗号旁多余空格": { zh: "首尾空白、重复空格、逗号旁多余空格", en: "Leading/trailing spaces, duplicate spaces, extra spaces around commas" },
+    "移除 LoRA 标签（remove_lora_tags）": { zh: "移除 LoRA 标签（remove_lora_tags）", en: "Remove LoRA tags (remove_lora_tags)" },
+    "删除 &lt;lora:…&gt;": { zh: "删除 &lt;lora:…&gt;", en: "Delete &lt;lora:…&gt;" },
+    "下划线转空格（underscore_to_space）": { zh: "下划线转空格（underscore_to_space）", en: "Underscore to space (underscore_to_space)" },
+    "tag_name → tag name": { zh: "tag_name → tag name", en: "tag_name → tag name" },
+    "权重语法补全（complete_weight_syntax）": { zh: "权重语法补全（complete_weight_syntax）", en: "Weight syntax completion (complete_weight_syntax)" },
+    "如 tag:1.2 → (tag:1.2)": { zh: "如 tag:1.2 → (tag:1.2)", en: "e.g. tag:1.2 → (tag:1.2)" },
+    "智能括号转义（smart_bracket_escaping）": { zh: "智能括号转义（smart_bracket_escaping）", en: "Smart bracket escaping (smart_bracket_escaping)" },
+    "系列名括号 \\(\\) 与漏逗号分段处理": { zh: "系列名括号 \\(\\) 与漏逗号分段处理", en: "Series name brackets \\(\\) and missing comma segmentation" },
+    "标准化逗号（standardize_commas）": { zh: "标准化逗号（standardize_commas）", en: "Standardize commas (standardize_commas)" },
+    "英文逗号 + 空格连接各标签": { zh: "英文逗号 + 空格连接各标签", en: "Connect tags with English comma + space" },
+    "清理换行（cleanup_newlines）": { zh: "清理换行（cleanup_newlines）", en: "Cleanup newlines (cleanup_newlines)" },
+    "含 COUPLE / MASK 等多区域语法时，后端只会把换行替换为空格，不会替换为逗号，以免破坏结构。": { zh: "含 COUPLE / MASK 等多区域语法时，后端只会把换行替换为空格，不会替换为逗号，以免破坏结构。", en: "With COUPLE/MASK multi-zone syntax, backend replaces newlines with space only, not commas, to avoid breaking structure." },
+    "修复括号（fix_brackets）": { zh: "修复括号（fix_brackets）", en: "Fix brackets (fix_brackets)" },
+    "仅在未勾选任何高级子项时按原版逻辑执行；勾了高级子项时由智能格式化流程处理。": { zh: "仅在未勾选任何高级子项时按原版逻辑执行；勾了高级子项时由智能格式化流程处理。", en: "Only executes original logic when no advanced items checked; smart format handles when advanced items are checked." },
+
+    // 换行下拉选项
+    "否 — 保留换行": { zh: "否 — 保留换行", en: "No — Keep newlines" },
+    "空格 — \\n → 空格": { zh: "空格 — \\n → 空格", en: "Space — \\n → Space" },
+    "逗号 — \\n → \", \"": { zh: "逗号 — \\n → \", \"", en: "Comma — \\n → \", \"" },
+    "否": { zh: "否", en: "No" },
+    "圆括号 — 移除不配对的 ( )": { zh: "圆括号 — 移除不配对的 ( )", en: "Parentheses — Remove unpaired ( )" },
+    "方括号 — 移除不配对的 [ ]": { zh: "方括号 — 移除不配对的 [ ]", en: "Square brackets — Remove unpaired [ ]" },
+    "两者": { zh: "两者", en: "Both" },
+
+    // 翻译设置
+    "3 · 翻译功能设置": { zh: "3 · 翻译功能设置", en: "3 · Translation Settings" },
+    "选择翻译调用的 LLM 配置；「管理 LLM」与「多功能AI提示词替换」节点的配置中心写入同一文件 userdata/llm_settings.txt。": { zh: "选择翻译调用的 LLM 配置；「管理 LLM」与「多功能AI提示词替换」节点的配置中心写入同一文件 userdata/llm_settings.txt。", en: "Select LLM config for translation; 'Manage LLM' and 'Magic Prompt Replace' settings center write to same file userdata/llm_settings.txt." },
+    "当前翻译使用的配置名会写入 ": { zh: "当前翻译使用的配置名会写入 ", en: "Current translation config name will be written to " },
+    " 的 ": { zh: " 的 ", en: "'s " },
+    "；修改后即自动保存。LLM 的 Base URL / Key / Model 在「管理 LLM 配置」中编辑。": { zh: "；修改后即自动保存。LLM 的 Base URL / Key / Model 在「管理 LLM 配置」中编辑。", en: "; auto-saved on change. LLM Base URL/Key/Model edited in 'Manage LLM Config'." },
+    "翻译使用的 LLM 配置": { zh: "翻译使用的 LLM 配置", en: "LLM config for translation" },
+    "⚙️ 管理 LLM 配置…": { zh: "⚙️ 管理 LLM 配置…", en: "⚙️ Manage LLM Config..." },
+    "打开与「多功能AI提示词替换 → 配置中心 → LLM服务」相同的编辑界面": { zh: "打开与「多功能AI提示词替换 → 配置中心 → LLM服务」相同的编辑界面", en: "Open same editor as 'Magic Prompt Replace → Settings Center → LLM Service'" },
+    "（暂无 LLM 配置，请先点「管理 LLM」添加）": { zh: "（暂无 LLM 配置，请先点「管理 LLM」添加）", en: "(No LLM config yet, click 'Manage LLM' to add)" },
+    "（加载失败，请重启 ComfyUI）": { zh: "（加载失败，请重启 ComfyUI）", en: "(Load failed, restart ComfyUI)" },
+    "翻译模式（二选一）": { zh: "翻译模式（二选一）", en: "Translation mode (choose one)" },
+    "📖 正常翻译模式（默认）": { zh: "📖 正常翻译模式（默认）", en: "📖 Normal translation mode (default)" },
+    "仅翻译本地词库未命中的 tag，已命中词库的 chip 保留原样；LLM 缓存命中的 tag 也跳过 API，最省 token。结果 = 词库 + LLM 缓存。": { zh: "仅翻译本地词库未命中的 tag，已命中词库的 chip 保留原样；LLM 缓存命中的 tag 也跳过 API，最省 token。结果 = 词库 + LLM 缓存。", en: "Only translates tags not in local lexicon; chips hit in lexicon stay unchanged; tags hit in LLM cache skip API, most token-efficient. Result = Lexicon + LLM cache." },
+    "⚡ 强制翻译模式": { zh: "⚡ 强制翻译模式", en: "⚡ Force translate mode" },
+    "忽略本地词库命中状态，所有 tag 都送 LLM 重译（已在 LLM 缓存的 tag 也会被覆盖）。翻译结果 = LLM 返回，适用于词典/缓存质量不佳需要整体重翻的情况。": { zh: "忽略本地词库命中状态，所有 tag 都送 LLM 重译（已在 LLM 缓存的 tag 也会被覆盖）。翻译结果 = LLM 返回，适用于词典/缓存质量不佳需要整体重翻的情况。", en: "Ignores local lexicon hit status, all tags sent to LLM (even tags in LLM cache overwritten). Result = LLM output. Use when lexicon/cache quality is poor and full re-translate needed." },
+
+    // 其他设置
+    "4 · 补全与历史等其他设置": { zh: "4 · 补全与历史等其他设置", en: "4 · Autocomplete & History & Other Settings" },
+    "内联补全列表条数上限、运行历史保留条数。": { zh: "内联补全列表条数上限、运行历史保留条数。", en: "Inline autocomplete list limit, run history retention." },
+    "补全提示词显示条数": { zh: "补全提示词显示条数", en: "Autocomplete display count" },
+    "编辑框内输入时，下拉补全最多展示的 tag 条数（1～500）。需返回「编辑」Tab 后对新开补全生效。": { zh: "编辑框内输入时，下拉补全最多展示的 tag 条数（1～500）。需返回「编辑」Tab 后对新开补全生效。", en: "Max tag count shown in autocomplete dropdown when typing in editor (1~500). Return to Edit Tab for new autocomplete to take effect." },
+    "历史记录保留条数": { zh: "历史记录保留条数", en: "History retention count" },
+    "工作流成功结束后写入运行历史的上限；保存后立即按新值裁剪本地历史。": { zh: "工作流成功结束后写入运行历史的上限；保存后立即按新值裁剪本地历史。", en: "Run history upper limit after successful workflow; immediately trims local history to new value on save." },
+    "LLM 翻译缓存条数": { zh: "LLM 翻译缓存条数", en: "LLM translation cache count" },
+    "本地 LLM 翻译缓存最大条数（LRU，超出自动淘汰最旧的）。强制翻译模式下即使命中缓存也会全部重送 LLM（节省 token）。": { zh: "本地 LLM 翻译缓存最大条数（LRU，超出自动淘汰最旧的）。强制翻译模式下即使命中缓存也会全部重送 LLM（节省 token）。", en: "Max local LLM translation cache items (LRU, oldest evicted when exceeded). In force translate mode, all items resent to LLM even if cached (saves tokens)." },
+
+    // 拖动提示
+    "拖动缩放窗体": { zh: "拖动缩放窗体", en: "Drag to resize window" },
+
+    // 后端错误
+    "HTTP ": { zh: "HTTP ", en: "HTTP " },
+    "（请确认已重启 ComfyUI 且扩展已加载）": { zh: "（请确认已重启 ComfyUI 且扩展已加载）", en: "(Make sure to restart ComfyUI and extension is loaded)" },
+    "模型未返回有效英文": { zh: "模型未返回有效英文", en: "Model returned no valid English" },
+
+    // 其他通用
+    "—": { zh: "—", en: "—" },
+    "...": { zh: "...", en: "..." },
+    "未找到匹配的权重信息": { zh: "未找到匹配的权重信息", en: "No matching weight info found" }
+};
+
 // 所有翻译映射（按节点分类）
 const allTranslations = {
     "MagicPowerLoraLoader": loraLoaderTranslations,
@@ -599,7 +905,8 @@ const allTranslations = {
     "MagicPromptReplace": promptReplaceTranslations,
     "MagicSDNQLoader": sdnqTranslations,
     "MagicSDNQSampler": sdnqTranslations,
-    "MagicCache": cacheTranslations
+    "MagicCache": cacheTranslations,
+    "MagicPromptBox": magicPromptBoxTranslations
 };
 
 // 翻译缓存（避免重复查找）
@@ -1348,7 +1655,7 @@ const nodeTranslations = {
     // 节点10: Magic SDNQ K Sampler
     "MagicSDNQSampler": {
         zh: "🎲 SDNQ K采样器 Magic SDNQ K Sampler",
-        en: "🎲 SDNQ K Sampler"
+        en: "🎲 Magic SDNQ K Sampler"
     }
 };
 
@@ -1526,6 +1833,12 @@ function interceptAppendChild() {
                                     } else if (parentText.includes('Magic Cache') || parentText.includes('TeaCache') || parentText.includes('FBCache') ||
                                               parentText.includes('本节点新增支持') || parentText.includes('已修改源项目代码')) {
                                         detectedNodeType = "MagicCache";
+                                    } else if (parentText.includes('Magic 提示词编辑器') || parentText.includes('Magic Prompt Editor') ||
+                                              parentText.includes('编辑提示词') || parentText.includes('Tag 预览') || parentText.includes('Tag Preview') ||
+                                              parentText.includes('标签搜索') || parentText.includes('Tag Search') || parentText.includes('运行历史') ||
+                                              parentText.includes('历史收藏') || parentText.includes('格式化') || parentText.includes('去重') ||
+                                              parentText.includes('编辑标签') || parentText.includes('Edit Tags')) {
+                                        detectedNodeType = "MagicPromptBox";
                                     }
                                     
                                     Array.from(label.childNodes).forEach(node => {
@@ -1644,6 +1957,12 @@ function interceptAppendChild() {
                             } else if (parentText.includes('Magic Cache') || parentText.includes('TeaCache') || parentText.includes('FBCache') ||
                                       parentText.includes('本节点新增支持') || parentText.includes('已修改源项目代码')) {
                                 detectedNodeType = "MagicCache";
+                            } else if (parentText.includes('Magic 提示词编辑器') || parentText.includes('Magic Prompt Editor') ||
+                                      parentText.includes('编辑提示词') || parentText.includes('Tag 预览') || parentText.includes('Tag Preview') ||
+                                      parentText.includes('标签搜索') || parentText.includes('Tag Search') || parentText.includes('运行历史') ||
+                                      parentText.includes('历史收藏') || parentText.includes('格式化') || parentText.includes('去重') ||
+                                      parentText.includes('编辑标签') || parentText.includes('Edit Tags')) {
+                                detectedNodeType = "MagicPromptBox";
                             }
                             
                             // 跳过URL和路径
@@ -1746,6 +2065,12 @@ function setupTranslationInterceptor() {
                                 } else if (text.includes('Magic Cache') || text.includes('TeaCache') || text.includes('FBCache') ||
                                           text.includes('本节点新增支持') || text.includes('已修改源项目代码')) {
                                     nodeType = "MagicCache";
+                                } else if (text.includes('Magic 提示词编辑器') || text.includes('Magic Prompt Editor') ||
+                                          text.includes('编辑提示词') || text.includes('Tag 预览') || text.includes('Tag Preview') ||
+                                          text.includes('标签搜索') || text.includes('Tag Search') || text.includes('运行历史') ||
+                                          text.includes('历史收藏') || text.includes('格式化') || text.includes('去重') ||
+                                          text.includes('编辑标签') || text.includes('Edit Tags')) {
+                                    nodeType = "MagicPromptBox";
                                 }
                                 
                                 if (target.textContent) {
@@ -1855,7 +2180,13 @@ function isLoraNodeElement(element) {
             // SDNQ 相关
             'SDNQ', 'SDNQ K Sampler', 'SDNQ K采样器', 'SDNQ模型', 'SDNQ采样', '降噪', '预览方式', '采样模式', 'Magic SDNQ', '正面条件', '负面条件',
             // Cache 相关
-            'Magic Cache', 'TeaCache', 'FBCache', '本节点新增支持', '已修改源项目代码', 'flux2klein', '最新 Anima 模型', 'SDXL 模型', '原项目不支持'
+            'Magic Cache', 'TeaCache', 'FBCache', '本节点新增支持', '已修改源项目代码', 'flux2klein', '最新 Anima 模型', 'SDXL 模型', '原项目不支持',
+            // MagicPromptBox 相关
+            'Magic 提示词编辑器', 'Magic Prompt Editor', '编辑提示词', 'Edit Prompt', 'Tag 预览', 'Tag Preview',
+            '标签搜索', 'Tag Search', '编辑标签', 'Edit Tags', '运行历史', 'Run History',
+            '历史收藏', 'Favorites', '格式化', 'Format', '去重', 'Dedup',
+            '一键翻译', 'Translate All', '翻译所有Tag', 'Translate Tags',
+            '提示词', 'Prompt'
         ];
         return keywords.some(keyword => text.includes(keyword));
     };
@@ -1914,6 +2245,14 @@ function translateElementRecursive(element, lang, nodeType = null) {
             } else if (text.includes('Magic Cache') || text.includes('TeaCache') || text.includes('FBCache') ||
                       text.includes('本节点新增支持') || text.includes('已修改源项目代码')) {
                 nodeType = "MagicCache";
+            } else if (text.includes('Magic 提示词编辑器') || text.includes('Magic Prompt Editor') ||
+                      text.includes('编辑提示词') || text.includes('Tag 预览') || text.includes('Tag Preview') ||
+                      text.includes('标签搜索') || text.includes('Tag Search') || text.includes('运行历史') ||
+                      text.includes('Run History') || text.includes('历史收藏') || text.includes('Favorites') ||
+                      text.includes('格式化') || text.includes('Format') || text.includes('去重') ||
+                      text.includes('一键翻译') || text.includes('Translate All') || text.includes('翻译所有') ||
+                      text.includes('编辑标签') || text.includes('Edit Tags')) {
+                nodeType = "MagicPromptBox";
             } else {
                 // 默认是LoRA节点
                 nodeType = "MagicPowerLoraLoader";
@@ -2415,6 +2754,12 @@ function translateElementRecursive(element, lang, nodeType = null) {
                                           parentText.includes('LLM服务') || parentText.includes('LLM Service') ||
                                           parentText.includes('Magic Prompt') || parentText.includes('Magic Assistant')) {
                                     detectedNodeType = "MagicPromptReplace";
+                                } else if (parentText.includes('Magic 提示词编辑器') || parentText.includes('Magic Prompt Editor') ||
+                                          parentText.includes('编辑提示词') || parentText.includes('Tag 预览') || parentText.includes('Tag Preview') ||
+                                          parentText.includes('标签搜索') || parentText.includes('Tag Search') || parentText.includes('运行历史') ||
+                                          parentText.includes('历史收藏') || parentText.includes('格式化') || parentText.includes('去重') ||
+                                          parentText.includes('编辑标签') || parentText.includes('Edit Tags')) {
+                                    detectedNodeType = "MagicPromptBox";
                                 }
                             }
                             
@@ -2502,6 +2847,12 @@ function translateElementRecursive(element, lang, nodeType = null) {
                                           parentText.includes('LLM服务') || parentText.includes('LLM Service') ||
                                           parentText.includes('Magic Prompt') || parentText.includes('Magic Assistant')) {
                                     detectedNodeType = "MagicPromptReplace";
+                                } else if (parentText.includes('Magic 提示词编辑器') || parentText.includes('Magic Prompt Editor') ||
+                                          parentText.includes('编辑提示词') || parentText.includes('Tag 预览') || parentText.includes('Tag Preview') ||
+                                          parentText.includes('标签搜索') || parentText.includes('Tag Search') || parentText.includes('运行历史') ||
+                                          parentText.includes('历史收藏') || parentText.includes('格式化') || parentText.includes('去重') ||
+                                          parentText.includes('编辑标签') || parentText.includes('Edit Tags')) {
+                                    detectedNodeType = "MagicPromptBox";
                                 }
                             }
                             
@@ -2525,6 +2876,11 @@ function translateElementRecursive(element, lang, nodeType = null) {
                     const parentText = parent.textContent || '';
                     if (parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor')) {
                         detectedNodeType = "MagicLogicCompute";
+                    } else if (parentText.includes('Magic 提示词编辑器') || parentText.includes('Magic Prompt Editor') ||
+                              parentText.includes('编辑提示词') || parentText.includes('Tag 预览') || parentText.includes('标签搜索') ||
+                              parentText.includes('运行历史') || parentText.includes('历史收藏') || parentText.includes('格式化') ||
+                              parentText.includes('编辑标签') || parentText.includes('Edit Tags')) {
+                        detectedNodeType = "MagicPromptBox";
                     }
                 }
                 
@@ -2575,6 +2931,11 @@ function updateAllUITexts(lang) {
             if (buttonText.includes('逻辑') || buttonText.includes('Logic') || buttonText.includes('编辑器') || buttonText.includes('Editor') ||
                 parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor')) {
                 nodeType = "MagicLogicCompute";
+            } else if (buttonText.includes('Magic 提示词编辑器') || buttonText.includes('Magic Prompt Editor') ||
+                buttonText.includes('编辑提示词') || buttonText.includes('Tag 预览') || buttonText.includes('标签搜索') ||
+                buttonText.includes('运行历史') || buttonText.includes('历史收藏') || buttonText.includes('格式化') ||
+                buttonText.includes('编辑标签') || buttonText.includes('Edit Tags')) {
+                nodeType = "MagicPromptBox";
             }
             
             // 尝试翻译按钮文本
@@ -2617,6 +2978,11 @@ function updateAllUITexts(lang) {
             if (inputText.includes('逻辑') || inputText.includes('Logic') || inputText.includes('编辑器') || inputText.includes('Editor') ||
                 parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor')) {
                 nodeType = "MagicLogicCompute";
+            } else if (inputText.includes('Magic 提示词编辑器') || inputText.includes('Magic Prompt Editor') ||
+                inputText.includes('编辑提示词') || inputText.includes('Tag 预览') || inputText.includes('标签搜索') ||
+                inputText.includes('运行历史') || inputText.includes('历史收藏') || inputText.includes('格式化') ||
+                inputText.includes('编辑标签') || parentText.includes('Magic 提示词编辑器') || parentText.includes('编辑标签')) {
+                nodeType = "MagicPromptBox";
             }
             const translated = translateText(input.placeholder, lang, nodeType);
             if (translated !== input.placeholder) {
@@ -2679,6 +3045,12 @@ function updateAllUITexts(lang) {
             } else if (parentText.includes('Magic Cache') || parentText.includes('TeaCache') || parentText.includes('FBCache') ||
                       parentText.includes('本节点新增支持') || parentText.includes('已修改源项目代码')) {
                 detectedNodeType = "MagicCache";
+            } else if (parentText.includes('Magic 提示词编辑器') || parentText.includes('Magic Prompt Editor') ||
+                      parentText.includes('编辑提示词') || parentText.includes('Tag 预览') || parentText.includes('Tag Preview') ||
+                      parentText.includes('标签搜索') || parentText.includes('Tag Search') || parentText.includes('运行历史') ||
+                      parentText.includes('历史收藏') || parentText.includes('格式化') || parentText.includes('去重') ||
+                      parentText.includes('编辑标签') || parentText.includes('Edit Tags')) {
+                detectedNodeType = "MagicPromptBox";
             }
             
             // 翻译label内的文本节点
@@ -2710,6 +3082,7 @@ app.registerExtension({
             if (typeof window !== 'undefined') {
                 window.getCurrentLanguage = getCurrentLanguage;
                 window.translateText = translateText;
+                window.translateElementImmediately = translateElementImmediately;
                 window.allTranslations = allTranslations;
             }
             console.log("[Language Switcher] Extension setup started");

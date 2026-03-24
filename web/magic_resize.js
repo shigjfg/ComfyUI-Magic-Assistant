@@ -153,8 +153,9 @@ async function saveResToServer(node) {
             method: "POST", body: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" }
         });
-        const allNodes = app.graph.findNodesByType(NODE_NAME);
-        allNodes.forEach(n => updateResDropdown(n));
+        const allResNodes = app.graph.findNodesByType("MagicResolution");
+        const allResizeNodes = app.graph.findNodesByType("MagicResolutionResize");
+        [...allResNodes, ...allResizeNodes].forEach(n => updateResDropdown(n));
     } catch (e) { alert("保存失败: " + e); }
 }
 
@@ -345,13 +346,71 @@ function showResModal(node) {
         sorted.forEach(val => {
             const row = document.createElement("div");
             row.style.cssText = "display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #333; border-radius: 4px;";
-            const label = document.createElement("span"); 
+            const label = document.createElement("span");
             label.textContent = currentTab === "preset" ? `${val} px` : val;
-            
+            label.style.cssText = "flex: 1; cursor: pointer; padding: 2px 5px; border-radius: 3px;";
+            label.title = "双击编辑";
+            preventConflict(label);
+
+            let isEditing = false;
+
+            const startEdit = () => {
+                if (isEditing) return;
+                isEditing = true;
+
+                const input = document.createElement("input");
+                input.type = currentTab === "preset" ? "number" : "text";
+                input.value = currentTab === "preset" ? val : val;
+                input.style.cssText = "flex: 1; padding: 4px 5px; background: #111; color: #fff; border: 1px solid #2196F3; border-radius: 3px; font-size: 13px;";
+
+                const finishEdit = (save) => {
+                    if (!isEditing) return;
+                    isEditing = false;
+                    if (save && input.value.trim()) {
+                        const newVal = input.value.trim();
+                        if (newVal !== String(val)) {
+                            if (currentTab === "preset") {
+                                const num = currentTab === "preset" ? parseInt(newVal) : newVal;
+                                if (isNaN(num)) { row.innerHTML = ""; row.appendChild(label); row.appendChild(delBtn); return; }
+                                node.res_config.presets = node.res_config.presets.filter(p => p !== val);
+                                node.res_config.presets.push(num);
+                            } else {
+                                node.res_config.dimensions = node.res_config.dimensions.filter(p => p !== val);
+                                node.res_config.dimensions.push(newVal);
+                            }
+                            saveResToServer(node);
+                            renderContent();
+                            return;
+                        }
+                    }
+                    label.textContent = currentTab === "preset" ? `${val} px` : val;
+                    row.innerHTML = "";
+                    row.appendChild(label);
+                    row.appendChild(delBtn);
+                    attachEvents();
+                };
+
+                input.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") { e.preventDefault(); finishEdit(true); }
+                    if (e.key === "Escape") { e.preventDefault(); finishEdit(false); }
+                });
+                input.addEventListener("blur", () => finishEdit(true));
+                preventConflict(input);
+
+                row.innerHTML = "";
+                row.appendChild(input);
+                row.style.justifyContent = "flex-start";
+                row.style.gap = "8px";
+                input.focus();
+                input.select();
+            };
+
+            label.addEventListener("dblclick", startEdit);
+
             const delBtn = document.createElement("button"); delBtn.textContent = "🗑️";
             delBtn.style.cssText = "background: none; border: none; cursor: pointer; color: #f44336;";
             preventConflict(delBtn);
-            
+
             delBtn.onclick = () => {
                 if(confirm(`删除 ${val}?`)) {
                     if(currentTab === "preset") {
@@ -362,6 +421,12 @@ function showResModal(node) {
                     saveResToServer(node); renderContent();
                 }
             };
+
+            const attachEvents = () => {
+                label.addEventListener("dblclick", startEdit);
+            };
+            attachEvents();
+
             row.appendChild(label); row.appendChild(delBtn); listDiv.appendChild(row);
         });
         content.appendChild(listDiv);

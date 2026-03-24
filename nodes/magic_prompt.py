@@ -33,11 +33,15 @@ class MagicPromptReplace:
                 "original_prompt": ("STRING", {"multiline": True, "dynamicPrompts": False, "placeholder": "原始提示词 (Original)"}),
                 "replace_tag": ("STRING", {"multiline": True, "dynamicPrompts": False, "placeholder": "新内容 (New Content)"}),
                 "llm_profile": (llm_list,),
-                "rule_name": (rules_list,), 
+                "rule_name": (rules_list,),
+            },
+            "optional": {
+                # 外接 STRING：有连线时使用连线内容；未连线时为 None，回退到上面的 original_prompt 编辑框
+                "original_prompt_in": ("STRING", {"forceInput": True}),
             },
             "hidden": {
-                "prompt_config_json": ("STRING", {"default": ""}), 
-            }
+                "prompt_config_json": ("STRING", {"default": ""}),
+            },
         }
 
     RETURN_TYPES = ("STRING",)
@@ -62,9 +66,20 @@ class MagicPromptReplace:
         elif type == "error": print(f"{RED}{prefix} ❌ Error | {msg}{RESET}")
         else: print(f"{CYAN}{prefix} ℹ️ Info  | {msg}{RESET}")
 
-    def process_llm(self, original_prompt, replace_tag, rule_name, llm_profile, prompt_config_json=None):
+    @staticmethod
+    def _effective_original_prompt(widget_prompt, linked_prompt):
+        """有外接 original_prompt_in 时用连线；否则用编辑框。"""
+        if linked_prompt is not None:
+            if isinstance(linked_prompt, str):
+                return linked_prompt
+            return str(linked_prompt)
+        return widget_prompt
+
+    def process_llm(self, original_prompt, replace_tag, rule_name, llm_profile, original_prompt_in=None, prompt_config_json=None):
         start_time = time.time()
-        
+
+        original_prompt = self._effective_original_prompt(original_prompt, original_prompt_in)
+
         llm_data = MagicUtils.get_llm_config()
         rules_data = MagicUtils.get_rules_config()
 
