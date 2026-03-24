@@ -14,37 +14,8 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > **V1.2.5 版本介绍 / Version Introduction** 2026-03-24
 
-> 1. **🧹 优化**: MagicPhotopeaNode - 清空缓存优化
->    * 优化了 MagicPhotopeaNode 的清空缓存功能，现在清空缓存时会清空的更彻底
->    * Optimized cache clearing in MagicPhotopeaNode; now clears more thoroughly
-
-> 2. **⚡ 新增功能**: Magic Cache - 全局缓存清理
->    * 新增全局清理功能，每次使用时都会自动清理一遍加速缓存，防止内存溢出
->    * Added global cache cleanup; automatically clears acceleration cache on each use to prevent memory overflow
-
-> 3. **📦 SDNQ 节点优化**: 使用体验全面升级
->    * SDNQ 节点使用优化，重新上传了工作流和使用预览图，详情请到 SDNQ 节点介绍处查看
->    * SDNQ nodes usage optimized; re-uploaded workflows and preview images, see SDNQ node introduction for details
-
-<details>
-<summary>Click to view more V1.2.5 updates / 点击查看更多 V1.2.5 更新内容</summary>
-
-> 4. **🔧 优化**: MagicResolutionResize 和 MagicResolution - 分辨率预设管理
->    * 分辨率预设管理新增双击分辨率名字后直接修改分辨率功能
->    * 修复了新增组合分辨率后会清空长边预设的问题
->    * Added double-click to edit preset resolution names directly in preset management
->    * Fixed issue where adding composite resolutions would clear long-edge presets
-
-> 5. **🎛️ 优化**: 万能禁用/忽略多框节点 - 组排序功能
->    * 新增组之间的排序功能，点击组最右边的三条杠即可拖拽组进行排序
->    * Added drag-and-drop sorting between groups; click the three-bar handle on the right side of a group to reorder
-
-> 6. **✨ 新增功能**: MagicPromptReplace 节点 - 文本接入
->    * 新增文本接入功能，可以自行选择是接入文本框还是接入文本点
->    * Added text input option; can choose between text box input or text point input
-
-> 7. **📝 大更新**: 多功能提示框（MagicPromptBox）- Tag 编辑弹窗
->    * 新增编辑按钮，点击编辑按钮可以打开一个 tag 编辑弹窗，在编辑弹窗中可以自由地编辑 tag，功能丰富
+> 1. **📝 大更新**: 多功能提示框（MagicPromptBox）- Tag 编辑弹窗 ⭐
+>    * 新增编辑按钮，点击编辑按钮可以打开一个 tag 编辑弹窗，在编辑弹窗中可以自由地编辑 tag，功能丰富，支持中英文双语切换
 >    * New edit button opens a tag editing dialog with rich features and full Chinese/English bilingual support
 >
 >    **功能亮点 / Features**:
@@ -67,7 +38,34 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    <img width="1321" height="1076" alt="Image" src="https://github.com/user-attachments/assets/c4f309ff-be6a-48d4-aad8-6e2e2a1c3b18" />
 >    <img width="874" height="692" alt="Image" src="https://github.com/user-attachments/assets/1af06565-e1f1-46d1-a895-7b422a1b20a8" />
 
-</details>
+> 2. **🧹 优化**: MagicPhotopeaNode - 清空缓存优化
+>    * 优化了 MagicPhotopeaNode 的清空缓存功能，现在清空缓存时会清空的更彻底
+>    * Optimized cache clearing in MagicPhotopeaNode; now clears more thoroughly
+
+> 3. **⚡ 新增功能**: Magic Cache - 全局缓存清理
+>    * 新增全局清理功能，每次使用时都会自动清理一遍加速缓存，防止内存溢出
+>    * Added global cache cleanup; automatically clears acceleration cache on each use to prevent memory overflow
+
+> 4. **📦 SDNQ 节点优化**: 使用体验全面升级
+>    * SDNQ 节点使用优化，重新上传了工作流和使用预览图，详情请到 SDNQ 节点介绍处查看
+>    * SDNQ nodes usage optimized; re-uploaded workflows and preview images, see SDNQ node introduction for details
+
+> 5. **🔧 优化**: MagicResolutionResize 和 MagicResolution - 分辨率预设管理
+>    * 分辨率预设管理新增双击分辨率名字后直接修改分辨率功能
+>    * 修复了新增组合分辨率后会清空长边预设的问题
+>    * Added double-click to edit preset resolution names directly in preset management
+>    * Fixed issue where adding composite resolutions would clear long-edge presets
+
+> 6. **🎛️ 优化**: 万能禁用/忽略多框节点 - 组排序功能
+>    * 新增组之间的排序功能，点击组最右边的三条杠即可拖拽组进行排序
+>    * Added drag-and-drop sorting between groups; click the three-bar handle on the right side of a group to reorder
+
+> 7. **✨ 新增功能**: MagicPromptReplace 节点 - 文本接入
+>    * 新增文本接入功能，可以自行选择是接入文本框还是接入文本点
+>    * Added text input option; can choose between text box input or text point input
+
+<details>
+<summary>Click to view previous version updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.4 版本介绍 / Version Introduction** 2026-02-28
 
