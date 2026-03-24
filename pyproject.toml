@@ -1,6 +1,6 @@
 [project]
 name = "magic-assistant"
-description = "Say goodbye to clutter! 🚀 Integrated Nodes to simplify workflow. 🤖 AI Node: Role-play & rules with one-click presets! 🧠 Programmable Logic: Edit logic in ONE node—no complex wiring! 🌐 Bilaingual: Real-time Chinese/English switching! 📦 SDNQ: Low-VRAM model loader & sampler! 🎨 More nodes await! 告别琐碎连线！🚀 多功能集成节点。🤖 AI节点：角色扮演+规则，一键预设！🧠 逻辑计算：一节点搞定运算与比较！🌐 双语：实时中英切换！📦 SDNQ：低显存模型加载与采样！🎨 更多节点等你发现！"
+description = "Say goodbye to clutter! 🚀 Integrated Nodes to simplify workflow. 🤖 AI Node: Role-play & rules with one-click presets! 🧠 Programmable Logic: Edit logic in ONE node—no complex wiring! 🌐 Bilaingual: Real-time Chinese/English switching! 📦 SDNQ: Low-VRAM model loader & sampler! ⚡ Versatile cache acceleration node integrating TeaCache and WaveSpeed 📝 Powerful universal prompt editor with 220k built-in prompts 🎨 More nodes await! 告别琐碎连线！🚀 多功能集成节点。🤖 AI节点：角色扮演+规则，一键预设！🧠 逻辑计算：一节点搞定运算与比较！🌐 双语：实时中英切换！📦 SDNQ：低显存模型加载与采样！⚡融合了TeaCache和WaveSpeed的多功能缓存加速节点！📝拥有内置22w提示词的超强万用提示词编辑器！🎨 更多节点等你发现！"
 version = "1.2.6"
 license = {file = "LICENSE"} 
 # classifiers = [
@@ -31,7 +31,7 @@ Documentation = "https://github.com/shigjfg/ComfyUI-Magic-Assistant/wiki"
 [tool.comfy]
 PublisherId = "shijun"
 DisplayName = "ComfyUI-Magic-Assistant"
-Icon = "https://raw.gitcode.com/shigjfg1/Noreason/raw/main/ComfyUI_temp_msyka_00006_.png"
+Icon = "https://raw.gitcode.com/shigjfg1/Noreason/raw/main/ComfyUI_temp_msyka_00007_.png"
 includes = [] 
 # "requires-comfyui" = ">=1.0.0"  # ComfyUI version compatibility
 
