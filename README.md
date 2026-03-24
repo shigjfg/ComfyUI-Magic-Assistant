@@ -64,9 +64,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 新增文本接入功能，可以自行选择是接入文本框还是接入文本点
 >    * Added text input option; can choose between text box input or text point input
 
-<details>
-<summary>Click to view previous version updates / 点击查看往期更多更新内容</summary>
-
 > **V1.2.4 版本介绍 / Version Introduction** 2026-02-28
 
 > 1. **✨ 优化**: Magic SDNQ Loader & Sampler - 模型加载和采样器优化
@@ -106,6 +103,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * Smart caching mechanism automatically skips redundant calculations and reuses cached results when appropriate
 >    * Supports cache device selection (CUDA or CPU) for flexible configuration
 >    * Source code from [Comfy-WaveSpeed](https://github.com/chengzeyi/Comfy-WaveSpeed) and [ComfyUI-TeaCache](https://github.com/welltop-cn/ComfyUI-TeaCache)
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.3 版本介绍 / Version Introduction** 2026-02-12
 
@@ -153,8 +153,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * 调整了 VAE 加载日志的输出顺序，使其出现在 pipeline 加载信息之后、采样信息之前
 >    * Optimized VAE loading log sequence to appear after pipeline loading info and before sampling info
 
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.1 版本介绍 / Version Introduction** 2026-02-11
 >
