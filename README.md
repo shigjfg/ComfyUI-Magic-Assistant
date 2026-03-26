@@ -10,7 +10,34 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-03-25**
+> Latest Update / 最新更新：**2026-03-26**
+
+> **V1.2.7 版本介绍 / Version Introduction** 2026-03-26
+
+> 1. **🔍 新增 danbooru 数据模式**: 在设置下改为 danbooru 数据后，补全功能和标签搜索功能将会去使用 danbooru 的标签
+>    * 在补全模式下将会调用 danbooru 预设库的数据，如果预设数据搜索不到可以到标签编辑下搜索
+>    * 可以实时连接 danbooru 数据进行爬取，自带中英文对照
+>    * 在 danbooru 模式下会显示这个 tag 的分类（可自定义设置分类显示结果）、热度，并按照一定逻辑排列 tag 组
+>    * 💡 提示：当切换成 danbooru 模式后每次打开编辑界面都会实时检测是否连接成功，当连接成功后才会替换补全功能和标签搜索，否则沿用本地模式
+>    * Added danbooru data mode: when enabled in settings, autocomplete and tag search use danbooru tags
+>    * Autocomplete uses danbooru preset library; search Edit Tags for data not in presets
+>    * Real-time danbooru web data with built-in Chinese/English translations
+>    * Danbooru mode displays tag category (customizable), popularity, and organizes tags logically
+>    * 💡 Note: When switching to danbooru mode, each open checks for live connection; only replaces functions if connected, otherwise falls back to local mode
+>
+>     <img width="2177" height="1014" alt="Image" src="https://github.com/user-attachments/assets/bfd0c233-9b01-40ec-a1e3-81e47d0f9e2a" />
+
+> 2. **🎛️ 显示设置优化**: 在显示设置中可以关闭或者开启补全功能了
+>    * Added ability to enable/disable autocomplete in display settings
+
+> 3. **📝 本地预设翻译补全**: 补全了本地预设的大部分中文翻译，以及修改了部分翻译
+>    * Completed most Chinese translations for local presets and fixed some existing translations
+
+> 4. **⚡ 搜索优化**: 优化了搜索匹配的一些小问题
+>    * Optimized search matching logic
+
+> ⚠️ **注意**: 更新后请删除节点目录 `/userdata` 下的 `settings.txt` 文件，因为新版的提示词编辑弹窗设置进行了修改，原版的 settings 文件不可用。不用担心，这个 settings 文件只保存的是关于你是否开启功能和选择的 AI 之类的简单数据。初次使用节点的用户不受影响。
+> ⚠️ **Note**: After updating, please delete the `settings.txt` file in `/userdata` under the node directory, because the new version modified the prompt editor popup settings. Don't worry — this file only saves simple data like whether you enabled certain features or which AI you selected. New users are not affected.
 
 > **V1.2.6 版本介绍 / Version Introduction** 2026-03-25
 
@@ -469,10 +496,10 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 ### 6. 📝 Magic Multi-Function Prompt Box (多功能提示词框)
 > **Your all-in-one Danbooru-style prompt editor with 220k+ tag library.** / **内置 22 万+ Tag 的全能 Danbooru 风格提示词编辑器。**
 
-> **Reference / 参考来源**: Inspired by [WeiLin-Comfyui-Tools](https://github.com/weilin9999/WeiLin-Comfyui-Tools) and [ComfyUI-Danbooru-Gallery](https://github.com/Aaalice233/ComfyUI-Danbooru-Gallery).
-
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
+
+**Reference / 参考来源**: Inspired by [WeiLin-Comfyui-Tools](https://github.com/weilin9999/WeiLin-Comfyui-Tools) and [ComfyUI-Danbooru-Gallery](https://github.com/Aaalice233/ComfyUI-Danbooru-Gallery) and [comfyui-danbooru-autocomplete](https://github.com/Schabe-Antimonfeld/comfyui-danbooru-autocomplete) and [danbooru-tag-pipeline](https://github.com/SuzumiyaAkizuki/danbooru-tag-pipeline).
 
 #### 节点概览 / Node Overview
 
@@ -483,12 +510,12 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 #### 编辑 Tab / Edit Tab
 
 * **工具栏**: 格式化、去重、清空全部、清空屏蔽、复制、编辑标签、一键翻译所有 Tag
-* **主编辑区**: 支持任意语言输入；Enter 可将短词转为 tag；**WeiLin 风格补全**：输入时显示下拉列表，左侧英文 tag、右侧中文释义，浮层跟随光标
+* **主编辑区**: 支持任意语言输入；Enter 可将短词转为 tag；**WeiLin 风格补全**：输入时显示下拉列表，左侧英文 tag、右侧中文释义，浮层跟随光标；切换 Danbooru 模式后补全列表显示 tag **分类**与**热度**，按热度排序
 * **Tag 卡片区**: 将文本解析为可拖拽卡片，支持修改权重、加 `()` / `[]` / `{}` 括号、删除、排序、双击屏蔽、翻译成中文
 * **单行翻译**: 输入中文或短概念，按 Enter 调用 LLM 译为英文 tag 并插入
 
 * **Toolbar**: Format, Deduplicate, Clear All, Clear Masked, Copy, Edit Tags, One-click Translate All Tags
-* **Main Editor**: Input any language; Enter converts short words to tags; **WeiLin-style autocomplete**: dropdown with EN tag + CN description, follows cursor
+* **Main Editor**: Input any language; Enter converts short words to tags; **WeiLin-style autocomplete**: dropdown with EN tag + CN description, follows cursor; Danbooru mode shows tag **category** and **popularity**, sorted by popularity
 * **Tag Chips**: Parsed into draggable cards; adjust weight, add `()` / `[]` / `{}`, delete, sort, double-click to mask, translate to Chinese
 * **Inline Translate**: Type Chinese or concepts, press Enter to LLM-translate to English tags and insert
 
@@ -497,10 +524,12 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **标签组管理**: 新建标签组、收藏标签组，分组管理常用 tag 集合
 * **标签搜索**: 中英文双向搜索（不区分大小写），自建标签组优先显示；支持一键添加 tag 到当前提示词
 * **数据源**: 预设库（22 万+ 条 `中文,英文tag`）+ 用户自建标签组 + 收藏标签组
+* **Danbooru 数据搜索**: 切换 Danbooru 模式后，搜索结果实时连接 Danbooru 远端，返回英文 tag / 中文释义 / 分类 / 热度；本地 danbooru预设库 提供毫秒级本地搜索兜底，自带中英文对照；支持分类过滤与分页加载
 
 * **Tag Group Management**: Create new tag groups, favorite tag groups; organize reusable tag sets
 * **Tag Search**: Bilingual search (case-insensitive); custom groups prioritized; one-click add to prompt
 * **Data Sources**: Preset library (220k+ entries) + user-created tag groups + favorite tag groups
+* **Danbooru Data Search**: After switching to Danbooru mode, search connects to Danbooru remote in real-time, returning EN tag / CN description / category / popularity; local danbooru预设库 provides millisecond-level local search fallback with built-in Chinese/English mapping; supports category filtering and pagination
 
 #### 历史 Tab / History Tab
 
@@ -514,12 +543,14 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 
 #### 设置 Tab / Settings Tab
 
-* **编辑界面显示**: 可勾选隐藏工具栏中的各项按钮，精简界面
+* **编辑界面显示**: 可勾选隐藏工具栏中的各项按钮，精简界面；可**关闭/开启补全弹窗**（关闭后编辑框输入时不弹出补全列表，词库搜索、标签编辑等独立功能不受影响）
+* **Danbooru 数据模式**: 切换补全与标签搜索的数据来源为「本地标签库」或「Danbooru 远端」；切换 Danbooru 模式后每次打开编辑界面会实时检测连接状态，连接成功才替换补全功能，否则自动回退并保存为本地模式
 * **格式化详细设置**: 对应 💫 格式化按钮，调用 `/ma/format_prompt`。清理逗号、修复括号始终执行；高级选项：下划线、权重语法、括号转义等可独立开启
 * **翻译功能**: 与「管理 LLM」「多功能AI提示词替换」共用 `userdata/llm_settings.txt`；支持正常/强制翻译模式
 * **补全与历史**: 补全列表条数上限、运行历史保留条数、LLM 翻译缓存条数
 
-* **Editor Display**: Toggle visibility of toolbar buttons
+* **Editor Display**: Toggle visibility of toolbar buttons; **enable/disable autocomplete popup** (closing it hides the dropdown while typing in the editor; tag search and Edit Tags autocomplete are unaffected)
+* **Danbooru Data Mode**: Switch data source for autocomplete and tag search between "Local Tag Library" and "Danbooru Remote"; switching to Danbooru mode checks connection on every open; only replaces functions if connected, otherwise falls back and saves as local mode
 * **Format Options**: Clean commas, fix brackets (always); advanced: underscores, weight syntax, bracket escaping
 * **Translation**: Shares `userdata/llm_settings.txt` with Manage LLM and AI Prompt Replace; normal/force translate modes
 * **Completion & History**: Autocomplete limit, history max entries, LLM cache size
@@ -536,6 +567,8 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 | **LLM 翻译** | 一键翻译所有 Tag，或单行翻译输入；共享 LLM 配置 |
 | **运行历史** | 工作流成功后自动保存，支持收藏与复用 |
 | **屏蔽机制** | 以 `!` 开头的段不参与输出，便于临时禁用 |
+| **Danbooru 模式** | 切换为 Danbooru 远端数据，补全显示分类与热度，实时连接检测 |
+| **补全开关** | 可在设置中关闭/开启编辑区补全弹窗 |
 
 </details>
 

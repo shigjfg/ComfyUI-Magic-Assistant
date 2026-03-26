@@ -10,6 +10,7 @@ import uuid
 import time
 import tempfile
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from server import PromptServer
 from aiohttp import web
 
@@ -127,6 +128,22 @@ def _ma_load_prompt_autocomplete_sync():
         if en_norm and en_norm not in norm_exact_map:
             norm_exact_map[en_norm] = e
 
+    # 中文→规范化英文的反向映射（支持 Danbooru 中文搜索：输入中文查出对应英文，再查 Danbooru）
+    cn_norm_map = {}
+    cn_norm_list = []
+    cn_norm_sorted = []
+    # 先收集全部 cn→norm 对
+    for e in entries:
+        cn = e.get("cn") or ""
+        if not cn:
+            continue
+        en_norm = e.get("_en_norm_cached") or ma_normalize_en_for_tag_match(e.get("en") or "")
+        if en_norm:
+            cn_norm_map[cn] = en_norm
+    # 按中文拼音/字面排序，便于二分前缀匹配
+    cn_norm_sorted = sorted(cn_norm_map.items(), key=lambda x: x[0])
+    cn_norm_list = [k for k, _ in cn_norm_sorted]
+
     preset_sorted_by_norm = sorted(
         preset_entries,
         key=lambda x: (x.get("_en_norm_cached") or "", x.get("en") or ""),
@@ -135,7 +152,8 @@ def _ma_load_prompt_autocomplete_sync():
 
     print(
         f"\033[36m[Magic Assistant] 补全索引完成 | 预设 {len(preset_entries)} 条 | "
-        f"自建 {len(custom_entries)} 条 | norm_exact_map {len(norm_exact_map)} 条\033[0m"
+        f"自建 {len(custom_entries)} 条 | norm_exact_map {len(norm_exact_map)} 条 | "
+        f"cn_norm_map {len(cn_norm_map)} 条（支持 Danbooru 中文搜索）\033[0m"
     )
 
     return {
@@ -149,6 +167,9 @@ def _ma_load_prompt_autocomplete_sync():
         "norm_exact_map": norm_exact_map,
         "preset_sorted_by_norm": preset_sorted_by_norm,
         "preset_norm_list": preset_norm_list,
+        "cn_norm_map": cn_norm_map,
+        "cn_norm_list": cn_norm_list,
+        "cn_norm_sorted": cn_norm_sorted,
     }
 
 
@@ -169,6 +190,50 @@ def ma_normalize_en_for_tag_match(s: str) -> str:
     t = s.strip().lower()
     t = re.sub(r"[\s_]+", "_", t)
     return t.strip("_")
+
+
+def ma_strip_autocomplete_query_edges(q: str) -> str:
+    """内联补全 / Danbooru 搜索用：去掉首尾空白与常见中英文标点。
+
+    仅剥离无搜索语义的分隔符：逗号（中英文）、句号（半全角）、中日文顿号。
+    保留对 tag 有意义的字符：; : ( ) / = ! ? @ # 等
+    （danbooru tag 如 score:9、rating:safe、!tag 排除、(solo) 等需精确匹配）。
+    """
+    if not q or not isinstance(q, str):
+        return ""
+    q = q.strip()
+    # 全角空格、半角空白换行、，。！？、；： 与半角 ,.!? 等
+    # 去掉 ;:() 等：danbooru tag 结构中这些字符是搜索关键字的一部分（如 score:9、rating:safe、!tag 排除、(solo)）
+    # 叹号 ! 用于 NOT 排除，问号 ? / @ / # 也可能有搜索意义，全部保留
+    _strip = " \t\n\r\u3000\uFF0C\u3002\u3001,."
+    while q and q[0] in _strip:
+        q = q[1:]
+    while q and q[-1] in _strip:
+        q = q[:-1]
+    return q.strip()
+
+
+# Danbooru 中文补全：词库键多为「1个女性」而非「女孩」，仅用子串匹配会优先命中「girl_sandwich」等说明里含「女孩」的条目。
+# 此处为高频口语提供英文 tag 别名（与 Danbooru 官方 tag 名一致）。
+MA_CN_DANBOORU_EN_ALIASES: dict[str, str] = {
+    # 单字：词库多为「1个女性」等整句，前缀「女*」会扫到海量键，Danbooru *en* 易混入无关高热度 artist
+    "女": "1girl",
+    "男": "1boy",
+    "女孩": "1girl",
+    "男孩子": "1boy",
+    "男孩": "1boy",
+    "男人": "1boy",
+    "女人": "1girl",
+    "女性": "1girl",
+    "男性": "1boy",
+}
+# 中文查询最多向 Danbooru 发几次 tags.json（每次最多 100 条）；过大则无关 en 的 *xxx* 会把列表搅乱
+MA_CN_DANBOORU_API_FANOUT = 5
+# 英文 *q*：多翻几页再按「有本地中文优先」排序；编辑标签 per_page≥80 走 FULL（8页），补全 per_page<80 走 AUTOCOMPLETE（1页）
+MA_DANBOORU_EN_SCAN_PAGES_FULL = 8
+MA_DANBOORU_EN_SCAN_PAGES_AUTOCOMPLETE = 1
+# 中文：每个英文根多翻几页，便于「释义含整段关键词」过滤后仍能凑满一页（补全与编辑标签统一用此深度）
+MA_DANBOORU_CN_SCAN_PAGES_PER_ROOT_FULL = 5
 
 
 def ma_norm_query_tokens(q_norm: str) -> set:
@@ -193,7 +258,7 @@ def ma_search_prompt_autocomplete(q: str, limit: int | None = 50):
     entries = data.get("entries") or []
     if not q or not entries:
         return []
-    q = q.strip()
+    q = ma_strip_autocomplete_query_edges((q or "").strip())
     if not q:
         return []
     q_lower = q.lower()
@@ -332,6 +397,8 @@ class MagicUtils:
             "edit_tags": True,
             "translate_all": True,
             "translate_input": True,
+            # 内联补全弹窗：与前端 editor_toolbar 键一致
+            "autocomplete_popup": True,
         },
         # Magic 提示词编辑器 · 「格式化」按钮调用的清洗选项（与 ma_prompt_cleaning 一致，不含修复分区语法）
         "format_options": {
@@ -353,6 +420,8 @@ class MagicUtils:
         "translate_mode": "normal",
         # LLM 翻译缓存最大条数（LRU，超出自动淘汰最旧条目）
         "llm_cache_max": 150,
+        # 补全模式："local" | "danbooru"（默认本地：首次使用无需检测远端连接，体验更流畅）
+        "danbooru_mode": "local",
     }
     SETTINGS_FILE = "settings.txt"
 
@@ -395,6 +464,12 @@ class MagicUtils:
                         else:
                             data[k] = v
                 except Exception: pass
+        # 兼容旧 settings.txt 根键 autocomplete_enabled → editor_toolbar.autocomplete_popup
+        ae = data.get("autocomplete_enabled")
+        if isinstance(ae, bool):
+            et = dict(data.get("editor_toolbar") or {})
+            et["autocomplete_popup"] = ae
+            data["editor_toolbar"] = et
         return data
 
     @classmethod
@@ -424,6 +499,204 @@ class MagicUtils:
     def get_resolutions_config(cls): return cls._load_dual_data("resolutions.txt", cls.DEFAULT_RESOLUTIONS)
     @classmethod
     def get_logic_config(cls): return cls._load_dual_data("logic_rules.json", cls.DEFAULT_LOGICS)
+
+# --- Danbooru 远端 API 配置 ---
+DANBOORU_API_BASE = "https://danbooru.donmai.us"
+# 本地中文词库路径（与预设补全库共用目录，文件名固定）
+DANBOORU_CN_DICT_PATH = os.path.join(PRESET_DIR, "tag预设库.txt")
+# Danbooru tag 分类（与参考代码一致）
+DANBOORU_CATEGORIES = {
+    0: "general",
+    1: "artist",
+    3: "copyright",
+    4: "character",
+    5: "meta",
+}
+DANBOORU_CATEGORY_COLORS = {
+    0: "#4e9af1",
+    1: "#f1964e",
+    3: "#c84ef1",
+    4: "#4ef17a",
+    5: "#f14e4e",
+}
+# 本地 danbooru 预设库路径（格式：中文,tag,分类,热度）
+DANBOORU_PRESET_PATH = os.path.join(PRESET_DIR, "danbooru预设库.txt")
+_DANBOORU_PRESET_CACHE = None
+_DANBOORU_PRESET_CACHE_LOCK = threading.Lock()
+_DANBOORU_PRESET_MTIME = 0
+_DANBOORU_CN_CACHE = None
+_DANBOORU_CN_CACHE_LOCK = threading.Lock()
+
+
+def _ma_load_danbooru_cn_dict_sync():
+    """加载本地中文词库，用于远端 tag 的中文翻译。"""
+    global _DANBOORU_CN_CACHE
+    if _DANBOORU_CN_CACHE is not None:
+        return _DANBOORU_CN_CACHE
+    with _DANBOORU_CN_CACHE_LOCK:
+        if _DANBOORU_CN_CACHE is not None:
+            return _DANBOORU_CN_CACHE
+    cache = {}
+    if os.path.isfile(DANBOORU_CN_DICT_PATH):
+        try:
+            with open(DANBOORU_CN_DICT_PATH, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or "," not in line:
+                        continue
+                    cn, en = line.split(",", 1)
+                    cn = cn.strip()
+                    en = en.strip()
+                    if not en:
+                        continue
+                    norm = ma_normalize_en_for_tag_match(en)
+                    cache[norm] = {"cn": cn, "en": en}
+        except Exception:
+            pass
+    _DANBOORU_CN_CACHE = cache
+    return cache
+
+
+def _ma_get_danbooru_cn(en_norm: str) -> str:
+    """按规范化 en 查本地词库，返回中文或空字符串。"""
+    cache = _ma_load_danbooru_cn_dict_sync()
+    entry = cache.get(en_norm)
+    return (entry.get("cn") or "") if entry else ""
+
+
+# ---- 本地 Danbooru 预设库缓存（格式：中文,tag,分类,热度）----
+def _ma_load_danbooru_preset_cache_sync() -> list[dict]:
+    """加载 danbooru预设库.txt，返回 [{cn, en, category, count, en_norm}, ...]，
+    按 category→count 降序排列，便于命中时直接取高热度在前。"""
+    global _DANBOORU_PRESET_CACHE, _DANBOORU_PRESET_MTIME
+    cur_mtime = os.path.getmtime(DANBOORU_PRESET_PATH) if os.path.isfile(DANBOORU_PRESET_PATH) else 0
+    if _DANBOORU_PRESET_CACHE is not None and _DANBOORU_PRESET_MTIME == cur_mtime:
+        return _DANBOORU_PRESET_CACHE
+    with _DANBOORU_PRESET_CACHE_LOCK:
+        if _DANBOORU_PRESET_CACHE is not None and _DANBOORU_PRESET_MTIME == cur_mtime:
+            return _DANBOORU_PRESET_CACHE
+    entries: list[dict] = []
+    _cn_key_map: dict[str, list[dict]] = {}   # cn → [entries]（同中文多 tag 时取最高热度）
+    _en_key_map: dict[str, dict] = {}           # en_norm → best entry
+    try:
+        with open(DANBOORU_PRESET_PATH, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                # 格式：中文,tag,分类,热度（最多3个逗号）
+                parts = line.split(",")
+                if len(parts) < 4:
+                    continue
+                cn = parts[0].strip()
+                raw_en = parts[1].strip()
+                cat_str = parts[2].strip()
+                cnt_str = parts[3].strip()
+                if not cn or not raw_en:
+                    continue
+                try:
+                    count = int(cnt_str)
+                except ValueError:
+                    count = 0
+                cat_map = {"通用": 0, "general": 0,
+                           "画师": 1, "artist": 1,
+                           "版权": 3, "copyright": 3,
+                           "角色": 4, "character": 4,
+                           "元数据": 5, "meta": 5}
+                category = cat_map.get(cat_str, 0)
+                en_norm = ma_normalize_en_for_tag_match(raw_en)
+                entry = {
+                    "cn": cn,
+                    "en": raw_en.replace("_", " "),
+                    "raw": raw_en,
+                    "category": category,
+                    "count": count,
+                    "en_norm": en_norm,
+                }
+                # 同 en_norm 去重（保留最高热度）
+                prev = _en_key_map.get(en_norm)
+                if prev is None or count > prev["count"]:
+                    _en_key_map[en_norm] = entry
+                # 同 cn 收集（用于中文匹配）
+                if cn not in _cn_key_map:
+                    _cn_key_map[cn] = []
+                _cn_key_map[cn].append(entry)
+    except Exception:
+        pass
+    # 合并去重后的 entries
+    seen_en = set()
+    for entry in _en_key_map.values():
+        if entry["en_norm"] not in seen_en:
+            seen_en.add(entry["en_norm"])
+            entries.append(entry)
+    # 按 category→count 降序
+    entries.sort(key=lambda e: (e["category"], -e["count"]))
+    _DANBOORU_PRESET_CACHE = entries
+    _DANBOORU_PRESET_MTIME = cur_mtime
+    return entries
+
+
+def _ma_search_danbooru_preset(q: str, limit: int = 50) -> list[dict]:
+    """本地 danbooru预设库 搜索：中文/英文均支持包含匹配，返回最多 limit 条。
+
+    排序规则与远端一致：有中文 → 无中文，各段内按热度降序。
+    对外返回的字段与远端 Danbooru /ma/danbooru_autocomplete 完全一致（raw, en, category, count, cn）。
+    """
+    if not q:
+        return []
+    q = ma_strip_autocomplete_query_edges(q)
+    if not q:
+        return []
+    entries = _ma_load_danbooru_preset_cache_sync()
+    if not entries:
+        return []
+
+    is_cn = bool(q and any(ord(c) >= 0x4E00 for c in q))
+    q_lower = q.lower()
+    matched: list[dict] = []
+
+    def _en_matches(en_norm: str) -> bool:
+        # 英文匹配：规范化后包含 q
+        if not en_norm:
+            return False
+        return en_norm in q_lower or q_lower in en_norm
+
+    def _cn_matches(cn_val: str) -> bool:
+        # 中文匹配：字面包含
+        if not cn_val:
+            return False
+        return q in cn_val or cn_val in q
+
+    def _gloss_exclude_longer_prefix(cn_val: str) -> bool:
+        """3字以上中文查询，排除更长前缀复合释义（与 _ma_danbooru_chinese_query_matches_gloss 一致）"""
+        if len(q) >= 3 and cn_val.startswith(q) and len(cn_val) > len(q):
+            return True  # 被排除
+        return False
+
+    for entry in entries:
+        en_norm = entry.get("en_norm") or ""
+        cn_val = entry.get("cn") or ""
+
+        if is_cn:
+            # 中文查询：释义须命中 q，且排除更长前缀复合释义
+            if not _cn_matches(cn_val):
+                continue
+            if _gloss_exclude_longer_prefix(cn_val):
+                continue
+            matched.append(entry)
+        else:
+            # 英文查询：规范化后包含
+            if not _en_matches(en_norm):
+                continue
+            matched.append(entry)
+
+    # 排序：有中文 → 无中文，各段内 count 降序
+    def _sort_key(e: dict) -> tuple:
+        has_cn = 1 if (e.get("cn") or "").strip() else 0
+        return (-has_cn, -(e.get("count") or 0))
+    matched.sort(key=_sort_key)
+    return matched[:limit]
+
 
 # --- API 路由 ---
 @PromptServer.instance.routes.get("/ma/get_config")
@@ -501,7 +774,7 @@ async def ma_prompt_autocomplete(request):
     - 中文释义：包含匹配 → '男孩' 匹配 '1个男孩'（1boy）、'女孩' 匹配 '1个女孩'、'多个女孩' 等
     查询参数 q、limit。limit<=0 表示不限制条数（返回全部匹配）；limit 为正数时限制在 1～5000（编辑器内联补全建议 50～100）。"""
     try:
-        q = request.query.get("q", "") or ""
+        q = ma_strip_autocomplete_query_edges(request.query.get("q", "") or "")
         try:
             limit_raw = int(request.query.get("limit", "50"))
         except ValueError:
@@ -1695,6 +1968,486 @@ async def get_file_list(request):
     except Exception as e:
         return web.json_response({"files": [], "error": str(e)})
 
+@PromptServer.instance.routes.get("/ma/danbooru_autocomplete")
+async def ma_danbooru_autocomplete(request):
+    """Danbooru 补全：支持远端（默认）和本地预设库（source=preset）两种数据源。
+    查询参数 q（搜索词）、limit（单页条数，默认 100，最大 100）、page（页码，从 1 起）、source（preset | remote）。
+    source=preset 时走本地 danbooru预设库.txt（毫秒级加载，带分类+热度）。
+    source=remote（或省略）时走 Danbooru 远端 API（分类+热度来自 Danbooru）。
+    返回 items、page、has_more（本页条数达 limit 时可能还有下一页）、cn_translate（如输入含中文则为翻译出的英文关键词列表）。
+    """
+    try:
+        q = ma_strip_autocomplete_query_edges(request.query.get("q") or "")
+        if len(q) < 1:
+            return web.json_response({"items": [], "page": 1, "has_more": False})
+
+        source = (request.query.get("source") or "remote").strip().lower()
+        is_preset = source == "preset"
+
+        # 预设库（本地）：同步内存搜索，毫秒级响应
+        if is_preset:
+            try:
+                limit = int(request.query.get("limit", "100"))
+            except ValueError:
+                limit = 100
+            limit = max(1, min(500, limit))
+            loop = asyncio.get_running_loop()
+            items = await loop.run_in_executor(
+                None, lambda: _ma_search_danbooru_preset(q, limit=limit)
+            )
+            return web.json_response({
+                "items": items,
+                "page": 1,
+                "has_more": False,
+                "source": "preset",
+            })
+
+        # 远端 Danbooru（保持原有逻辑不变）
+        has_cn_query = bool(q and any(ord(c) >= 0x4E00 for c in q))
+        cn_translated_en_norms = []
+        if has_cn_query:
+            _, local_entries = _ma_translate_cn_for_danbooru(q, limit=20)
+            cn_translated_en_norms = [e.get("_en_norm_cached") or ma_normalize_en_for_tag_match(e.get("en") or "") for e in local_entries]
+
+        try:
+            page = int(request.query.get("page", "1"))
+        except ValueError:
+            page = 1
+        page = max(1, page)
+        try:
+            per_page = int(request.query.get("limit", "100"))
+        except ValueError:
+            per_page = 100
+        per_page = max(1, min(100, per_page))
+        loop = asyncio.get_running_loop()
+        items, has_more = await loop.run_in_executor(
+            None, lambda: _ma_search_danbooru_remote(q, page=page, per_page=per_page)
+        )
+        return web.json_response({
+            "items": items,
+            "page": page,
+            "has_more": has_more,
+            "cn_translate": cn_translated_en_norms if has_cn_query else None,
+            "source": "remote",
+        })
+    except Exception as e:
+        return web.json_response({"items": [], "page": 1, "has_more": False, "error": str(e)})
+
+
+def _ma_translate_cn_for_danbooru(q: str, limit: int = 10) -> tuple[list[str], list[dict]]:
+    """将中文查询 q 翻译为英文 en_norm 列表，返回 (en_norm 列表, 对应本地条目，与 en 顺序对齐尽量一致)。
+
+    顺序：口语别名 → 词库精确 cn → 前缀（中文键越短越靠前）→ 子串（键短、匹配位置靠前优先）。
+    避免「女孩」只走子串时大量「被两个女孩夹在中间」类条目排在「1girl」之前。
+    """
+    if not q:
+        return [], []
+    q = ma_strip_autocomplete_query_edges(q)
+    if not q:
+        return [], []
+    data = ma_get_prompt_autocomplete_cache()
+    cn_norm_map = data.get("cn_norm_map") or {}
+    cn_norm_sorted = data.get("cn_norm_sorted") or []
+    cn_norm_list = data.get("cn_norm_list") or []
+
+    ordered_en: list[str] = []
+    seen_en: set[str] = set()
+    qn = len(q)
+
+    def add_en(en_norm: str) -> None:
+        if not en_norm or en_norm in seen_en:
+            return
+        seen_en.add(en_norm)
+        ordered_en.append(en_norm)
+
+    alias_raw = MA_CN_DANBOORU_EN_ALIASES.get(q)
+    if alias_raw:
+        add_en(ma_normalize_en_for_tag_match(alias_raw))
+
+    if q in cn_norm_map:
+        add_en(cn_norm_map[q])
+
+    # 单字且已有口语别名（如「女」→1girl）：不再叠前缀「女*」，否则仍会拼进短罗马字 en 导致 Danbooru 扫到画师名
+    if alias_raw and qn <= 1:
+        en_norms = ordered_en[:limit]
+        if not en_norms:
+            return [], []
+        norm_exact_map = data.get("norm_exact_map") or {}
+        preset_sorted = data.get("preset_sorted_by_norm") or []
+        preset_norm_list = data.get("preset_norm_list") or []
+        local_matches: list[dict] = []
+        seen_local: set[int] = set()
+        for en_norm in en_norms:
+            entry = norm_exact_map.get(en_norm)
+            if entry and id(entry) not in seen_local:
+                seen_local.add(id(entry))
+                local_matches.append(entry)
+                continue
+            idx = bisect.bisect_left(preset_norm_list, en_norm)
+            while idx < len(preset_sorted):
+                n = preset_norm_list[idx]
+                if n != en_norm:
+                    break
+                e = preset_sorted[idx]
+                if id(e) not in seen_local:
+                    seen_local.add(id(e))
+                    local_matches.append(e)
+                idx += 1
+        return en_norms, local_matches[: len(en_norms)]
+
+    prefix_hits: list[tuple[int, int, str, str]] = []
+    if cn_norm_list:
+        idx = bisect.bisect_left(cn_norm_list, q)
+        while idx < len(cn_norm_sorted):
+            cn_key, en_norm = cn_norm_sorted[idx]
+            if not cn_key.startswith(q):
+                break
+            prefix_hits.append((len(cn_key), idx, cn_key, en_norm))
+            idx += 1
+    # 单字/双字：禁止用超长中文键参与 Danbooru 根查询，否则 en 过短（如某画师罗马字）会 *xxx* 扫到海量 artist
+    if qn <= 1:
+        max_cn_chars = 5
+        max_prefix_rows = 18
+    elif qn == 2:
+        max_cn_chars = 10
+        max_prefix_rows = 36
+    else:
+        max_cn_chars = 10**9
+        max_prefix_rows = 10**9
+    prefix_hits = [t for t in prefix_hits if t[0] <= max_cn_chars]
+    prefix_hits.sort(key=lambda t: (t[0], t[2]))
+    if max_prefix_rows < 10**9:
+        prefix_hits = prefix_hits[:max_prefix_rows]
+    for *_, cn_key, en_norm in prefix_hits:
+        if not _ma_danbooru_chinese_query_matches_gloss(q, cn_key):
+            continue
+        add_en(en_norm)
+
+    # 单字、双字：不做全表子串扫描（「女」会命中数万条释文）
+    if qn >= 3 and len(ordered_en) < max(limit, 20):
+        sub_hits: list[tuple[int, int, str, str]] = []
+        for cn_key, en_norm in cn_norm_map.items():
+            if en_norm in seen_en:
+                continue
+            pos = cn_key.find(q)
+            if pos < 0:
+                continue
+            sub_hits.append((len(cn_key), pos, cn_key, en_norm))
+        sub_hits.sort(key=lambda t: (t[0], t[1], t[2]))
+        cap = max(limit * 3, 30)
+        for _, _, cn_key, en_norm in sub_hits:
+            if not _ma_danbooru_chinese_query_matches_gloss(q, cn_key):
+                continue
+            add_en(en_norm)
+            if len(ordered_en) >= cap:
+                break
+
+    en_norms = ordered_en[:limit]
+    local_matches: list[dict] = []
+    seen_local: set[int] = set()
+    if not en_norms:
+        return [], []
+
+    norm_exact_map = data.get("norm_exact_map") or {}
+    preset_sorted = data.get("preset_sorted_by_norm") or []
+    preset_norm_list = data.get("preset_norm_list") or []
+
+    for en_norm in en_norms:
+        entry = norm_exact_map.get(en_norm)
+        if entry and id(entry) not in seen_local:
+            seen_local.add(id(entry))
+            local_matches.append(entry)
+            continue
+        idx = bisect.bisect_left(preset_norm_list, en_norm)
+        while idx < len(preset_sorted):
+            n = preset_norm_list[idx]
+            if n != en_norm:
+                break
+            e = preset_sorted[idx]
+            if id(e) not in seen_local:
+                seen_local.add(id(e))
+                local_matches.append(e)
+            idx += 1
+
+    return en_norms, local_matches[: len(en_norms)]
+
+
+def _ma_danbooru_name_matches_for_en_root(en_norm: str) -> str:
+    """把规范化英文 tag 根转成 Danbooru search[name_matches] 通配串。
+
+    中文翻译常得到「1girl」「2girls」等；若用 *1girl* 只会命中名字里含子串 1girl 的 tag（如 2boys+1girl），
+    前几名之后易出现大量低热度怪 tag，和英文输入 gir → *gir* 的体验断层。
+
+    对「数字 + 字母段」形式改为 *字母段*（如 1girl→*girl*、2girls→*girls*），与手打英文补全的覆盖面接近。
+    """
+    s = (en_norm or "").strip().lower()
+    if not s:
+        return "**"
+    m = re.match(r"^(\d+)([a-z0-9_]+)$", s)
+    if m:
+        rest = m.group(2).strip("_")
+        if len(rest) >= 3:
+            return f"*{rest}*"
+    return f"*{s}*"
+
+
+def _ma_danbooru_row_has_local_cn(row: dict) -> bool:
+    """本地 tag预设库是否对该 tag 有中文释义（用于排序，不等同于「与搜索词语义一致」）。"""
+    cn = (row.get("cn") or "").strip()
+    return bool(cn and cn != "—")
+
+
+def _ma_danbooru_collect_tag_json_pages(
+    _requests,
+    url: str,
+    base_params: dict,
+    max_pages: int,
+    fetch_limit: int = 100,
+) -> tuple[list[dict], bool]:
+    """请求 page=1..max_pages 并合并结果；多页并行以缩短补全/搜索等待。any_full：曾出现满页。"""
+    lim = max(1, min(100, int(fetch_limit)))
+    n = max(1, int(max_pages))
+
+    def fetch_one(p: int) -> tuple[int, list, bool]:
+        params = {**base_params, "limit": lim, "page": p}
+        try:
+            resp = _requests.get(url, params=params, timeout=12)
+            if resp.status_code != 200:
+                return p, [], False
+            data = resp.json()
+            if not isinstance(data, list) or not data:
+                return p, [], False
+            full = len(data) >= lim
+            return p, data, full
+        except Exception:
+            return p, [], False
+
+    pages_data: dict[int, list] = {}
+    any_full = False
+    workers = min(8, n)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = [ex.submit(fetch_one, p) for p in range(1, n + 1)]
+        for fut in as_completed(futs):
+            p, data, page_full = fut.result()
+            pages_data[p] = data
+            if page_full:
+                any_full = True
+    all_rows: list[dict] = []
+    for p in range(1, n + 1):
+        all_rows.extend(pages_data.get(p, []))
+    return all_rows, any_full
+
+
+def _ma_batch_get_danbooru_cn(en_norms: list[str]) -> dict[str, str]:
+    """批量查询多个 en_norm 的中文释义，一次加载词库 dict。返回 {en_norm: cn_str}。"""
+    if not en_norms:
+        return {}
+    cache = _ma_load_danbooru_cn_dict_sync()
+    return {nk: ((cache[nk].get("cn") or "") if nk in cache else "") for nk in en_norms}
+
+
+def _ma_danbooru_chinese_query_matches_gloss(q: str, cn_gloss: str) -> bool:
+    """判断中文搜索词 q 是否「命中」本地释义 cn_gloss（用于过滤与译根筛选）。
+
+    须含 q；若 q 不少于 3 字且 gloss 以 q 为前缀且更长，视为另一枚复合词（如 q=健身房 与 健身房淋浴），
+    不算命中——与标签搜索「精确到词」预期一致，并避免 *gym_shower* 等根被前缀词库带出来。
+    """
+    q = (q or "").strip()
+    s = (cn_gloss or "").strip()
+    if not q or not s or q not in s:
+        return False
+    if s == q:
+        return True
+    if len(q) >= 3 and s.startswith(q) and len(s) > len(q):
+        return False
+    return True
+
+
+def _ma_danbooru_sort_key(row: dict, query: str | None) -> tuple:
+    """Danbooru 结果排序：有本地中文且（中文搜索时）释义含关键词优先，再按热度降序。
+
+    即：有中文（释义含 q，仅中文 q）→ 有中文（不含 q）→ 无中文；各段内按 count 降序。
+    解决「搜 gym 时 gym(0) 有译名却在后」「搜 健身房 全是有译名的高热度体操服」等纯按热度的问题。
+    """
+    has_cn = 1 if _ma_danbooru_row_has_local_cn(row) else 0
+    q = (query or "").strip()
+    cn_hit = 0
+    if has_cn and q and any(ord(c) >= 0x4E00 for c in q):
+        cn = (row.get("cn") or "").strip()
+        if _ma_danbooru_chinese_query_matches_gloss(q, cn):
+            cn_hit = 1
+    count = int(row.get("count") or 0)
+    return (-has_cn, -cn_hit, -count)
+
+
+def _ma_search_danbooru_remote(q: str, page: int = 1, per_page: int = 100) -> tuple[list, bool]:
+    """实际执行 Danbooru API 搜索（含本地中文翻译）。返回 (结果列表, 是否可能还有下一页)。
+
+    支持中文搜索：检测 q 是否含中文，若是则先在本地词库翻译为英文，再分别查 Danbooru。
+    本地匹配的条目会合并到结果中（按本地匹配优先、Danbooru 热度填充的顺序）。
+    """
+    import requests as _requests
+    q = ma_strip_autocomplete_query_edges(q or "")
+    if not q:
+        return [], False
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+    url = f"{DANBOORU_API_BASE}/tags.json"
+
+    # ---- 中文检测：含非 ASCII 汉字/CJK 字符即认为需要翻译查询 ----
+    def _is_chinese_query(text: str) -> bool:
+        return bool(text and any(ord(c) >= 0x4E00 for c in text))
+
+    # 含中文：本地词库翻译为若干英文根，再查 Danbooru（仅用少量根，避免列表被无关 *xxx* 填满）
+    if _is_chinese_query(q):
+        en_norms, _local_entries = _ma_translate_cn_for_danbooru(q, limit=max(per_page, 50))
+        if not en_norms:
+            return [], False
+
+        # 中文查询：补全(limit<80)与编辑标签均多页抓取再统一过滤分页，避免仅 1 页时与标签搜索结果集不一致
+        scan_per_root = MA_DANBOORU_CN_SCAN_PAGES_PER_ROOT_FULL
+        api_roots = en_norms[: max(1, MA_CN_DANBOORU_API_FANOUT)]
+        seen_match_patterns: set[str] = set()
+        patterns: list[str] = []
+        for en_q in api_roots:
+            match_pat = _ma_danbooru_name_matches_for_en_root(en_q)
+            if match_pat in seen_match_patterns:
+                continue
+            seen_match_patterns.add(match_pat)
+            patterns.append(match_pat)
+
+        remote_results: list[dict] = []
+
+        def _collect_cn_pat(pat: str):
+            base_params = {
+                "search[name_matches]": pat,
+                "search[order]": "count",
+                "only": "name,post_count,category",
+            }
+            return _ma_danbooru_collect_tag_json_pages(
+                _requests, url, base_params, scan_per_root, fetch_limit=100
+            )[0]
+
+        if patterns:
+            workers = min(5, len(patterns))
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                futs = [ex.submit(_collect_cn_pat, pat) for pat in patterns]
+                for fut in as_completed(futs):
+                    remote_data = fut.result()
+                    for item in remote_data:
+                        raw = str(item.get("name") or "").strip()
+                        if not raw:
+                            continue
+                        en_norm = ma_normalize_en_for_tag_match(raw)
+                        remote_results.append({
+                            "raw": raw,
+                            "en": raw.replace("_", " "),
+                            "count": int(item.get("post_count") or 0),
+                            "category": int(item.get("category") or 0),
+                            "cn": "",
+                            "_en_norm": en_norm,
+                        })
+
+        # 去重保留最高热度，再排序
+        best_by_norm: dict[str, dict] = {}
+        for r in remote_results:
+            en_norm = r.get("_en_norm") or ma_normalize_en_for_tag_match(r["raw"])
+            prev = best_by_norm.get(en_norm)
+            if prev is None or r["count"] > prev["count"]:
+                best_by_norm[en_norm] = r
+
+        # 批量查中文列（一次加载词库替代逐条 _ma_get_danbooru_cn）
+        all_en_norms = [r["_en_norm"] for r in best_by_norm.values() if r.get("_en_norm")]
+        cn_map = _ma_batch_get_danbooru_cn(all_en_norms)
+        for r in best_by_norm.values():
+            r["cn"] = cn_map.get(r["_en_norm"]) or ""
+            r.pop("_en_norm", None)
+
+        merged = sorted(best_by_norm.values(), key=lambda r: _ma_danbooru_sort_key(r, q))
+        # 中文搜索：释义须命中 q（含排除「更长前缀复合释义」，与译根筛选一致）
+        merged = [
+            r for r in merged
+            if _ma_danbooru_chinese_query_matches_gloss(q, (r.get("cn") or "").strip())
+        ]
+        start = (page - 1) * per_page
+        page_slice = merged[start : start + per_page]
+        for r in page_slice:
+            r.pop("_en_norm", None)
+        has_more = (start + per_page) < len(merged)
+        return page_slice, has_more
+
+    # ---- 纯英文/数字查询：补全（per_page<50）只拉 1 页保证 <1s；编辑标签 per_page>=80 仍多页 ----
+    scan_pages = (
+        MA_DANBOORU_EN_SCAN_PAGES_FULL
+        if per_page >= 80
+        else MA_DANBOORU_EN_SCAN_PAGES_AUTOCOMPLETE
+    )
+    base_params = {
+        "search[name_matches]": f"*{q}*",
+        "search[order]": "count",
+        "only": "name,post_count,category",
+    }
+    data, _ = _ma_danbooru_collect_tag_json_pages(
+        _requests, url, base_params, scan_pages, fetch_limit=100
+    )
+    if not data:
+        return [], False
+
+    results = []
+    for item in data:
+        raw = str(item.get("name") or "").strip()
+        if not raw:
+            continue
+        display = raw.replace("_", " ")
+        count = int(item.get("post_count") or 0)
+        category = int(item.get("category") or 0)
+        en_norm = ma_normalize_en_for_tag_match(raw)
+        results.append({
+            "raw": raw,
+            "en": display,
+            "count": count,
+            "category": category,
+            "cn": "",  # 暂空，批量查词库
+            "_en_norm": en_norm,
+        })
+    # 批量查中文列（一次加载词库，替代逐条 _ma_get_danbooru_cn 每次都加载）
+    en_norms = [r["_en_norm"] for r in results if r.get("_en_norm")]
+    cn_map = _ma_batch_get_danbooru_cn(en_norms)
+    for r in results:
+        r["cn"] = cn_map.get(r["_en_norm"]) or ""
+        r.pop("_en_norm", None)
+    # 多页并行合并后若出现同名重复，只保留热度最高的一条（与中文分支 best_by_norm 一致）
+    best_en: dict[str, dict] = {}
+    for r in results:
+        nk = ma_normalize_en_for_tag_match(r.get("raw") or "")
+        if not nk:
+            continue
+        prev = best_en.get(nk)
+        if prev is None or int(r.get("count") or 0) > int(prev.get("count") or 0):
+            best_en[nk] = r
+    results = list(best_en.values())
+    results.sort(key=lambda r: _ma_danbooru_sort_key(r, q))
+    start = (page - 1) * per_page
+    page_rows = results[start : start + per_page]
+    has_more = (start + per_page) < len(results)
+    return page_rows, has_more
+
+
+@PromptServer.instance.routes.get("/ma/danbooru_check_connection")
+async def ma_danbooru_check_connection(request):
+    """检测远端 Danbooru API 是否可达。返回 {ok, message}。"""
+    import requests as _requests
+    url = f"{DANBOORU_API_BASE}/tags.json"
+    params = {"search[name_matches]": "solo", "limit": 1}
+    try:
+        resp = _requests.get(url, params=params, timeout=8)
+        if resp.status_code == 200:
+            return web.json_response({"ok": True, "message": "连接成功"})
+        return web.json_response({"ok": False, "message": f"HTTP {resp.status_code}"})
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)})
+
+
 # --- 更新检测 API ---
 @PromptServer.instance.routes.get("/ma/check_update")
 async def check_update(request):
@@ -1743,7 +2496,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.2.6"  # Current version / 当前版本号
+        current_version = "1.2.7"  # Current version / 当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:
