@@ -12,7 +12,7 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 > Latest Update / 最新更新：**2026-03-26**
 
-> **V1.2.7 版本介绍 / Version Introduction** 2026-03-26
+> **V1.2.8 版本介绍 / Version Introduction** 2026-03-26
 
 > 1. **🔍 新增 danbooru 数据模式**: 在设置下改为 danbooru 数据后，补全功能和标签搜索功能将会去使用 danbooru 的标签
 >    * 在补全模式下将会调用 danbooru 预设库的数据，如果预设数据搜索不到可以到标签编辑下搜索
