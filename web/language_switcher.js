@@ -719,6 +719,44 @@ const magicPromptBoxTranslations = {
     "来自「": { zh: "来自「", en: "From \"" },
     "」": { zh: "」", en: "\"" },
 
+    // 补全面板 - Danbooru 中文搜索支持
+    "本地结果已显示，正在加载 Danbooru 热度排序…": { zh: "本地结果已显示，正在加载 Danbooru 热度排序…", en: "Local results shown, loading Danbooru热度 sort…" },
+    "本地中文匹配结果已显示，正在加载 Danbooru 补充热度…": { zh: "本地中文匹配结果已显示，正在加载 Danbooru 补充热度…", en: "Local Chinese matches shown, loading Danbooru补充热度…" },
+    "中文已翻译为英文，从 Danbooru 获取热度排序": { zh: "中文已翻译为英文，从 Danbooru 获取热度排序", en: "Chinese translated to English, fetching Danbooru热度 sort" },
+    "Danbooru 无对应热度数据，显示本地中文匹配结果": { zh: "Danbooru 无对应热度数据，显示本地中文匹配结果", en: "Danbooru has no 热度 data, showing local Chinese matches" },
+    "Danbooru 获取为空，显示本地结果": { zh: "Danbooru 获取为空，显示本地结果", en: "Danbooru returned empty, showing local results" },
+    "Danbooru 无结果": { zh: "Danbooru 无结果", en: "Danbooru: no results" },
+    "Danbooru 获取失败": { zh: "Danbooru 获取失败", en: "Danbooru fetch failed" },
+    "正在从 Danbooru 加载…": { zh: "正在从 Danbooru 加载…", en: "Loading from Danbooru…" },
+    "正在查询 danbooru预设库…": { zh: "正在查询 danbooru预设库…", en: "Searching danbooru preset library…" },
+    "本地预设库 · 毫秒级加载 · 分类+热度来自 danbooru预设库": {
+        zh: "本地预设库 · 毫秒级加载 · 分类+热度来自 danbooru预设库",
+        en: "Local preset · instant load · category & count from danbooru preset file",
+    },
+    "预设库无匹配，尝试更长关键词": {
+        zh: "预设库无匹配，尝试更长关键词",
+        en: "No preset match; try a longer or more specific keyword",
+    },
+    "danbooru预设库中无匹配，请扩充 savedata/danbooru预设库.txt，或使用「编辑标签」搜索远端": {
+        zh: "danbooru预设库中无匹配，请扩充 savedata/danbooru预设库.txt，或使用「编辑标签」搜索远端",
+        en: "No match in danbooru preset; expand savedata/danbooru preset file, or use Edit Tags for remote search",
+    },
+    "danbooru预设库加载失败，请重启 ComfyUI 或检查 savedata/danbooru预设库.txt": {
+        zh: "danbooru预设库加载失败，请重启 ComfyUI 或检查 savedata/danbooru预设库.txt",
+        en: "Failed to load danbooru preset; restart ComfyUI or check savedata/danbooru preset file",
+    },
+    "Danbooru 无匹配，正在加载本地词库…": { zh: "Danbooru 无匹配，正在加载本地词库…", en: "No Danbooru match, loading local lexicon…" },
+    "Danbooru 无匹配，以下为本地词库结果": { zh: "Danbooru 无匹配，以下为本地词库结果", en: "No Danbooru match; showing local lexicon results" },
+    "Danbooru 与本地词库均无匹配": { zh: "Danbooru 与本地词库均无匹配", en: "No match on Danbooru or local lexicon" },
+    "本地词库加载失败": { zh: "本地词库加载失败", en: "Local lexicon failed to load" },
+    "Danbooru 失败，以下为本地词库": { zh: "Danbooru 失败，以下为本地词库", en: "Danbooru failed; showing local lexicon" },
+    "Danbooru 失败且无本地匹配": { zh: "Danbooru 失败且无本地匹配", en: "Danbooru failed and no local match" },
+    "Danbooru 失败，本地词库不可用": { zh: "Danbooru 失败，本地词库不可用", en: "Danbooru failed; local lexicon unavailable" },
+    "中文已翻译为英文，获取 Danbooru 热度排序中…": { zh: "中文已翻译为英文，获取 Danbooru 热度排序中…", en: "Chinese translated, fetching Danbooru热度…" },
+    "「」→「」已翻译为英文，从 Danbooru 获取热度排序": { zh: "「」→「」已翻译为英文，从 Danbooru 获取热度排序", en: "「」→「」translated, fetching Danbooru热度 sort" },
+    "本地词库未找到「」→「」的对应英文，Danbooru 无法直接搜索中文": { zh: "本地词库未找到「」→「」的对应英文，Danbooru 无法直接搜索中文", en: "No English match for「」→「」in local lexicon, Danbooru cannot search Chinese directly" },
+    "编辑标签弹窗搜索 - Danbooru 中文提示": { zh: "中文「」→「」→「」已翻译为英文，从 Danbooru 获取热度排序", en: "Chinese「」→「」→「」translated, fetching Danbooru热度 sort" },
+
     // 编辑标签弹窗
     "🏷️ 编辑标签": { zh: "🏷️ 编辑标签", en: "🏷️ Edit Tags" },
     "关闭": { zh: "关闭", en: "Close" },
@@ -767,6 +805,14 @@ const magicPromptBoxTranslations = {
     "搜索中…": { zh: "搜索中…", en: "Searching..." },
     "请输入关键词后点击搜索。": { zh: "请输入关键词后点击搜索。", en: "Enter keywords then click Search." },
     "搜索失败，请稍后重试。": { zh: "搜索失败，请稍后重试。", en: "Search failed, try again later." },
+    "【Danbooru 远端】英文：多页取回后排序——有本地中文释义的优先于无中文，再按热度。中文搜索：词库译成英文根后向 Danbooru 按英文名匹配；「中文」列须命中你的词，且查询不少于 3 字时排除「更长前缀复合释义」（如搜「健身房」不显示释义为「健身房淋浴」的 tag）。「中文」列来自本地词库。若出现与前排相似的英文名，多为远端另一条独立 tag（含错拼），无预设译名时「中文」为—。": {
+        zh: "【Danbooru 远端】英文：多页取回后排序——有本地中文释义的优先于无中文，再按热度。中文搜索：词库译成英文根后向 Danbooru 按英文名匹配；「中文」列须命中你的词，且查询不少于 3 字时排除「更长前缀复合释义」（如搜「健身房」不显示释义为「健身房淋浴」的 tag）。「中文」列来自本地词库。若出现与前排相似的英文名，多为远端另一条独立 tag（含错拼），无预设译名时「中文」为—。",
+        en: "[Danbooru remote] English: multi-page fetch then sort—local Chinese gloss first, then heat. Chinese: roots from lexicon then Danbooru English match; gloss must match your text, and for queries of 3+ Han chars, longer glosses that are mere prefixes (e.g. 健身房 vs 健身房淋浴) are excluded. Chinese column is local lexicon. Similar English names are often separate Danbooru tags (typos); no preset gloss shows —.",
+    },
+    "（每页最多 100 条，向下滚动加载更多；关键词过短建议打更完整的词。）": {
+        zh: "（每页最多 100 条，向下滚动加载更多；关键词过短建议打更完整的词。）",
+        en: " (Up to 100 per page, scroll to load more; use longer keywords if results are too broad.)",
+    },
 
     // 历史记录
     "📜 工作流": { zh: "📜 工作流", en: "📜 Workflow" },
@@ -820,6 +866,7 @@ const magicPromptBoxTranslations = {
     // 设置项标题
     "1 · 编辑界面显示设置": { zh: "1 · 编辑界面显示设置", en: "1 · Editor Display Settings" },
     "控制「编辑」Tab 顶部工具栏：默认全部显示，关闭后对应按钮或输入框将隐藏。": { zh: "控制「编辑」Tab 顶部工具栏：默认全部显示，关闭后对应按钮或输入框将隐藏。", en: "Controls Edit Tab top toolbar: all shown by default, hidden when toggled off." },
+    "控制「编辑」Tab 顶部工具栏与内联补全弹窗：默认全部开启，关闭后对应按钮、输入框或补全列表将隐藏。": { zh: "控制「编辑」Tab 顶部工具栏与内联补全弹窗：默认全部开启，关闭后对应按钮、输入框或补全列表将隐藏。", en: "Controls Edit Tab toolbar and inline autocomplete popup: all on by default; toggling off hides the matching buttons, inputs, or completion list." },
     "单行翻译输入框（按 Enter）": { zh: "单行翻译输入框（按 Enter）", en: "Single-line translate input (Press Enter)" },
 
     // 格式化设置
@@ -882,6 +929,52 @@ const magicPromptBoxTranslations = {
     "工作流成功结束后写入运行历史的上限；保存后立即按新值裁剪本地历史。": { zh: "工作流成功结束后写入运行历史的上限；保存后立即按新值裁剪本地历史。", en: "Run history upper limit after successful workflow; immediately trims local history to new value on save." },
     "LLM 翻译缓存条数": { zh: "LLM 翻译缓存条数", en: "LLM translation cache count" },
     "本地 LLM 翻译缓存最大条数（LRU，超出自动淘汰最旧的）。强制翻译模式下即使命中缓存也会全部重送 LLM（节省 token）。": { zh: "本地 LLM 翻译缓存最大条数（LRU，超出自动淘汰最旧的）。强制翻译模式下即使命中缓存也会全部重送 LLM（节省 token）。", en: "Max local LLM translation cache items (LRU, oldest evicted when exceeded). In force translate mode, all items resent to LLM even if cached (saves tokens)." },
+    "🔍 开启补全弹窗（打字时显示 Tag 候选列表）": { zh: "🔍 开启补全弹窗（打字时显示 Tag 候选列表）", en: "🔍 Enable autocomplete popup (show tag suggestions while typing)" },
+    "关闭后编辑框输入时不弹出补全列表；词库搜索、标签编辑弹窗等独立补全功能不受影响。": { zh: "关闭后编辑框输入时不弹出补全列表；词库搜索、标签编辑弹窗等独立补全功能不受影响。", en: "After turning off, no autocomplete popup while typing in editor; tag library search, Edit Tags modal and other independent autocomplete features are unaffected." },
+
+    // 设置项 5 — 标签和补全功能设置（新增）
+    "5 · 标签和补全功能设置": { zh: "5 · 标签和补全功能设置", en: "5 · Tag & Autocomplete Settings" },
+    "选择补全数据来源：本地标签数据库使用预设库+用户标签组；远端 Danbooru 则实时从官方 API 获取（自带分类与热度）。": {
+        zh: "选择补全数据来源：本地标签数据库使用预设库+用户标签组；远端 Danbooru 则实时从官方 API 获取（自带分类与热度）。",
+        en: "Choose autocomplete data source: local tag DB uses preset library + user tagsets; remote Danbooru fetches live from official API (with category & heat).",
+    },
+    "数据来源(🚨使用danbooru数据时，请当编辑界面下方显示连接成功再编辑tag，否则补全可能会显示bug。)": {
+        zh: "数据来源(🚨使用danbooru数据时，请当编辑界面下方显示连接成功再编辑tag，否则补全可能会显示bug。)",
+        en: "Data Source (🚨When using danbooru data, wait until the connection success message appears below the editor, then edit tags. Otherwise autocomplete may show bugs.)",
+    },
+    "📁 本地标签数据库": { zh: "📁 本地标签数据库", en: "📁 Local Tag Database" },
+    "使用预设库（tag预设库.txt）与用户标签组进行补全，中文释义来自本地词库。": {
+        zh: "使用预设库（tag预设库.txt）与用户标签组进行补全，中文释义来自本地词库。",
+        en: "Uses preset library (tag预设库.txt) and user tagsets for autocomplete; Chinese glossary from local lexicon.",
+    },
+    "🌐 远端 Danbooru Tag 数据": { zh: "🌐 远端 Danbooru Tag 数据", en: "🌐 Remote Danbooru Tag Data" },
+    "实时从 danbooru.donmai.us 获取 Tag，带分类（general/artist/copyright/character/meta）与热度排序；中文释义使用本地词库匹配。": {
+        zh: "实时从 danbooru.donmai.us 获取 Tag，带分类（general/artist/copyright/character/meta）与热度排序；中文释义使用本地词库匹配。",
+        en: "Fetches tags live from danbooru.donmai.us, with category (general/artist/copyright/character/meta) and popularity sort; Chinese glossary matched from local lexicon.",
+    },
+    "正在检测连接…": { zh: "正在检测连接…", en: "Checking connection..." },
+    "❌ 连接失败：": { zh: "❌ 连接失败：", en: "❌ Connection failed:" },
+    "（将自动切回本地模式）": { zh: "（将自动切回本地模式）", en: "(Will automatically switch back to local mode)" },
+    "✅ 连接成功！已启用 Danbooru 远端补全。": { zh: "✅ 连接成功！已启用 Danbooru 远端补全。", en: "✅ Connection successful! Remote Danbooru autocomplete enabled." },
+
+    // 补全选项卡标题（设置项 1 副标题补充）
+    "💫 格式化": { zh: "💫 格式化", en: "💫 Format" },
+    "🔄 去重": { zh: "🔄 去重", en: "🔄 Dedupe" },
+    "🗑️ 清空全部": { zh: "🗑️ 清空全部", en: "🗑️ Clear All" },
+    "🚫 清空屏蔽": { zh: "🚫 清空屏蔽", en: "🚫 Clear Disabled" },
+    "📋 复制": { zh: "📋 复制", en: "📋 Copy" },
+    "🏷️ 编辑标签": { zh: "🏷️ 编辑标签", en: "🏷️ Edit Tags" },
+    "🌐 一键翻译所有Tag": { zh: "🌐 一键翻译所有Tag", en: "🌐 Translate All Tags" },
+
+    // Danbooru 连接状态条（编辑区底部）
+    "补全来源：本地标签库": { zh: "补全来源：本地标签库", en: "Source: Local Tag Library" },
+    "✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据": {
+        zh: "✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据",
+        en: "✅ Danbooru connected; autocomplete & tag search use Danbooru data",
+    },
+    "❌ Danbooru 不可用：": { zh: "❌ Danbooru 不可用：", en: "❌ Danbooru unavailable:" },
+    "✅ 已自动保存": { zh: "✅ 已自动保存", en: "✅ Auto-saved" },
+    "自动保存失败：": { zh: "自动保存失败：", en: "Auto-save failed:" },
 
     // 拖动提示
     "拖动缩放窗体": { zh: "拖动缩放窗体", en: "Drag to resize window" },

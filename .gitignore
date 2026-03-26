@@ -14,6 +14,7 @@ savedata/*
 !savedata/replace_rules.txt
 !savedata/resolutions.txt
 !savedata/tag预设库.txt
+!savedata/danbooru预设库.txt
 
 # 3. 再次确保 API 设置文件绝对被忽略（双重保险）
 savedata/llm_settings.txt
@@ -24,5 +25,3 @@ node.zip
 # 5. 测试文档（不上传到 GitHub）
 TEST_UPDATE_CHECKER.md
 DEVELOPMENT_GUIDE.md
-
-.cursorignore

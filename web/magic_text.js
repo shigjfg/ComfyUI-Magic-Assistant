@@ -443,6 +443,8 @@ function insertMagicPromptAtCaret(textarea, textToInsert, onAfter) {
 
 /** 编辑标签弹窗内搜索：与补全同接口；limit=0 时后端返回全部匹配（utils.py） */
 const MAGIC_TAG_EDITOR_SEARCH_LIMIT = 0;
+/** Danbooru 标签搜索单页条数（远端单次最多 100；滚动接近底部自动加载下一页） */
+const DANBOORU_TAG_SEARCH_PAGE_SIZE = 100;
 
 /** 卡片配色：新建 / 收藏（参考标签管理器色块头 + 深灰正文） */
 const MAGIC_TAG_CARD_HEADER_NEW = "#9a8f4a";
@@ -491,10 +493,12 @@ async function magicPostTagSets(body) {
 /**
  * 「编辑标签」弹窗：三区域 UI（新建标签 / 收藏标签 可折叠卡片区 + 标签搜索表）。
  * 非模态：shell pointer-events:none，仅本窗体可点。
- * 搜索逻辑与提示词补全一致：GET /ma/prompt_autocomplete?q=&limit=
+ * 搜索逻辑与提示词补全一致：GET /ma/prompt_autocomplete?q=&limit=（本地模式）
+ * danbooru 模式：GET /ma/danbooru_autocomplete（远端，含分类）
  * @param {object} [ctx]
  * @param {function} [ctx.getTextarea] 主编辑区 textarea
  * @param {function} [ctx.afterInsert] 插入后回调（同步 editorText 等）
+ * @param {boolean} [ctx.danbooruMode] 是否为 Danbooru 远端模式
  */
 function showMagicEditTagsModal(shell, ctx = {}) {
     if (!shell) return;
@@ -505,6 +509,9 @@ function showMagicEditTagsModal(shell, ctx = {}) {
         if (typeof ctx.afterInsert === "function") ctx.afterInsert();
     };
     const insertEn = (en) => insertMagicPromptAtCaret(getTa(), en, doAfterInsert);
+
+    // Danbooru 模式
+    const danbooruMode = !!(ctx && ctx.danbooruMode);
 
     let localNew = [];
     let localFav = [];
@@ -1002,6 +1009,68 @@ function showMagicEditTagsModal(shell, ctx = {}) {
     searchRow.appendChild(searchBtn);
     bottomZone.appendChild(searchRow);
 
+    let lastFetchedItems = [];
+    let editTagsCatFilter = null;
+    let editTagsCatSelect = null;
+    /** Danbooru：搜索框与表格之间的条数统计行 */
+    let searchStatRow = null;
+    let danbooruTagSearchHasMore = false;
+    let danbooruTagSearchPage = 1;
+    let lastDanbooruSearchQuery = "";
+    let danbooruLoadingMore = false;
+    if (danbooruMode) {
+        searchStatRow = document.createElement("div");
+        searchStatRow.style.cssText = `
+            font-size: 10px; color: ${THEME.text2}; margin: 0 0 8px 2px;
+            line-height: 1.45; min-height: 16px;
+        `;
+        searchStatRow.textContent = ""; // 搜索后由 refreshTagSearchStat 填充
+        bottomZone.appendChild(searchStatRow);
+    }
+
+    function refreshTagSearchStat() {
+        if (!danbooruMode || !searchStatRow) return;
+        const n = lastFetchedItems.length;
+        const filtered =
+            editTagsCatFilter == null
+                ? lastFetchedItems
+                : lastFetchedItems.filter((it) => it.category === editTagsCatFilter);
+        const m = filtered.length;
+        const parts = [];
+        if (n > 0) {
+            parts.push(magicT("已加载") + " " + n + " " + magicT("条"));
+            if (editTagsCatFilter != null) {
+                parts.push(magicT("· 筛选显示") + " " + m + " " + magicT("条"));
+            }
+            if (danbooruTagSearchHasMore) {
+                parts.push(magicT("· 下拉列表可加载更多"));
+            } else {
+                parts.push(magicT("· 已全部加载"));
+            }
+        }
+        searchStatRow.textContent = parts.join(" ");
+    }
+
+    /** 与 utils.ma_normalize_en_for_tag_match 一致：空格/下划线等价，避免分页合并时同一 tag 两种写法各出现一次 */
+    const danbooruRowDedupeKey = (it) => {
+        const s = String((it && (it.raw || it.en)) || "")
+            .trim()
+            .toLowerCase();
+        if (!s) return "";
+        return s.replace(/[\s_]+/g, "_").replace(/^_+|_+$/g, "");
+    };
+    const mergeDanbooruTagItems = (a, b) => {
+        const seen = new Set(a.map((it) => danbooruRowDedupeKey(it)).filter(Boolean));
+        const out = [...a];
+        for (const it of b) {
+            const k = danbooruRowDedupeKey(it);
+            if (!k || seen.has(k)) continue;
+            seen.add(k);
+            out.push(it);
+        }
+        return out;
+    };
+
     const tableWrap = document.createElement("div");
     tableWrap.style.cssText = `
         flex: 1;
@@ -1018,17 +1087,113 @@ function showMagicEditTagsModal(shell, ctx = {}) {
     const thr = document.createElement("tr");
     thr.style.cssText = `background:${THEME.bg3}; color:${THEME.text2};`;
     thead.style.cssText = `position: sticky; top: 0; z-index: 2; box-shadow: 0 1px 0 ${THEME.border};`;
-    [magicT("Tag"), magicT("中文"), magicT("操作")].forEach((label, i) => {
-        const th = document.createElement("th");
-        th.textContent = label;
-        th.style.cssText = `
-            padding: 8px 10px; text-align: ${i === 2 ? "center" : "left"};
-            font-weight: 600; border-bottom: 1px solid ${THEME.border};
-            ${i === 0 ? "width:36%;" : ""}
-            ${i === 2 ? "width:76px;" : ""}
-        `;
-        thr.appendChild(th);
-    });
+
+    if (danbooruMode) {
+        // 固定列宽 + table-layout:fixed，表头与单元格 text-align 一致，避免「分类」「热度」错位
+        table.style.tableLayout = "fixed";
+        const cg = document.createElement("colgroup");
+        const colSpecs = [
+            { w: "32%" },
+            { w: "24%" },
+            { w: "112px" },
+            { w: "76px" },
+            { w: "76px" },
+        ];
+        colSpecs.forEach(({ w }) => {
+            const col = document.createElement("col");
+            col.style.width = w;
+            cg.appendChild(col);
+        });
+        table.appendChild(cg);
+
+        const thAlign = ["left", "left", "center", "right", "center"];
+        const colHdr = [
+            magicT("Tag"),
+            magicT("中文"),
+            null,
+            magicT("热度"),
+            magicT("操作"),
+        ];
+        for (let i = 0; i < 5; i++) {
+            const th = document.createElement("th");
+            if (i === 2) {
+                th.style.cssText = `
+                    padding: 5px 4px;
+                    text-align: center;
+                    font-weight: 600;
+                    border-bottom: 1px solid ${THEME.border};
+                    box-sizing: border-box;
+                    vertical-align: middle;
+                `;
+                const catHeadRow = document.createElement("div");
+                catHeadRow.style.cssText =
+                    "display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;";
+                const catTitle = document.createElement("span");
+                catTitle.textContent = magicT("分类");
+                catTitle.style.cssText = "font-size:10px;line-height:1;white-space:nowrap;";
+                editTagsCatSelect = document.createElement("select");
+                editTagsCatSelect.title = magicT("按分类筛选");
+                editTagsCatSelect.style.cssText = `
+                    flex:0 1 auto;width:auto;max-width:54px;min-width:0;height:17px;
+                    line-height:15px;padding:0 1px 0 2px;margin:0;
+                    font-size:9px;font-weight:600;font-family:inherit;
+                    background:${THEME.bg3};color:${THEME.text};
+                    border:1px solid ${THEME.border};border-radius:3px;
+                    outline:none;cursor:pointer;box-sizing:border-box;
+                `;
+                DANBOORU_CAT_FILTER_OPTIONS.forEach((opt) => {
+                    const op = document.createElement("option");
+                    op.value = opt.value === null ? "" : String(opt.value);
+                    op.textContent = opt.label;
+                    editTagsCatSelect.appendChild(op);
+                });
+                preventConflict(editTagsCatSelect);
+                editTagsCatSelect.addEventListener("change", () => {
+                    const v = editTagsCatSelect.value;
+                    editTagsCatFilter = v === "" ? null : Number(v);
+                    refreshTagSearchStat();
+                    if (lastFetchedItems.length) {
+                        const emptyMsg = lastFetchedItems.length
+                            ? magicT("该分类下无结果。")
+                            : magicT("无结果，请更换关键词。");
+                        const filtered =
+                            editTagsCatFilter == null
+                                ? lastFetchedItems
+                                : lastFetchedItems.filter((it) => it.category === editTagsCatFilter);
+                        renderSearchRows(filtered, emptyMsg);
+                    }
+                });
+                catHeadRow.appendChild(catTitle);
+                catHeadRow.appendChild(editTagsCatSelect);
+                th.appendChild(catHeadRow);
+            } else {
+                th.textContent = colHdr[i];
+                th.style.cssText = `
+                    padding: 8px 8px;
+                    text-align: ${thAlign[i]};
+                    font-weight: 600;
+                    border-bottom: 1px solid ${THEME.border};
+                    box-sizing: border-box;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                `;
+            }
+            thr.appendChild(th);
+        }
+    } else {
+        [magicT("Tag"), magicT("中文"), magicT("操作")].forEach((label, i) => {
+            const th = document.createElement("th");
+            th.textContent = label;
+            th.style.cssText = `
+                padding: 8px 10px; text-align: ${i === 2 ? "center" : "left"};
+                font-weight: 600; border-bottom: 1px solid ${THEME.border};
+                ${i === 0 ? "width:36%;" : ""}
+                ${i === 2 ? "width:76px;" : ""}
+            `;
+            thr.appendChild(th);
+        });
+    }
     thead.appendChild(thr);
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
@@ -1037,21 +1202,48 @@ function showMagicEditTagsModal(shell, ctx = {}) {
     bottomZone.appendChild(tableWrap);
 
     const searchHint = document.createElement("div");
-    searchHint.style.cssText = `
+    searchHint.style.cssText = danbooruMode
+        ? `
+        margin-top: 8px; font-size: 11px; line-height: 1.45; flex-shrink: 0;
+        color: ${THEME.success};
+        padding: 8px 10px; border-radius: 6px;
+        background: ${THEME.bg3};
+        border: 1px solid rgba(76, 175, 80, 0.35);
+    `
+        : `
         margin-top: 8px; font-size: 11px; color: ${THEME.text2}; line-height: 1.45;
         flex-shrink: 0;
     `;
-    searchHint.innerHTML = magicT("匹配方式与提示词补全相同：英文 ") + "<b>" + magicT("包含") + "</b>" + magicT("（不区分大小写），中文 ") + "<b>" + magicT("包含") + "</b>" + magicT("。") + "<b>" + magicT("显示全部") + "</b>" + magicT("匹配结果（无条数上限）；自建标签组优先列出。关键词过短时结果可能很多，建议打全名缩小范围。");
+    if (danbooruMode) {
+        // 与后端一致：Danbooru 只按英文 tag 名检索；「中文」列是本地词库释义，易与「中文包含」误解
+        searchHint.innerHTML =
+            magicT(
+                "【Danbooru 远端】英文：多页取回后排序——有本地中文释义的优先于无中文，再按热度。中文搜索：词库译成英文根后向 Danbooru 按英文名匹配；「中文」列须命中你的词，且查询不少于 3 字时排除「更长前缀复合释义」（如搜「健身房」不显示释义为「健身房淋浴」的 tag）。「中文」列来自本地词库。若出现与前排相似的英文名，多为远端另一条独立 tag（含错拼），无预设译名时「中文」为—。",
+            ) +
+            magicT("（每页最多 100 条，向下滚动加载更多；关键词过短建议打更完整的词。）");
+    } else {
+        searchHint.innerHTML =
+            magicT("匹配方式与提示词补全相同：英文 ") + "<b>" + magicT("包含") + "</b>" +
+            magicT("（不区分大小写），中文 ") + "<b>" + magicT("包含") + "</b>" + magicT("。") +
+            "<b>" + magicT("显示全部") + "</b>" + magicT("匹配结果（无条数上限）；自建标签组优先列出。关键词过短时结果可能很多，建议打全名缩小范围。");
+    }
     bottomZone.appendChild(searchHint);
 
     body.appendChild(bottomZone);
 
+    const fmtCount = (n) => {
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+        if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+        return String(n || 0);
+    };
+
     const renderSearchRows = (items, emptyMessage) => {
         tbody.innerHTML = "";
+        const colSpan = danbooruMode ? 5 : 3;
         if (!items || !items.length) {
             const tr = document.createElement("tr");
             const td = document.createElement("td");
-            td.colSpan = 3;
+            td.colSpan = colSpan;
             td.textContent = emptyMessage || magicT("无结果，请更换关键词。");
             td.style.cssText = `padding:20px;text-align:center;color:${THEME.text2};`;
             tr.appendChild(td);
@@ -1063,106 +1255,265 @@ function showMagicEditTagsModal(shell, ctx = {}) {
             tr.style.cssText = `border-bottom:1px solid ${THEME.border};`;
             tr.addEventListener("mouseenter", () => { tr.style.background = THEME.hover; });
             tr.addEventListener("mouseleave", () => { tr.style.background = "transparent"; });
-            const tdEn = document.createElement("td");
-            tdEn.style.cssText = `padding:8px 10px;color:${THEME.text};vertical-align:middle;display:flex;align-items:center;gap:0;`;
-            const enText = document.createElement("span");
-            enText.style.cssText = "word-break:break-all;flex-shrink:1;";
-            const enFull = row.en || "";
-            const enShow =
-                row.kind === "tagset" ? magicFormatTagPreview(enFull, 2) : enFull;
-            enText.textContent = enShow;
-            if (row.kind === "tagset" && enFull && enFull !== enShow) {
-                enText.title = enFull;
-            }
-            tdEn.appendChild(enText);
-            if (row.source === "custom") {
-                const badge = document.createElement("span");
-                badge.textContent = magicT("用户");
-                badge.title =
-                    row.kind === "tagset"
-                        ? `标签组「${row.setName || row.cn || "自定义"}」· 添加为整段`
-                        : `来自「${row.setName || "自定义"}」`;
-                badge.style.cssText = `
-                    margin-left: 6px; padding: 1px 5px; font-size: 10px;
-                    border-radius: 3px; background: rgba(156, 39, 176, 0.28);
-                    color: #ce93d8; font-weight: 600; flex-shrink: 0;
-                    vertical-align: middle; line-height: 1.4;
+
+            if (danbooruMode) {
+                // Danbooru 模式：英文 / 中文 / 分类 / 热度 / 操作（与 thead 同 padding、text-align）
+                const cellBase = `box-sizing:border-box;padding:8px 8px;vertical-align:middle;`;
+                const tdEn = document.createElement("td");
+                tdEn.style.cssText = `${cellBase}color:${THEME.text};text-align:left;overflow:hidden;`;
+                const enText = document.createElement("span");
+                enText.textContent = row.en || "";
+                enText.style.cssText = "word-break:break-all;";
+                tdEn.appendChild(enText);
+
+                const tdCn = document.createElement("td");
+                tdCn.textContent = row.cn || "—";
+                tdCn.style.cssText = `${cellBase}color:${THEME.text2};text-align:left;word-break:break-word;`;
+
+                const ck = magicDanbooruCategoryId(row);
+                const catColor = DANBOORU_CATEGORY_COLORS[ck] || "#888";
+                const catName = DANBOORU_CATEGORY_NAMES[ck] || "other";
+                const tdCat = document.createElement("td");
+                tdCat.style.cssText = `${cellBase}text-align:center;`;
+                const catBadge = document.createElement("span");
+                catBadge.textContent = catName;
+                catBadge.style.cssText = `
+                    display:inline-block; padding:1px 5px; font-size:9px; border-radius:3px;
+                    background:${catColor}1a; color:${catColor}; border:1px solid ${catColor}55;
+                    font-weight:600; max-width:100%; overflow:hidden; text-overflow:ellipsis;
                 `;
-                tdEn.appendChild(badge);
+                tdCat.appendChild(catBadge);
+
+                const tdCnt = document.createElement("td");
+                tdCnt.textContent = fmtCount(row.count);
+                tdCnt.style.cssText = `${cellBase}color:${THEME.text2};font-size:11px;text-align:right;font-variant-numeric:tabular-nums;`;
+
+                const tdOp = document.createElement("td");
+                tdOp.style.cssText = `${cellBase}text-align:center;`;
+                const addBtn = document.createElement("button");
+                addBtn.type = "button";
+                addBtn.textContent = magicT("添加");
+                addBtn.style.cssText = `
+                    padding: 4px 10px; font-size: 11px; border-radius: 4px; cursor: pointer;
+                    border: 1px solid ${THEME.accent}; background: rgba(156, 39, 176, 0.2);
+                    color: #e1bee7; font-weight: 600;
+                `;
+                preventConflict(addBtn);
+                addBtn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    insertEn(row.en || "");
+                });
+                tdOp.appendChild(addBtn);
+
+                tr.appendChild(tdEn);
+                tr.appendChild(tdCn);
+                tr.appendChild(tdCat);
+                tr.appendChild(tdCnt);
+                tr.appendChild(tdOp);
+            } else {
+                // 本地模式：英文 / 中文 / 操作
+                const tdEn = document.createElement("td");
+                tdEn.style.cssText = `padding:8px 10px;color:${THEME.text};vertical-align:middle;display:flex;align-items:center;gap:0;`;
+                const enText = document.createElement("span");
+                enText.style.cssText = "word-break:break-all;flex-shrink:1;";
+                const enFull = row.en || "";
+                const enShow =
+                    row.kind === "tagset" ? magicFormatTagPreview(enFull, 2) : enFull;
+                enText.textContent = enShow;
+                if (row.kind === "tagset" && enFull && enFull !== enShow) {
+                    enText.title = enFull;
+                }
+                tdEn.appendChild(enText);
+                if (row.source === "custom") {
+                    const badge = document.createElement("span");
+                    badge.textContent = magicT("用户");
+                    badge.title =
+                        row.kind === "tagset"
+                            ? `标签组「${row.setName || row.cn || "自定义"}」· 添加为整段`
+                            : `来自「${row.setName || "自定义"}」`;
+                    badge.style.cssText = `
+                        margin-left: 6px; padding: 1px 5px; font-size: 10px;
+                        border-radius: 3px; background: rgba(156, 39, 176, 0.28);
+                        color: #ce93d8; font-weight: 600; flex-shrink: 0;
+                        vertical-align: middle; line-height: 1.4;
+                    `;
+                    tdEn.appendChild(badge);
+                }
+                const tdCn = document.createElement("td");
+                tdCn.textContent = row.cn || "—";
+                tdCn.style.cssText = `padding:8px 10px;color:${THEME.text2};vertical-align:middle;word-break:break-word;`;
+                const tdOp = document.createElement("td");
+                tdOp.style.cssText = "padding:6px 8px;text-align:center;vertical-align:middle;";
+                const addBtn = document.createElement("button");
+                addBtn.type = "button";
+                addBtn.textContent = magicT("添加");
+                addBtn.style.cssText = `
+                    padding: 4px 10px; font-size: 11px; border-radius: 4px; cursor: pointer;
+                    border: 1px solid ${THEME.accent}; background: rgba(156, 39, 176, 0.2);
+                    color: #e1bee7; font-weight: 600;
+                `;
+                preventConflict(addBtn);
+                addBtn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    insertEn(row.en || "");
+                });
+                tdOp.appendChild(addBtn);
+                tr.appendChild(tdEn);
+                tr.appendChild(tdCn);
+                tr.appendChild(tdOp);
             }
-            const tdCn = document.createElement("td");
-            tdCn.textContent = row.cn || "—";
-            tdCn.style.cssText = `padding:8px 10px;color:${THEME.text2};vertical-align:middle;word-break:break-word;`;
-            const tdOp = document.createElement("td");
-            tdOp.style.cssText = "padding:6px 8px;text-align:center;vertical-align:middle;";
-            const addBtn = document.createElement("button");
-            addBtn.type = "button";
-            addBtn.textContent = magicT("添加");
-            addBtn.style.cssText = `
-                padding: 4px 10px; font-size: 11px; border-radius: 4px; cursor: pointer;
-                border: 1px solid ${THEME.accent}; background: rgba(156, 39, 176, 0.2);
-                color: #e1bee7; font-weight: 600;
-            `;
-            preventConflict(addBtn);
-            addBtn.addEventListener("click", (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                insertEn(row.en || "");
-            });
-            tdOp.appendChild(addBtn);
-            tr.appendChild(tdEn);
-            tr.appendChild(tdCn);
-            tr.appendChild(tdOp);
             tbody.appendChild(tr);
         });
     };
 
     const setSearchLoading = (on) => {
         tbody.innerHTML = "";
+        const colSpan = danbooruMode ? 5 : 3;
         const tr = document.createElement("tr");
         const td = document.createElement("td");
-        td.colSpan = 3;
-            td.textContent = on ? magicT("搜索中…") : "";
+        td.colSpan = colSpan;
+        td.textContent = on ? magicT("搜索中…") : "";
         td.style.cssText = `padding:20px;text-align:center;color:${THEME.text2};`;
         tr.appendChild(td);
         tbody.appendChild(tr);
     };
 
+    const loadMoreDanbooruTags = async () => {
+        if (!danbooruMode || !danbooruTagSearchHasMore || danbooruLoadingMore || !lastDanbooruSearchQuery) {
+            return;
+        }
+        danbooruLoadingMore = true;
+        const nextPage = danbooruTagSearchPage + 1;
+        try {
+            const res = await magicDanbooruSearch(
+                lastDanbooruSearchQuery,
+                DANBOORU_TAG_SEARCH_PAGE_SIZE,
+                nextPage,
+            );
+            if (!res.items.length) {
+                danbooruTagSearchHasMore = false;
+                refreshTagSearchStat();
+                return;
+            }
+            lastFetchedItems = mergeDanbooruTagItems(lastFetchedItems, res.items);
+            danbooruTagSearchPage = nextPage;
+            danbooruTagSearchHasMore = res.hasMore;
+            refreshTagSearchStat();
+            const emptyMsg = lastFetchedItems.length
+                ? magicT("该分类下无结果。")
+                : magicT("无结果，请更换关键词。");
+            const filtered =
+                editTagsCatFilter == null
+                    ? lastFetchedItems
+                    : lastFetchedItems.filter((it) => it.category === editTagsCatFilter);
+            renderSearchRows(filtered, emptyMsg);
+        } catch (e) {
+            console.warn("[MagicText] loadMoreDanbooruTags", e);
+        } finally {
+            danbooruLoadingMore = false;
+        }
+    };
+
     const runSearch = async () => {
         const q = (searchInp.value || "").trim();
         if (!q) {
-            renderSearchRows([], "请输入关键词后点击搜索。");
+            lastFetchedItems = [];
+            lastDanbooruSearchQuery = "";
+            danbooruTagSearchHasMore = false;
+            danbooruTagSearchPage = 1;
+            if (searchStatRow) searchStatRow.textContent = "";
+            renderSearchRows([], magicT("请输入关键词后点击搜索。"));
             return;
         }
         searchBtn.disabled = true;
         setSearchLoading(true);
         try {
-            const params = new URLSearchParams({
-                q,
-                limit: String(MAGIC_TAG_EDITOR_SEARCH_LIMIT),
-            });
-            const url = api.apiURL(`/ma/prompt_autocomplete?${params.toString()}`);
-            const res = await fetch(url, { credentials: "same-origin" });
-            const data = await res.json();
-            const items = Array.isArray(data.items) ? data.items : [];
+            let items = [];
+            const isCnQuery = Boolean(q && /[\u4e00-\u9fff]/.test(q));
+            if (danbooruMode) {
+                lastDanbooruSearchQuery = q;
+                danbooruTagSearchPage = 1;
+                const res = await magicDanbooruSearch(q, DANBOORU_TAG_SEARCH_PAGE_SIZE, 1);
+                items = res.items || [];
+                danbooruTagSearchHasMore = res.hasMore;
+                // 更新统计行提示（中文查询时）
+                if (searchStatRow) {
+                    const hasCnTranslate = Array.isArray(res.cnTranslate) && res.cnTranslate.length > 0;
+                    if (isCnQuery && hasCnTranslate) {
+                        const translatedEn = (res.cnTranslate || []).slice(0, 3).join(", ");
+                        searchStatRow.textContent =
+                            magicT("中文「") + q + magicT("」→「") + translatedEn + magicT("」已翻译为英文，从 Danbooru 获取热度排序");
+                    } else if (isCnQuery && !items.length) {
+                        searchStatRow.textContent = magicT("本地词库未找到「") + q + magicT("」的对应英文，Danbooru 无法直接搜索中文");
+                    } else {
+                        searchStatRow.textContent = "";
+                    }
+                }
+            } else {
+                // 本地模式搜索
+                const params = new URLSearchParams({
+                    q,
+                    limit: String(MAGIC_TAG_EDITOR_SEARCH_LIMIT),
+                });
+                const url = api.apiURL(`/ma/prompt_autocomplete?${params.toString()}`);
+                const res = await fetch(url, { credentials: "same-origin" });
+                const data = await res.json();
+                items = Array.isArray(data.items) ? data.items : [];
+            }
+            // 保存结果并重置分类筛选
+            lastFetchedItems = items;
+            if (editTagsCatSelect) {
+                editTagsCatSelect.value = "";
+                editTagsCatFilter = null;
+            }
             renderSearchRows(
                 items,
-                items.length ? undefined : "无结果，请更换关键词。",
+                items.length ? undefined : magicT("无结果，请更换关键词。"),
             );
+            if (danbooruMode) {
+                refreshTagSearchStat();
+                void (async () => {
+                    for (let i = 0; i < 30; i++) {
+                        await new Promise((r) => requestAnimationFrame(r));
+                        if (!danbooruTagSearchHasMore || danbooruLoadingMore) break;
+                        const el = tableWrap;
+                        if (el.scrollHeight > el.clientHeight + 10) break;
+                        await loadMoreDanbooruTags();
+                    }
+                })();
+            }
         } catch (err) {
             console.warn("[MagicText] tag search", err);
             tbody.innerHTML = "";
+            const colSpan = danbooruMode ? 5 : 3;
             const tr = document.createElement("tr");
             const td = document.createElement("td");
-            td.colSpan = 3;
+            td.colSpan = colSpan;
             td.textContent = magicT("搜索失败，请稍后重试。");
             td.style.cssText = "padding:20px;text-align:center;color:#e57373;";
             tr.appendChild(td);
             tbody.appendChild(tr);
+            if (searchStatRow) searchStatRow.textContent = "";
         } finally {
             searchBtn.disabled = false;
         }
     };
+
+    if (danbooruMode) {
+        let scrollTimer = null;
+        tableWrap.addEventListener("scroll", () => {
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(() => {
+                if (!danbooruTagSearchHasMore || danbooruLoadingMore) return;
+                const el = tableWrap;
+                if (el.scrollHeight <= el.clientHeight + 2) return;
+                if (el.scrollTop + el.clientHeight < el.scrollHeight - 48) return;
+                void loadMoreDanbooruTags();
+            }, 120);
+        });
+    }
 
     searchBtn.addEventListener("click", (e) => {
         e.preventDefault();
@@ -1175,7 +1526,7 @@ function showMagicEditTagsModal(shell, ctx = {}) {
         }
     });
 
-    renderSearchRows([], "请输入关键词后点击搜索。");
+    renderSearchRows([], magicT("请输入关键词后点击搜索。"));
 
     inner.appendChild(body);
 
@@ -1246,6 +1597,8 @@ const MAGIC_DEFAULT_EDITOR_TOOLBAR = {
     edit_tags: true,
     translate_all: true,
     translate_input: true,
+    /** 内联补全弹窗：false 时编辑框输入不弹出候选列表 */
+    autocomplete_popup: true,
 };
 
 /** 与 utils.MagicUtils._DEFAULT_SETTINGS.format_options / ma_prompt_cleaning 一致 */
@@ -1284,7 +1637,150 @@ function magicClampAutocompleteLimit(n) {
 
 const AUTOCOMPLETE_DEBOUNCE_MS = 160;
 /** 补全浮层宽度（固定紧凑，不随整行文本框拉满） */
-const AUTOCOMPLETE_PANEL_WIDTH_PX = 300;
+const AUTOCOMPLETE_PANEL_WIDTH_PX = 328;
+
+/** Danbooru 远端 API 地址 */
+const DANBOORU_API = "https://danbooru.donmai.us";
+
+/** Danbooru 分类颜色（与参考代码一致） */
+const DANBOORU_CATEGORY_COLORS = {
+    0: "#4e9af1",
+    1: "#f1964e",
+    3: "#c84ef1",
+    4: "#4ef17a",
+    5: "#f14e4e",
+};
+
+/** Danbooru 分类名称 */
+const DANBOORU_CATEGORY_NAMES = {
+    0: "general",
+    1: "artist",
+    3: "copyright",
+    4: "character",
+    5: "meta",
+};
+
+/** 远端返回的 category（0 为 general）；避免 undefined 被当成无分类显示成 other */
+function magicDanbooruCategoryId(it) {
+    const v = it == null ? undefined : it.category;
+    if (v === 0 || v === "0") return 0;
+    if (v == null || v === "") return 0;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+}
+
+/** 分类筛选下拉选项（用于补全弹窗和标签搜索） */
+const DANBOORU_CAT_FILTER_OPTIONS = [
+    { value: null,   label: "全部" },
+    { value: 0,      label: "general" },
+    { value: 1,      label: "artist" },
+    { value: 3,      label: "copyright" },
+    { value: 4,      label: "character" },
+    { value: 5,      label: "meta" },
+];
+
+/** 与 userdata/settings.txt 中 danbooru_mode 一致：仅 local | danbooru */
+function magicNormalizeDanbooruMode(v) {
+    const s = v == null ? "" : String(v).trim().toLowerCase();
+    return s === "danbooru" ? "danbooru" : "local";
+}
+
+/**
+ * 仅更新 danbooru_mode（POST /ma/settings 会合并写入 settings.txt）
+ */
+async function magicPersistDanbooruModeOnly(mode) {
+    const m = magicNormalizeDanbooruMode(mode);
+    try {
+        const r = await fetch("/ma/settings", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ danbooru_mode: m }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return true;
+    } catch (e) {
+        console.warn("[MagicText] magicPersistDanbooruModeOnly", e);
+        return false;
+    }
+}
+
+/**
+ * 检测 Danbooru 远端是否可达。
+ * 返回 Promise<{ok, message}>。
+ */
+async function magicDanbooruCheckConnection() {
+    try {
+        const r = await fetch(api.apiURL("/ma/danbooru_check_connection"), {
+            credentials: "same-origin",
+            signal: AbortSignal.timeout(10000),
+        });
+        const j = await r.json();
+        return j;
+    } catch (e) {
+        return { ok: false, message: String(e && e.message ? e.message : e) };
+    }
+}
+
+/** 与 utils.ma_strip_autocomplete_query_edges 一致 */
+function magicStripAutocompleteQueryEdges(q) {
+    if (q == null || typeof q !== "string") return "";
+    let s = q.trim();
+    const stripChars = " \t\n\r\u3000\uFF0C\u3002\uFF01\uFF1F\u3001\uFF1B\uFF1A,.!?;:";
+    while (s && stripChars.indexOf(s[0]) !== -1) s = s.slice(1);
+    while (s && stripChars.indexOf(s[s.length - 1]) !== -1) s = s.slice(0, -1);
+    return s.trim();
+}
+
+/** 与 utils._is_chinese_query（任意字符 ord>=0x4E00）一致 */
+function magicDanbooruQueryIsChinese(text) {
+    if (!text) return false;
+    for (const ch of text) {
+        if (ch.codePointAt(0) >= 0x4e00) return true;
+    }
+    return false;
+}
+
+/** 与 utils._ma_danbooru_chinese_query_matches_gloss 一致（≥3 字排除更长前缀复合释义） */
+function magicDanbooruChineseQueryMatchesGloss(q, cnGloss) {
+    const qn = (q == null ? "" : String(q)).trim();
+    const s = (cnGloss == null ? "" : String(cnGloss)).trim();
+    if (!qn || !s || !s.includes(qn)) return false;
+    if (s === qn) return true;
+    if (qn.length >= 3 && s.startsWith(qn) && s.length > qn.length) return false;
+    return true;
+}
+
+/**
+ * Danbooru 模式下的搜索（分页）。
+ * @param {string} [source] - "remote"（默认，远端 Danbooru）或 "preset"（本地 danbooru预设库，毫秒级）
+ * @returns Promise<{ items, hasMore, page, cnTranslate }>
+ */
+async function magicDanbooruSearch(q, limit, page = 1, signal, source = "remote") {
+    const params = new URLSearchParams({
+        q,
+        limit: String(limit || 100),
+        page: String(page || 1),
+    });
+    if (source !== "remote") {
+        params.set("source", source);
+    }
+    const r = await fetch(api.apiURL(`/ma/danbooru_autocomplete?${params.toString()}`), {
+        credentials: "same-origin",
+        signal,
+    });
+    if (!r.ok) {
+        return { items: [], hasMore: false, page: page || 1, cnTranslate: null };
+    }
+    const j = await r.json();
+    const items = Array.isArray(j.items) ? j.items : [];
+    return {
+        items,
+        hasMore: j.has_more === true,
+        page: typeof j.page === "number" ? j.page : page,
+        cnTranslate: Array.isArray(j.cn_translate) ? j.cn_translate : null,
+    };
+}
 
 function debounce(fn, ms) {
     let t;
@@ -1928,18 +2424,23 @@ function createMagicTagToolbarBar({ THEME: T, preventConflict: pc, compact = fal
     };
 }
 
+/** 片段分隔符：半角逗号、全角逗号「，」、顿号「、」、换行（与提示词书写习惯一致） */
+function magicIsPromptSegmentDelimiter(ch) {
+    return ch === "," || ch === "\n" || ch === "\uFF0C" || ch === "\u3001";
+}
+
 /** 当前光标所在「逗号/换行」之间的片段，用于补全 query 与整段替换 */
 function getSegmentAtCaret(value, caret) {
     let start = 0;
     for (let i = caret - 1; i >= 0; i--) {
-        if (value[i] === "," || value[i] === "\n") {
+        if (magicIsPromptSegmentDelimiter(value[i])) {
             start = i + 1;
             break;
         }
     }
     let end = value.length;
     for (let i = caret; i < value.length; i++) {
-        if (value[i] === "," || value[i] === "\n") {
+        if (magicIsPromptSegmentDelimiter(value[i])) {
             end = i;
             break;
         }
@@ -2038,10 +2539,12 @@ function getTextareaCaretViewportRect(textarea, position) {
  * @param {HTMLElement} panelMount — 建议用全屏透明壳层（pointer-events:none，无裁剪、无 transform，fixed 即视口坐标）
  * @param {HTMLElement[]} [scrollRoots] — 滚动时重算位置（如 content）
  */
-function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRoots = [], limit: acLimitOpt } = {}) {
+function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRoots = [], limit: acLimitOpt, danbooruMode = false } = {}) {
     const acLimit = magicClampAutocompleteLimit(
         acLimitOpt != null ? acLimitOpt : AUTOCOMPLETE_LIMIT,
     );
+    let danbooruCatFilter = null;
+    let danbooruCatSelect = null;
     if (typeof panelMount._magicAcDispose === "function") {
         try { panelMount._magicAcDispose(); } catch (_) { /* ignore */ }
         panelMount._magicAcDispose = null;
@@ -2060,8 +2563,22 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
     preventConflict(panel);
     panelMount.appendChild(panel);
 
+    /** Danbooru 补全表头与数据行共用列宽，避免关闭按钮挤窄表头导致列错位 */
+    const DANBOORU_AC_GRID = `minmax(0,1fr) minmax(0,34%) 76px 42px`;
+    /** 本地补全仅两列（无分类/热度），表头与行共用 grid，避免与「分类」空列错位 */
+    const LOCAL_AC_GRID = `minmax(0,1fr) minmax(0,38%)`;
     const headRow = document.createElement("div");
-    headRow.style.cssText = `
+    headRow.style.cssText = danbooruMode
+        ? `
+        position:sticky; top:0; z-index:1;
+        position:relative;
+        padding:5px 28px 5px 8px;
+        font-size:10px; color:${THEME.text2};
+        border-bottom:1px solid ${THEME.border};
+        background:${THEME.bg2};
+        box-sizing:border-box;
+    `
+        : `
         display:flex; align-items:center; gap:6px;
         padding:3px 6px; font-size:10px; color:${THEME.text2};
         border-bottom:1px solid ${THEME.border}; position:sticky; top:0;
@@ -2069,21 +2586,100 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
     `;
     const hEn = document.createElement("span");
     hEn.textContent = magicT("英文 tag");
-    hEn.style.cssText = "flex:1; font-weight:600;";
+    hEn.style.cssText = danbooruMode
+        ? "min-width:0; font-weight:600; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+        : "min-width:0; font-weight:600; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;";
     const hCn = document.createElement("span");
     hCn.textContent = magicT("中文");
+    hCn.style.cssText = danbooruMode
+        ? "min-width:0; font-weight:600; text-align:left; line-height:1.25; word-break:break-word;"
+        : "min-width:0; font-weight:600; text-align:left; line-height:1.25; word-break:break-word;";
+    /** Danbooru：「分类」文字 + 紧凑筛选下拉，与数据列宽对齐 */
+    let hCatWrap = null;
+    const hCnt = document.createElement("span");
+    hCnt.textContent = magicT("热度");
+    hCnt.style.cssText =
+        "flex:0 0 42px; flex-shrink:0; text-align:right; font-weight:600; font-variant-numeric:tabular-nums;";
+    hCnt.style.display = danbooruMode ? "" : "none";
     const closeAc = document.createElement("button");
     closeAc.type = "button";
     closeAc.textContent = "✕";
     closeAc.title = magicT("关闭补全");
-    closeAc.style.cssText = `padding:0 6px;border:none;background:transparent;color:${THEME.text2};cursor:pointer;font-size:14px;line-height:1;`;
+    closeAc.style.cssText = danbooruMode
+        ? `position:absolute;right:4px;top:50%;transform:translateY(-50%);padding:0 6px;border:none;background:transparent;color:${THEME.text2};cursor:pointer;font-size:14px;line-height:1;z-index:2;`
+        : `flex-shrink:0;padding:0 6px;border:none;background:transparent;color:${THEME.text2};cursor:pointer;font-size:14px;line-height:1;`;
     preventConflict(closeAc);
-    headRow.appendChild(hEn);
-    headRow.appendChild(hCn);
-    headRow.appendChild(closeAc);
+    if (danbooruMode) {
+        hCatWrap = document.createElement("div");
+        hCatWrap.style.cssText = `
+            flex:0 0 76px; flex-shrink:0; min-width:0;
+            display:flex; flex-direction:row; align-items:center; justify-content:center;
+            gap:3px; font-weight:600;
+        `;
+        const hCatLbl = document.createElement("span");
+        hCatLbl.textContent = magicT("分类");
+        hCatLbl.style.cssText = "font-size:9px; line-height:1; flex-shrink:0; white-space:nowrap;";
+        danbooruCatSelect = document.createElement("select");
+        danbooruCatSelect.title = magicT("按分类筛选");
+        danbooruCatSelect.style.cssText = `
+            flex:0 1 auto; width:auto; min-width:0; max-width:52px;
+            height:17px; line-height:15px; padding:0 1px 0 2px; margin:0;
+            font-size:9px; font-weight:600; font-family:inherit;
+            background:${THEME.bg3}; color:${THEME.text};
+            border:1px solid ${THEME.border}; border-radius:3px;
+            outline:none; cursor:pointer; box-sizing:border-box;
+            vertical-align:middle;
+        `;
+        DANBOORU_CAT_FILTER_OPTIONS.forEach((opt) => {
+            const op = document.createElement("option");
+            op.value = opt.value === null ? "" : String(opt.value);
+            op.textContent = opt.label;
+            danbooruCatSelect.appendChild(op);
+        });
+        preventConflict(danbooruCatSelect);
+        danbooruCatSelect.addEventListener("change", () => {
+            const v = danbooruCatSelect.value;
+            danbooruCatFilter = v === "" ? null : Number(v);
+            if (items.length) renderList();
+        });
+        hCatWrap.appendChild(hCatLbl);
+        hCatWrap.appendChild(danbooruCatSelect);
+        const headGrid = document.createElement("div");
+        headGrid.style.cssText = `
+            display:grid;
+            grid-template-columns: ${DANBOORU_AC_GRID};
+            column-gap:8px;
+            align-items:center;
+            width:100%;
+            min-width:0;
+            box-sizing:border-box;
+        `;
+        headGrid.appendChild(hEn);
+        headGrid.appendChild(hCn);
+        headGrid.appendChild(hCatWrap);
+        headGrid.appendChild(hCnt);
+        headRow.appendChild(headGrid);
+        headRow.appendChild(closeAc);
+    } else {
+        const headGridLocal = document.createElement("div");
+        headGridLocal.style.cssText = `
+            display:grid;
+            grid-template-columns: ${LOCAL_AC_GRID};
+            column-gap:8px;
+            align-items:center;
+            flex:1;
+            min-width:0;
+        `;
+        headGridLocal.appendChild(hEn);
+        headGridLocal.appendChild(hCn);
+        headRow.appendChild(headGridLocal);
+        headRow.appendChild(closeAc);
+    }
     panel.appendChild(headRow);
 
-    const acHintBase = magicT("单次最多 ") + acLimit + magicT(" 条 · 自建标签组优先 · 词太短时预设结果多，可打全名缩小范围");
+    const acHintBase = danbooruMode
+        ? magicT("Danbooru 补全模式 · 热度排序 · 更多Tag请到编辑标签处搜索")
+        : magicT("本地补全模式 · 自建标签组优先 · 词太短时预设结果多，可打全名缩小范围");
     const acHintRow = document.createElement("div");
     acHintRow.textContent = acHintBase;
     acHintRow.style.cssText = `
@@ -2097,9 +2693,15 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
     panel.appendChild(listRoot);
 
     let items = [];
+    /** Danbooru 补全：正在等待远端（或 Danbooru 空后加载本地补充）时为 true */
+    let danbooruAcPending = false;
+    /** 递增序号：避免旧请求的 finally 在新请求已开始后仍把 pending 清掉并误渲染「无结果」 */
+    let danbooruAcReqId = 0;
     let sel = 0;
     let visible = false;
     let acAbort = null;
+    /** 供 keydown 使用（与 renderList 内 shown 同步） */
+    let lastShownForKeys = [];
 
     const margin = 8;
     const updatePanelPosition = () => {
@@ -2155,8 +2757,14 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
         visible = false;
         panel.style.display = "none";
         items = [];
+        danbooruAcPending = false;
         sel = 0;
+        lastShownForKeys = [];
         listRoot.innerHTML = "";
+        if (danbooruMode) {
+            listRoot.style.display = "";
+            listRoot.style.minHeight = "";
+        }
         if (acAbort) {
             try { acAbort.abort(); } catch (_) { /* ignore */ }
             acAbort = null;
@@ -2175,7 +2783,7 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
         const { segStart, segEnd } = getSegmentAtCaret(v, caret);
         // 选完后默认加 ", "；仅当片段后面已经是逗号或换行时不重复加（末尾 segEnd===length 也要加逗号）
         const after = v[segEnd];
-        const trailing = after === "," || after === "\n" ? "" : ", ";
+        const trailing = magicIsPromptSegmentDelimiter(after) ? "" : ", ";
         const tail = v.slice(segEnd).replace(/^[ ]+/, ""); // 只去前导空格，保留逗号/换行
         const newV = v.slice(0, segStart) + it.en + trailing + tail;
         const norm = magicEnsureTrailingCommaPerLine(newV);
@@ -2192,26 +2800,55 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             const caret0 = textarea.selectionStart;
             const { query: acQuery } = getSegmentAtCaret(textarea.value, caret0);
 
-            if (!items.length) {
-                const empty = document.createElement("div");
-                empty.style.cssText = `
-                    padding: 16px 10px; text-align: center;
-                    color: ${THEME.text2}; font-size: 12px;
-                `;
-                empty.textContent = magicT("没有找到包含 \"") + acQuery + magicT("\" 的 tag");
-                listRoot.appendChild(empty);
+            if (danbooruMode && danbooruAcPending && (!items || !items.length)) {
+                lastShownForKeys = [];
+                listRoot.innerHTML = "";
+                listRoot.style.display = "none";
+                listRoot.style.minHeight = "0";
                 visible = true;
-                acHintRow.textContent = acHintBase;
                 panel.style.display = "flex";
                 updatePanelPosition();
                 requestAnimationFrame(() => updatePanelPosition());
                 return;
             }
+            if (danbooruMode) {
+                listRoot.style.display = "";
+            }
+
+            // 应用分类过滤（仅 Danbooru 模式有效）
+            const shown = danbooruCatFilter == null ? items : items.filter(it => it.category === danbooruCatFilter);
+            if (sel >= shown.length) sel = Math.max(0, shown.length - 1);
+
+            if (!shown.length) {
+                lastShownForKeys = [];
+                const empty = document.createElement("div");
+                empty.style.cssText = `
+                    padding: 16px 10px; text-align: center;
+                    color: ${THEME.text2}; font-size: 12px;
+                `;
+                const catHint = danbooruCatFilter != null && danbooruCatFilter !== "" && danbooruCatFilter !== undefined
+                    ? `（${DANBOORU_CATEGORY_NAMES[danbooruCatFilter] || danbooruCatFilter} 分类）`
+                    : "";
+                empty.textContent = magicT("没有找到包含 \"") + acQuery + magicT("\" 的 tag") + catHint;
+                listRoot.appendChild(empty);
+                visible = true;
+                if (!danbooruMode) {
+                    acHintRow.textContent = acHintBase;
+                }
+                panel.style.display = "flex";
+                updatePanelPosition();
+                requestAnimationFrame(() => updatePanelPosition());
+                return;
+            }
+            lastShownForKeys = shown;
             visible = true;
+            const showCat = danbooruCatFilter != null && danbooruCatFilter !== "" && danbooruCatFilter !== undefined
+                ? ` · ${DANBOORU_CATEGORY_NAMES[danbooruCatFilter] || danbooruCatFilter} ${shown.length} 条`
+                : "";
             acHintRow.textContent =
                 items.length >= acLimit
-                    ? magicT("已显示 ") + acLimit + magicT(" 条（已达上限），可能还有更多 · 自建标签已优先 · 请输入更长关键词或至编辑标签处搜索")
-                    : acHintBase;
+                    ? magicT("已显示 ") + acLimit + magicT(" 条（补全条数已达上限）") + showCat + magicT(" · 请输入更长关键词或至编辑标签处搜索")
+                    : acHintBase + showCat;
             panel.style.display = "flex";
 
             const query = acQuery;
@@ -2228,47 +2865,107 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                 );
             };
 
-            items.forEach((it, idx) => {
+            const fmtCount = (n) => {
+                if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+                if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+                return String(n || 0);
+            };
+
+            shown.forEach((it, idx) => {
                 const row = document.createElement("div");
-                row.style.cssText = `
-                    display:flex; justify-content:space-between; align-items:flex-start;
+                row.style.cssText = danbooruMode
+                    ? `
+                    display:grid;
+                    grid-template-columns: ${DANBOORU_AC_GRID};
+                    column-gap:8px;
+                    align-items:center;
                     padding:5px 8px; cursor:pointer; font-size:11px;
-                    border-bottom:1px solid ${THEME.border}; gap:8px;
+                    border-bottom:1px solid ${THEME.border};
+                    box-sizing:border-box;
+                `
+                    : `
+                    display:grid;
+                    grid-template-columns: ${LOCAL_AC_GRID};
+                    column-gap:8px;
+                    align-items:center;
+                    padding:5px 8px; cursor:pointer; font-size:11px;
+                    border-bottom:1px solid ${THEME.border};
+                    box-sizing:border-box;
                 `;
                 if (idx === sel) {
                     row.style.background = "rgba(24, 144, 255, 0.22)";
                 }
-                const enEl = document.createElement("span");
-                const enFull = it.en || "";
-                const enShow =
-                    it.kind === "tagset" ? magicFormatTagPreview(enFull, 2) : enFull;
-                enEl.innerHTML = highlightMatch(enShow);
-                if (it.kind === "tagset" && enFull !== enShow) {
-                    enEl.title = enFull;
-                }
-                enEl.style.cssText = "flex:1; color:#e8e8e8; word-break:break-all; text-align:left; min-width:0; display:flex; align-items:center; gap:0;";
-                const cnEl = document.createElement("span");
-                cnEl.style.cssText = `flex:0 0 36%; max-width:38%; color:#9a9a9a; text-align:right; word-break:break-all; display:flex; align-items:center; justify-content:flex-end; gap:4px;`;
-                if (it.source === "custom") {
-                    const badge = document.createElement("span");
-                    badge.textContent = magicT("用户");
-                    badge.title =
-                        it.kind === "tagset"
-                            ? magicT("标签组「") + (it.setName || it.cn || magicT("自定义")) + magicT("」· 点击插入整段英文")
-                            : magicT("来自「") + (it.setName || magicT("自定义")) + magicT("」");
-                    badge.style.cssText = `
-                        padding: 1px 4px; font-size: 10px;
-                        border-radius: 3px; background: rgba(156, 39, 176, 0.28);
-                        color: #ce93d8; font-weight: 600; flex-shrink: 0;
-                        line-height: 1.4;
+
+                if (danbooruMode) {
+                    // Danbooru 模式：英文 / 中文 / 分类 / 热度（与表头同 grid 列宽）
+                    const enEl = document.createElement("span");
+                    const enFull = it.en || "";
+                    enEl.innerHTML = highlightMatch(enFull);
+                    enEl.style.cssText =
+                        "min-width:0; color:#e8e8e8; text-align:left; overflow-wrap:anywhere; word-break:break-word; line-height:1.35;";
+
+                    const catKey = magicDanbooruCategoryId(it);
+                    const catColor = DANBOORU_CATEGORY_COLORS[catKey] || "#888";
+                    const catName = DANBOORU_CATEGORY_NAMES[catKey] || "other";
+                    const catEl = document.createElement("span");
+                    catEl.textContent = catName;
+                    catEl.style.cssText = `
+                        font-size:9px; padding:1px 5px;
+                        border-radius:3px; text-align:center;
+                        background:${catColor}1a; color:${catColor};
+                        border:1px solid ${catColor}55; font-weight:600;
                     `;
-                    cnEl.appendChild(badge);
+
+                    const cntEl = document.createElement("span");
+                    cntEl.textContent = fmtCount(it.count);
+                    cntEl.style.cssText = "color:#666; font-size:10px; text-align:right; font-variant-numeric:tabular-nums;";
+
+                    const cnText = it.cn ? highlightMatch(it.cn) : "—";
+                    const cnEl = document.createElement("span");
+                    cnEl.innerHTML = cnText;
+                    cnEl.style.cssText =
+                        "min-width:0; color:#ce93d8; text-align:left; word-break:break-word; line-height:1.35;";
+
+                    row.appendChild(enEl);
+                    row.appendChild(cnEl);
+                    row.appendChild(catEl);
+                    row.appendChild(cntEl);
+                } else {
+                    // 本地模式：英文 / 中文（含用户标签标识）
+                    const enEl = document.createElement("span");
+                    const enFull = it.en || "";
+                    const enShow =
+                        it.kind === "tagset" ? magicFormatTagPreview(enFull, 2) : enFull;
+                    enEl.innerHTML = highlightMatch(enShow);
+                    if (it.kind === "tagset" && enFull !== enShow) {
+                        enEl.title = enFull;
+                    }
+                    enEl.style.cssText =
+                        "min-width:0; color:#e8e8e8; text-align:left; overflow-wrap:anywhere; word-break:break-word; line-height:1.35; display:flex; align-items:center; gap:0;";
+                    const cnEl = document.createElement("span");
+                    cnEl.style.cssText =
+                        "min-width:0; color:#ce93d8; text-align:left; word-break:break-word; line-height:1.35; display:flex; align-items:center; justify-content:flex-start; flex-wrap:wrap; gap:4px;";
+                    if (it.source === "custom") {
+                        const badge = document.createElement("span");
+                        badge.textContent = magicT("用户");
+                        badge.title =
+                            it.kind === "tagset"
+                                ? magicT("标签组「") + (it.setName || it.cn || magicT("自定义")) + magicT("」· 点击插入整段英文")
+                                : magicT("来自「") + (it.setName || magicT("自定义")) + magicT("」");
+                        badge.style.cssText = `
+                            padding: 1px 4px; font-size: 10px;
+                            border-radius: 3px; background: rgba(156, 39, 176, 0.28);
+                            color: #ce93d8; font-weight: 600; flex-shrink: 0;
+                            line-height: 1.4;
+                        `;
+                        cnEl.appendChild(badge);
+                    }
+                    const cnText = document.createElement("span");
+                    cnText.innerHTML = highlightMatch(it.cn || "");
+                    cnEl.appendChild(cnText);
+                    row.appendChild(enEl);
+                    row.appendChild(cnEl);
                 }
-                const cnText = document.createElement("span");
-                cnText.innerHTML = highlightMatch(it.cn || "");
-                cnEl.appendChild(cnText);
-                row.appendChild(enEl);
-                row.appendChild(cnEl);
                 row.addEventListener("mousedown", (e) => {
                     e.preventDefault();
                     applyChoice(it);
@@ -2283,7 +2980,7 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
         requestAnimationFrame(() => updatePanelPosition());
     };
 
-    const fetchSuggestions = async () => {
+        const fetchSuggestions = async () => {
         const v = textarea.value;
         const caret = textarea.selectionStart;
         const { query } = getSegmentAtCaret(v, caret);
@@ -2295,6 +2992,62 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             try { acAbort.abort(); } catch (_) { /* ignore */ }
         }
         acAbort = new AbortController();
+
+        if (danbooruMode) {
+            const isCnQuery = (text) => Boolean(text && /[\u4e00-\u9fff]/.test(text));
+            const cnQuery = isCnQuery(query);
+            const reqId = ++danbooruAcReqId;
+
+            danbooruAcPending = true;
+            items = [];
+            sel = 0;
+            acHintRow.textContent = magicT("正在查询 danbooru预设库…");
+            renderList();
+
+            try {
+                const results = await magicDanbooruSearch(query, acLimit, 1, acAbort.signal, "preset");
+                if (reqId !== danbooruAcReqId || acAbort.signal.aborted) return;
+
+                const danbooItems = results.items || [];
+                const qCn = magicStripAutocompleteQueryEdges(query);
+                const danbooItemsCnFiltered =
+                    magicDanbooruQueryIsChinese(qCn)
+                        ? danbooItems.filter((it) =>
+                              magicDanbooruChineseQueryMatchesGloss(qCn, (it && it.cn) || "")
+                          )
+                        : danbooItems;
+
+                // 仅使用 savedata/danbooru预设库.txt，绝不回退到 tag预设库（避免两套词库混用）
+                if (danbooItems.length === 0) {
+                    items = [];
+                    acHintRow.textContent = magicT(
+                        "danbooru预设库中无匹配，请扩充 savedata/danbooru预设库.txt，或使用「编辑标签」搜索远端",
+                    );
+                } else {
+                    items = danbooItemsCnFiltered;
+                    acHintRow.textContent =
+                        items.length
+                            ? magicT("本地预设库 · 毫秒级加载 · 分类+热度来自 danbooru预设库")
+                            : magicT("预设库无匹配，尝试更长关键词");
+                }
+                sel = 0;
+            } catch (e) {
+                if (reqId !== danbooruAcReqId || acAbort.signal.aborted) return;
+                if (e.name !== "AbortError") {
+                    console.warn("[MagicText] danbooru preset autocomplete", e);
+                    items = [];
+                    acHintRow.textContent = magicT("danbooru预设库加载失败，请重启 ComfyUI 或检查 savedata/danbooru预设库.txt");
+                }
+            } finally {
+                if (reqId !== danbooruAcReqId) return;
+                danbooruAcPending = false;
+                if (acAbort.signal.aborted) return;
+                renderList();
+            }
+            return;
+        }
+
+        // 本地模式
         const params = new URLSearchParams({ q: query, limit: String(acLimit) });
         const url = api.apiURL(`/ma/prompt_autocomplete?${params.toString()}`);
         try {
@@ -2323,10 +3076,10 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             hide();
             return;
         }
-        if (!items.length) return;
+        if (!lastShownForKeys.length) return;
         if (e.key === "ArrowDown") {
             e.preventDefault();
-            sel = Math.min(sel + 1, items.length - 1);
+            sel = Math.min(sel + 1, lastShownForKeys.length - 1);
             renderList();
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
@@ -2334,10 +3087,10 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             renderList();
         } else if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            applyChoice(items[sel]);
+            applyChoice(lastShownForKeys[sel]);
         } else if (e.key === "Tab") {
             e.preventDefault();
-            applyChoice(items[sel]);
+            applyChoice(lastShownForKeys[sel]);
         }
     });
 }
@@ -2415,6 +3168,8 @@ async function showPromptEditorModal(node, nodeSeed) {
         translate_mode: "normal",
         /** LLM 翻译缓存最大条数（LRU），默认 150 */
         llm_cache_max: 150,
+        /** 补全数据来源："local" | "danbooru" */
+        danbooru_mode: "local",
     };
     try {
         const r = await fetch("/ma/settings", { credentials: "same-origin" });
@@ -2440,6 +3195,15 @@ async function showPromptEditorModal(node, nodeSeed) {
             const lcm = parseInt(all.llm_cache_max, 10);
             if (Number.isFinite(lcm)) {
                 magicEditorSettings.llm_cache_max = Math.max(10, Math.min(2000, lcm));
+            }
+            magicEditorSettings.danbooru_mode = magicNormalizeDanbooruMode(all.danbooru_mode);
+            /* 兼容旧根键 autocomplete_enabled（服务端 _load_settings 已合并时可省略，双保险） */
+            if (typeof all.autocomplete_enabled === "boolean") {
+                const et0 = magicEditorSettings.editor_toolbar || {};
+                const rawEt = all.editor_toolbar && typeof all.editor_toolbar === "object" ? all.editor_toolbar : {};
+                if (!Object.prototype.hasOwnProperty.call(rawEt, "autocomplete_popup")) {
+                    magicEditorSettings.editor_toolbar = { ...et0, autocomplete_popup: all.autocomplete_enabled };
+                }
             }
         }
     } catch (_) { /* use defaults */ }
@@ -2800,6 +3564,8 @@ async function showPromptEditorModal(node, nodeSeed) {
     // ---- 编辑 Tab ----
     function renderEditTab() {
         content.style.alignItems = "stretch";
+        // 勿在此处清空 _magicDanbooruAutocompleteActive：重建编辑区过程中若有代码读取该标志会误判为本地模式；
+        // 实际值由文末 applyEditorAutocomplete(true/false) 统一设置。
 
         if (shell._magicChipRowAbort) {
             try {
@@ -3037,10 +3803,10 @@ async function showPromptEditorModal(node, nodeSeed) {
         floatBar.addEventListener("mousedown", (e) => e.preventDefault());
         shell.appendChild(floatBar);
         shell._magicTagFloatBar = floatBar;
-        // 预测量占位（实际尺寸在首次 positionTagFloatBar 时测量并缓存，hidden 时测不到准确值）
+        // 首次定位前在 positionTagFloatBar 内测量并缓存（须先 display:flex，display:none 时宽高为 0）
         shell._magicTagFloatBarSize = { w: 0, h: 0, _initialized: false };
 
-        /** 单次 RAF 定位（复用预测量尺寸，无需触发布局重排） */
+        /** 单次 RAF 定位（首次须先 display:flex 再测宽高，否则 sz.h=0 会把条叠在芯片上） */
         const positionTagFloatBar = (chip) => {
             if (!chip || !chip.isConnected || !floatBar.isConnected) return;
             const sz = shell._magicTagFloatBarSize;
@@ -3048,6 +3814,14 @@ async function showPromptEditorModal(node, nodeSeed) {
             requestAnimationFrame(() => {
                 if (!chip.isConnected || !floatBar.isConnected) return;
                 const r = chip.getBoundingClientRect();
+                floatBar.style.display = "flex";
+                floatBar.style.transform = "translateX(-50%)";
+                if (!sz._initialized) {
+                    floatBar.style.visibility = "hidden";
+                    sz.w = floatBar.offsetWidth;
+                    sz.h = floatBar.offsetHeight;
+                    sz._initialized = true;
+                }
                 let top = r.top - sz.h - margin;
                 if (top < 8) top = r.bottom + margin;
                 let cx = r.left + r.width / 2;
@@ -3055,15 +3829,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 cx = Math.max(8 + half, Math.min(cx, window.innerWidth - 8 - half));
                 floatBar.style.left = Math.round(cx) + "px";
                 floatBar.style.top = Math.round(top) + "px";
-                floatBar.style.transform = "translateX(-50%)";
-                floatBar.style.display = "flex";
                 floatBar.style.visibility = "visible";
-                // 首次出现时测量实际尺寸并缓存（hidden 时测不到准确值）
-                if (!sz._initialized) {
-                    sz._initialized = true;
-                    sz.w = floatBar.offsetWidth;
-                    sz.h = floatBar.offsetHeight;
-                }
             });
         };
 
@@ -3097,8 +3863,16 @@ async function showPromptEditorModal(node, nodeSeed) {
             scheduleHideTagFloatBar();
         });
 
+        /** 芯片英文行内编辑：失焦以触发既有 blur→commit（点空白时 mousedown preventDefault 可能不带走焦点） */
+        const blurChipTagInlineInputIfAny = () => {
+            if (!tagChipsRow) return;
+            const inp = tagChipsRow.querySelector("[data-magic-tag-index] input");
+            if (inp) inp.blur();
+        };
+
         /** 取消「单击锁定」并隐藏权重条（主输入框聚焦、点空白等） */
         const clearPinnedToolbar = () => {
+            blurChipTagInlineInputIfAny();
             shell._magicChipToolbarPinnedIndex = null;
             cancelHideTagFloatBar();
             hideTagFloatBar();
@@ -3434,6 +4208,7 @@ async function showPromptEditorModal(node, nodeSeed) {
         }
 
         function clearChipSelection() {
+            blurChipTagInlineInputIfAny();
             if (shell._magicChipSelSet) {
                 shell._magicChipSelSet.clear();
                 shell._magicChipSelAnchor = null;
@@ -3824,6 +4599,12 @@ async function showPromptEditorModal(node, nodeSeed) {
                 chip.appendChild(top);
                 chip.appendChild(bottom);
                 preventConflict(chip);
+
+                // 阻止 mousedown 透传到 textarea（textarea focusin 会抢在 click 之前清掉 pinnedIndex）
+                chip.addEventListener("mousedown", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
 
                 chip.addEventListener("mouseenter", () => {
                     if (shell._magicTagChipsRubberArmed) return;
@@ -4309,6 +5090,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                     editorText = textarea.value;
                     syncEditorFromTextarea();
                 },
+                danbooruMode: !!shell._magicDanbooruAutocompleteActive,
             }),
         );
         if (tbCfg.edit_tags !== false) toolbar.appendChild(editTagsBtn);
@@ -4472,12 +5254,79 @@ async function showPromptEditorModal(node, nodeSeed) {
             shell._magicEditorSettings && shell._magicEditorSettings.prompt_autocomplete_limit != null
                 ? shell._magicEditorSettings.prompt_autocomplete_limit
                 : AUTOCOMPLETE_LIMIT;
-        attachMagicPromptAutocomplete(textarea, {
-            onInput: syncEditorFromTextarea,
-            panelMount: shell,
-            scrollRoots: [content],
-            limit: acLim,
-        });
+
+        const applyEditorAutocomplete = (useDanbooru) => {
+            /* 与内联补全是否挂载无关：编辑标签弹窗等共用「当前是否 Danbooru 数据源」 */
+            shell._magicDanbooruAutocompleteActive = !!useDanbooru;
+            const tbAc = magicMergeEditorToolbar(shell._magicEditorSettings && shell._magicEditorSettings.editor_toolbar);
+            if (typeof shell._magicAcDispose === "function") {
+                try {
+                    shell._magicAcDispose();
+                } catch (_) {
+                    /* ignore */
+                }
+                shell._magicAcDispose = null;
+            }
+            if (tbAc.autocomplete_popup === false) return;
+            attachMagicPromptAutocomplete(textarea, {
+                onInput: syncEditorFromTextarea,
+                panelMount: shell,
+                scrollRoots: [content],
+                limit: acLim,
+                danbooruMode: !!useDanbooru,
+            });
+        };
+
+        const danbooruConnBar = document.createElement("div");
+        danbooruConnBar.style.cssText = `margin-top: 10px; font-size: 11px; line-height: 1.5; padding: 8px 10px; border-radius: 6px; background: ${THEME.bg3}; border: 1px solid ${THEME.border}; color: ${THEME.text2};`;
+
+        const prefMode = magicNormalizeDanbooruMode(
+            shell._magicEditorSettings && shell._magicEditorSettings.danbooru_mode,
+        );
+        if (prefMode === "local") {
+            danbooruConnBar.textContent = magicT("补全来源：本地标签库");
+            applyEditorAutocomplete(false);
+        } else {
+            if (shell._magicDanbooruConnChecked) {
+                const cached = shell._magicDanbooruConnResult;
+                if (cached && cached.ok) {
+                    danbooruConnBar.style.color = THEME.success;
+                    danbooruConnBar.style.borderColor = "rgba(76, 175, 80, 0.35)";
+                    danbooruConnBar.textContent = magicT("✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据");
+                    applyEditorAutocomplete(true);
+                } else {
+                    danbooruConnBar.style.color = THEME.danger;
+                    danbooruConnBar.style.borderColor = "rgba(244, 67, 54, 0.35)";
+                    danbooruConnBar.textContent =
+                        magicT("补全来源：本地标签库");
+                    applyEditorAutocomplete(false);
+                }
+            } else {
+                danbooruConnBar.textContent = magicT("正在检测 Danbooru 连接…");
+                applyEditorAutocomplete(false);
+                void (async () => {
+                    const result = await magicDanbooruCheckConnection();
+                    shell._magicDanbooruConnChecked = true;
+                    shell._magicDanbooruConnResult = result;
+                    if (!shell.isConnected || !document.body.contains(shell)) return;
+                    if (result.ok) {
+                        danbooruConnBar.style.color = THEME.success;
+                        danbooruConnBar.style.borderColor = "rgba(76, 175, 80, 0.35)";
+                        danbooruConnBar.textContent = magicT("✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据");
+                        applyEditorAutocomplete(true);
+                    } else {
+                        danbooruConnBar.style.color = THEME.danger;
+                        danbooruConnBar.style.borderColor = "rgba(244, 67, 54, 0.35)";
+                        danbooruConnBar.textContent =
+                            magicT("❌ Danbooru 不可用：") +
+                            (result.message || "?") +
+                            magicT(" · 已切换为本地补全（设置已保存为本地）");
+                        await magicPersistDanbooruModeOnly("local");
+                        applyEditorAutocomplete(false);
+                    }
+                })();
+            }
+        }
 
         try {
             const debouncedPersistTa = debounce(
@@ -4508,6 +5357,7 @@ async function showPromptEditorModal(node, nodeSeed) {
             ${h6}<code style="background:${THEME.bg3};padding:2px 5px;border-radius:3px;">!</code>${h7},${h8}
         `;
         content.appendChild(hint);
+        content.appendChild(danbooruConnBar);
 
         updateStatAndChips();
 
@@ -4804,7 +5654,7 @@ async function showPromptEditorModal(node, nodeSeed) {
         /* —— 1 · 编辑界面显示 —— */
         const panel1 = mkCollapsible(
             magicT("1 · 编辑界面显示设置"),
-            magicT("控制「编辑」Tab 顶部工具栏：默认全部显示，关闭后对应按钮或输入框将隐藏。"),
+            magicT("控制「编辑」Tab 顶部工具栏与内联补全弹窗：默认全部开启，关闭后对应按钮、输入框或补全列表将隐藏。"),
             false,
         );
         const section1Checks = {};
@@ -4817,11 +5667,17 @@ async function showPromptEditorModal(node, nodeSeed) {
             { key: "edit_tags", label: magicT("🏷️ 编辑标签") },
             { key: "translate_all", label: magicT("🌐 一键翻译所有Tag") },
             { key: "translate_input", label: magicT("单行翻译输入框（按 Enter）") },
+            {
+                key: "autocomplete_popup",
+                label: magicT("🔍 开启补全弹窗（打字时显示 Tag 候选列表）"),
+                sub: magicT("关闭后编辑框输入时不弹出补全列表；词库搜索、标签编辑弹窗等独立补全功能不受影响。"),
+            },
         ];
         section1Defs.forEach((def) => {
+            const hasSub = !!def.sub;
             const row = document.createElement("label");
             row.style.cssText = `
-                display: flex; align-items: center; gap: 10px; padding: 8px 6px; margin-bottom: 4px;
+                display: flex; align-items: ${hasSub ? "flex-start" : "center"}; gap: 10px; padding: 8px 6px; margin-bottom: 4px;
                 border-radius: 6px; cursor: pointer; user-select: none;
             `;
             row.addEventListener("mouseenter", () => {
@@ -4834,13 +5690,30 @@ async function showPromptEditorModal(node, nodeSeed) {
             cb.type = "checkbox";
             cb.checked = tbLive[def.key] !== false;
             section1Checks[def.key] = cb;
-            cb.style.cssText = "width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:#9C27B0;";
+            cb.style.cssText = `width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:#9C27B0;${
+                hasSub ? "margin-top:2px;" : ""
+            }`;
             preventConflict(cb);
-            const span = document.createElement("span");
-            span.textContent = def.label;
-            span.style.cssText = `font-size: 13px; color: ${THEME.text};`;
-            row.appendChild(cb);
-            row.appendChild(span);
+            if (hasSub) {
+                const right = document.createElement("div");
+                right.style.cssText = "flex:1;min-width:0;";
+                const span = document.createElement("div");
+                span.textContent = def.label;
+                span.style.cssText = `font-size: 13px; color: ${THEME.text}; font-weight: 600;`;
+                const sub = document.createElement("div");
+                sub.textContent = def.sub;
+                sub.style.cssText = `font-size: 11px; color: ${THEME.text2}; margin-top: 2px; line-height: 1.35;`;
+                right.appendChild(span);
+                right.appendChild(sub);
+                row.appendChild(cb);
+                row.appendChild(right);
+            } else {
+                const span = document.createElement("span");
+                span.textContent = def.label;
+                span.style.cssText = `font-size: 13px; color: ${THEME.text};`;
+                row.appendChild(cb);
+                row.appendChild(span);
+            }
             panel1.appendChild(row);
         });
 
@@ -5197,6 +6070,109 @@ async function showPromptEditorModal(node, nodeSeed) {
                 : 150,
         );
 
+        /* —— 5 · 标签和补全功能设置 —— */
+        const panel5 = mkCollapsible(
+            magicT("5 · 标签和补全功能设置"),
+            magicT("选择补全数据来源：本地标签数据库使用预设库+用户标签组；远端 Danbooru 则实时从官方 API 获取（自带分类与热度）。"),
+            false,
+        );
+
+        const p5modeRow = document.createElement("div");
+        p5modeRow.style.cssText = `
+            margin-bottom: 12px; padding: 10px 14px;
+            background: rgba(156,39,176,0.08); border-radius: 8px;
+            border: 1px solid rgba(156,39,176,0.25);
+        `;
+        const p5modeTitle = document.createElement("div");
+        p5modeTitle.style.cssText = `font-size: 12px; color: ${THEME.text2}; margin-bottom: 10px; font-weight: 600;`;
+        p5modeTitle.textContent = magicT("数据来源(🚨使用danbooru数据时，请当编辑界面下方显示连接成功再编辑tag，否则补全可能会显示bug。)");
+        p5modeRow.appendChild(p5modeTitle);
+        preventConflict(p5modeRow);
+
+        const mkRadio5 = (value, labelHtml, hintHtml) => {
+            const id = `magic-danbooru-mode-${value}`;
+            const wrap = document.createElement("div");
+            wrap.style.cssText = `
+                display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; cursor: pointer;
+            `;
+            const rb = document.createElement("input");
+            rb.type = "radio";
+            rb.name = "magic-danbooru-mode";
+            rb.value = value;
+            rb.id = id;
+            preventConflict(rb);
+            const currentDanboo = magicNormalizeDanbooruMode(stRef && stRef.danbooru_mode);
+            rb.checked = currentDanboo === value;
+            rb.style.cssText = "margin-top: 3px; flex-shrink: 0;";
+            const lbl = document.createElement("label");
+            lbl.htmlFor = id;
+            lbl.style.cssText = `font-size: 13px; color: ${THEME.text}; cursor: pointer; line-height: 1.5;`;
+            lbl.innerHTML = `<b>${labelHtml}</b><br><span style="font-size:11px;color:${THEME.text2};">${hintHtml}</span>`;
+            wrap.appendChild(rb);
+            wrap.appendChild(lbl);
+            return { wrap, rb };
+        };
+
+        const localRadio = mkRadio5(
+            "local",
+            magicT("📁 本地标签数据库"),
+            magicT("使用预设库（tag预设库.txt）与用户标签组进行补全，中文释义来自本地词库。"),
+        );
+        const danbooRadio = mkRadio5(
+            "danbooru",
+            magicT("🌐 远端 Danbooru Tag 数据"),
+            magicT("实时从 danbooru.donmai.us 获取 Tag，带分类（general/artist/copyright/character/meta）与热度排序；中文释义使用本地词库匹配。"),
+        );
+        p5modeRow.appendChild(localRadio.wrap);
+        p5modeRow.appendChild(danbooRadio.wrap);
+
+        const getDanbooruMode = () => {
+            if (localRadio.rb.checked) return "local";
+            if (danbooRadio.rb.checked) return "danbooru";
+            return magicNormalizeDanbooruMode(stRef && stRef.danbooru_mode);
+        };
+
+        // Danbooru 连接状态提示
+        const danbooStatusEl = document.createElement("div");
+        danbooStatusEl.style.cssText = `
+            font-size: 11px; color: ${THEME.text2}; padding: 6px 10px;
+            background: ${THEME.bg3}; border-radius: 6px; margin-top: 6px;
+            display: none;
+        `;
+        p5modeRow.appendChild(danbooStatusEl);
+
+        // 切换到 danbooru：先落盘偏好并检测连接；失败则切回本地并保存（与下方 persist 监听器合并，避免重复 change）
+        danbooRadio.rb.addEventListener("change", async () => {
+            if (!danbooRadio.rb.checked) return;
+            danbooStatusEl.style.display = "block";
+            danbooStatusEl.style.color = THEME.text2;
+            danbooStatusEl.textContent = magicT("正在检测连接…");
+            persistEditorSettingsAuto();
+            const result = await magicDanbooruCheckConnection();
+            if (!danbooRadio.rb.checked) return;
+            if (!result.ok) {
+                danbooStatusEl.style.color = THEME.danger;
+                danbooStatusEl.textContent =
+                    magicT("❌ 连接失败：") +
+                    (result.message || "?") +
+                    " " +
+                    magicT("（将自动切回本地模式）");
+                setTimeout(() => {
+                    localRadio.rb.checked = true;
+                    persistEditorSettingsAuto();
+                    danbooStatusEl.style.display = "none";
+                }, 2200);
+            } else {
+                danbooStatusEl.style.color = THEME.success;
+                danbooStatusEl.textContent = magicT("✅ 连接成功！已启用 Danbooru 远端补全。");
+                setTimeout(() => {
+                    danbooStatusEl.style.display = "none";
+                }, 2000);
+            }
+        });
+
+        panel5.appendChild(p5modeRow);
+
         const status = document.createElement("div");
         status.style.cssText = `font-size: 12px; color: ${THEME.text2}; margin: 16px 0 10px; min-height: 20px;`;
         content.appendChild(status);
@@ -5259,6 +6235,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 translate_llm_profile: translateProf,
                 translate_mode: translateMode,
                 llm_cache_max: cacheMax,
+                danbooru_mode: getDanbooruMode(),
             };
 
             return fetch("/ma/settings", {
@@ -5278,6 +6255,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                     shell._magicEditorSettings.translate_llm_profile = translateProf;
                     shell._magicEditorSettings.translate_mode = translateMode;
                     shell._magicEditorSettings.llm_cache_max = cacheMax;
+                    shell._magicEditorSettings.danbooru_mode = getDanbooruMode();
                     showAutoSaveOk();
                 })
                 .catch((e) => {
@@ -5306,6 +6284,7 @@ async function showPromptEditorModal(node, nodeSeed) {
         selTranslateProfile.addEventListener("change", () => persistEditorSettingsAuto());
         normalRadio.rb.addEventListener("change", () => persistEditorSettingsAuto());
         forceRadio.rb.addEventListener("change", () => persistEditorSettingsAuto());
+        localRadio.rb.addEventListener("change", () => persistEditorSettingsAuto());
         [acHolder.inp, histHolder.inp, cacheMaxHolder.inp].forEach((inp) => {
             inp.addEventListener("input", () => scheduleNumSettingsSave());
             inp.addEventListener("change", () => {
