@@ -10,8 +10,18 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-03-26**
+> Latest Update / 最新更新：**2026-03-30**
 
+> **V1.2.9 版本介绍 / Version Introduction** 2026-03-30
+
+> 1. **🔧 优化**: 屏蔽符号改为 `*`，防止用 `!` 进行组合的 tag 失效
+>    * 将屏蔽符号从 `!` 更改为 `*`，避免与用户使用 `!` 进行 tag 组合时产生冲突
+>    * Changed mask symbol from `!` to `*` to prevent conflicts with user combinations using `!`
+>
+> 2. **🐛 修复**: Tag 预览器 bug 修复
+>    * 修复了 tag 预览器的绝大部分已知 bug，提升使用体验
+>    * Fixed most known bugs in the tag preview for better user experience
+>
 > **V1.2.8 版本介绍 / Version Introduction** 2026-03-26
 
 > 1. **🔍 新增 danbooru 数据模式**: 在设置下改为 danbooru 数据后，补全功能和标签搜索功能将会去使用 danbooru 的标签
@@ -57,6 +67,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * Fix the conditioning issue.
 >   
 >    <img width="1375" height="1037" alt="Image" src="https://github.com/user-attachments/assets/3af2f79d-56bd-4b31-863c-94480e5ac9f2" />
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.5 版本介绍 / Version Introduction** 2026-03-24
 
@@ -109,9 +122,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > 7. **✨ 新增功能**: MagicPromptReplace 节点 - 文本接入
 >    * 新增文本接入功能，可以自行选择是接入文本框还是接入文本点
 >    * Added text input option; can choose between text box input or text point input
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.4 版本介绍 / Version Introduction** 2026-02-28
 

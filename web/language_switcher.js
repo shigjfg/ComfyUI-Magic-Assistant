@@ -606,7 +606,7 @@ const magicPromptBoxTranslations = {
     "🔄 去重": { zh: "🔄 去重", en: "🔄 Dedup" },
     "🗑️ 清空全部": { zh: "🗑️ 清空全部", en: "🗑️ Clear All" },
     "🚫 清空屏蔽": { zh: "🚫 清空屏蔽", en: "🚫 Clear Disabled" },
-    "删除所有以 ! 屏蔽的 tag（保留未屏蔽内容）": { zh: "删除所有以 ! 屏蔽的 tag（保留未屏蔽内容）", en: "Remove all !-disabled tags (keep enabled content)" },
+    "删除所有以 * 屏蔽的 tag（保留未屏蔽内容）": { zh: "删除所有以 * 屏蔽的 tag（保留未屏蔽内容）", en: "Remove all *-disabled tags (keep enabled content)" },
     "📋 复制": { zh: "📋 复制", en: "📋 Copy" },
     "🏷️ 编辑标签": { zh: "🏷️ 编辑标签", en: "🏷️ Edit Tags" },
     "🌐 一键翻译所有Tag": { zh: "🌐 一键翻译所有Tag", en: "🌐 Translate All Tags" },
@@ -619,9 +619,9 @@ const magicPromptBoxTranslations = {
 
     // Tag预览区
     "Tag 预览": { zh: "Tag 预览", en: "Tag Preview" },
-    " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（!），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）": { zh: " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（!），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）", en: " · Shows when main box has content · ↵ Newline chip · Click tag: lock & show weight bar (click top English area → inline edit; click bottom Chinese area → unlock) · Double-click bottom area only: toggle disable (!), avoids conflict with edit above · Click main input or blank: unlock · Drag on blank or margins: rubber-band select (no toolbar, live blue preview) · Hover chip: faint outline · Selected group draggable (blue line shows drop point)" },
+    " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（*），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）": { zh: " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（*），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）", en: " · Shows when main box has content · ↵ Newline chip · Click tag: lock & show weight bar (click top English area → inline edit; click bottom Chinese area → unlock) · Double-click bottom area only: toggle disable (*), avoids conflict with edit above · Click main input or blank: unlock · Drag on blank or margins: rubber-band select (no toolbar, live blue preview) · Hover chip: faint outline · Selected group draggable (blue line shows drop point)" },
     "锁定后仅在此区域点击进入文字编辑": { zh: "锁定后仅在此区域点击进入文字编辑", en: "Click here to edit text after locking" },
-    "双击此区域切换屏蔽（!）；锁定后单击下方取消锁定": { zh: "双击此区域切换屏蔽（!）；锁定后单击下方取消锁定", en: "Double-click to toggle disable (!); click here when locked to unlock" },
+    "双击此区域切换屏蔽（*）；锁定后单击下方取消锁定": { zh: "双击此区域切换屏蔽（*）；锁定后单击下方取消锁定", en: "Double-click to toggle disable (*); click here when locked to unlock" },
     "解析结果为空": { zh: "解析结果为空", en: "No tags to parse" },
     "字符数: ": { zh: "字符数: ", en: "Chars: " },
     "Tag: ": { zh: "Tag: ", en: "Tag: " },
@@ -657,7 +657,7 @@ const magicPromptBoxTranslations = {
     "选中 ": { zh: "选中 ", en: "" },
     " 个标签": { zh: " 个标签", en: " tags selected" },
     "一键复制": { zh: "一键复制", en: "Copy All" },
-    "一键屏蔽（!）": { zh: "一键屏蔽（!）", en: "Disable All (!)" },
+    "一键屏蔽（*）": { zh: "一键屏蔽（*）", en: "Disable All (*)" },
     "一键启用": { zh: "一键启用", en: "Enable All" },
     "一键删除": { zh: "一键删除", en: "Delete All" },
 

@@ -1838,6 +1838,24 @@ function magicPromptHasVisibleContent(raw) {
     return s.trim().length > 0;
 }
 
+/** 屏蔽 tag 的前缀字符（! → *，避免与 !? 等表情/tag 混合用法冲突） */
+const DISABLE_PREFIX = "*";
+const DISABLE_REG = /^\*/;
+function isDisabledTag(t) {
+    return DISABLE_REG.test(t);
+}
+
+/**
+ * 「:(」「>:(」等表情里的 '(' 不是 A1111/分组括号，不应提高深度，否则其后逗号无法切 tag。
+ */
+function magicIsEmoticonOpenParen(buf, ch) {
+    if (ch !== "(") return false;
+    if (/[><]\s*:\s*$/.test(buf)) return true;
+    const t = buf.trim();
+    if (/^[:;=<]$/.test(t)) return true;
+    return false;
+}
+
 /**
  * 解析为片段列表：普通 tag 或换行占位（WeiLin 式换行芯片）。
  * 逗号仅在括号深度为 0 时切分，避免 (a:1.1, b) 被误切。
@@ -1854,10 +1872,10 @@ function parseMagicPromptTags(raw) {
         const t = buf.trim();
         buf = "";
         if (!t) return;
-        const dis = t.startsWith("!");
+        const dis = isDisabledTag(t);
         result.push({
             isNewline: false,
-            text: dis ? (t.slice(1).trim() || "!") : t,
+            text: dis ? (t.slice(1).trim() || DISABLE_PREFIX) : t,
             disabled: dis,
         });
     };
@@ -1873,8 +1891,9 @@ function parseMagicPromptTags(raw) {
             flushTag();
             continue;
         }
-        if (openB.includes(c)) depth++;
-        else if (closeB.includes(c)) depth = Math.max(0, depth - 1);
+        if (openB.includes(c)) {
+            if (!magicIsEmoticonOpenParen(buf, c)) depth++;
+        } else if (closeB.includes(c)) depth = Math.max(0, depth - 1);
         buf += c;
     }
     flushTag();
@@ -1933,7 +1952,7 @@ function serializeMagicPromptTags(tags) {
         }
         const x = (t.text || "").trim();
         if (!x) continue;
-        chunks.push({ k: "t", s: t.disabled ? `!${x}` : x });
+        chunks.push({ k: "t", s: t.disabled ? `${DISABLE_PREFIX}${x}` : x });
     }
     if (chunks.length === 0) return "";
     let out = "";
@@ -1987,7 +2006,7 @@ function magicReorderTagsByIndices(tags, movingSorted, targetIdx, insertAfter) {
 function magicCoreTagForCnLookup(raw) {
     let s = String(raw || "").trim();
     if (!s) return "";
-    while (s.startsWith("!")) s = s.slice(1).trim();
+    while (s.startsWith(DISABLE_PREFIX)) s = s.slice(1).trim();
     for (let g = 0; g < 8; g++) {
         const m = s.match(/^\((.+):([\d.]+)\)$/);
         if (m) {
@@ -3709,7 +3728,7 @@ async function showPromptEditorModal(node, nodeSeed) {
         tagStripTitle.style.cssText = `font-size: 11px; color: ${THEME.text2}; margin-bottom: 10px; line-height: 1.45;`;
         tagStripTitle.innerHTML = `
             <b>${magicT("Tag 预览")}</b>
-            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（!），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）")}</span>
+            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（*），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）")}</span>
         `;
         const tagChipsHit = document.createElement("div");
         tagChipsHit.setAttribute("data-magic-tag-chips-hit", "1");
@@ -4077,7 +4096,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 .then(() => showMagicChipToast(magicT("✅ 已复制到剪贴板")))
                 .catch(() => showMagicChipToast(magicT("❌ 复制失败（请检查浏览器权限）")));
         });
-        mkSelBtn("🚫", magicT("一键屏蔽（!）"), "#e57373", () => {
+        mkSelBtn("🚫", magicT("一键屏蔽（*）"), "#e57373", () => {
             const set = shell._magicChipSelSet;
             if (!set || !set.size) return;
             const next = parseMagicPromptTags(textarea.value);
@@ -4574,7 +4593,7 @@ async function showPromptEditorModal(node, nodeSeed) {
 
                 const bottom = document.createElement("div");
                 bottom.setAttribute("data-magic-tag-bottom", "1");
-                bottom.title = magicT("双击此区域切换屏蔽（!）；锁定后单击下方取消锁定");
+                bottom.title = magicT("双击此区域切换屏蔽（*）；锁定后单击下方取消锁定");
                 bottom.style.cssText =
                     "display:flex;align-items:center;gap:5px;padding:5px 8px;color:#d8d8d8;font-size:11px;";
                 const llmBtn = document.createElement("button");
@@ -4600,9 +4619,8 @@ async function showPromptEditorModal(node, nodeSeed) {
                 chip.appendChild(bottom);
                 preventConflict(chip);
 
-                // 阻止 mousedown 透传到 textarea（textarea focusin 会抢在 click 之前清掉 pinnedIndex）
+                // 仅 stopPropagation：阻止透传到外层/textarea；勿 preventDefault，否则会取消 HTML5 drag，导致只能从未冒泡到芯片的 ✕ 上拖动。
                 chip.addEventListener("mousedown", (e) => {
-                    e.preventDefault();
                     e.stopPropagation();
                 });
 
@@ -4961,7 +4979,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 key: "clear_disabled",
                 label: magicT("🚫 清空屏蔽"),
                 action: "clear_disabled",
-                title: magicT("删除所有以 ! 屏蔽的 tag（保留未屏蔽内容）"),
+                title: magicT("删除所有以 * 屏蔽的 tag（保留未屏蔽内容）"),
             },
             { key: "copy", label: magicT("📋 复制"), action: "copy" },
         ];
@@ -5354,7 +5372,7 @@ async function showPromptEditorModal(node, nodeSeed) {
         hint.innerHTML = `
             <b>${h1}</b><code style="background:${THEME.bg3};padding:2px 5px;border-radius:3px;">,</code>${h2}
             ${h3}<b>${h4}</b>${h5}
-            ${h6}<code style="background:${THEME.bg3};padding:2px 5px;border-radius:3px;">!</code>${h7},${h8}
+            ${h6}<code style="background:${THEME.bg3};padding:2px 5px;border-radius:3px;">*</code>${h7},${h8}
         `;
         content.appendChild(hint);
         content.appendChild(danbooruConnBar);
