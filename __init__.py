@@ -16,6 +16,7 @@ from .nodes.magic_resolution import MagicResolution
 from .nodes.magic_sdnq_loader import MagicSDNQLoader
 from .nodes.magic_sdnq_sampler import MagicSDNQSampler
 from .nodes.magic_cache import MagicCache
+from .nodes.magic_klein_loader import MagicKleinLoader
 
 # --- 节点映射 ---
 NODE_CLASS_MAPPINGS = {
@@ -30,6 +31,7 @@ NODE_CLASS_MAPPINGS = {
     "MagicSDNQLoader": MagicSDNQLoader,
     "MagicSDNQSampler": MagicSDNQSampler,
     "MagicCache": MagicCache,
+    "MagicKleinLoader": MagicKleinLoader,
 }
 
 # --- 节点显示名称 ---
@@ -46,12 +48,13 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicSDNQLoader": "📦 SDNQ模型加载器 Magic SDNQ Model Loader",
     "MagicSDNQSampler": "🎲 SDNQ K采样器 Magic SDNQ K Sampler",
     "MagicCache": "⚡ Magic Cache 缓存加速 (TeaCache + FBCache)",
+    "MagicKleinLoader": "🔮 Magic Nunchaku FLUX.2 Klein Loader",
 }
 
 # --- 指定 Web 目录 ---
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.2.9)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.3.0)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")

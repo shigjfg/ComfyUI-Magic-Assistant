@@ -10,7 +10,31 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-03-30**
+> Latest Update / 最新更新：**2026-04-02**
+
+> **V1.3.0 版本介绍 / Version Introduction** 2026-04-02
+
+> 1. **🐛 修复**: Tag 预览悬浮功能条 Bug 修复
+>    * 修复了编辑提示器节点中 tag 预览悬浮功能条的已知问题，提升使用体验
+>    * Fixed known bugs in the tag preview floating toolbar in the prompt editor
+
+> 2. **✨ 新增节点**: Magic Nunchaku FLUX.2 Klein Loader ⭐
+>    * 新增 nunchaku-flux2-klein9b 模型加载节点，完全兼容 ComfyUI 工作流
+>    * 使用极其简单，只需将原有的 unet 加载器替换为本节点即可！
+>    * 支持完整 LoRA 功能（建议配合强力 LoRA 加载器，并开启自适应模式）
+>    * 速度提升是至今所有 klein9b 量化模型的 3-4 倍
+>    * 强烈推荐 30 系显卡和 40 系显卡用户使用
+>    * 模型下载：https://drive.google.com/file/d/1BHjxeiC-a55vqnftYk2SK7Wvbgx6gMNv/view?usp=drive_link
+>    * 本节点技术基于 [tonera/FLUX.2-klein-9B-Nunchaku](https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku) 实现
+>    * New Magic Nunchaku FLUX.2 Klein Loader node for nunchaku-flux2-klein9b models
+>    * Simple to use: just replace your unet loader with this node
+>    * Full LoRA support (recommended with Magic Power LoRA Loader, enable adaptive mode)
+>    * Speed improvement: 3-4x faster than any previous klein9b quantized model
+>    * Strongly recommended for RTX 30 series and RTX 40 series users
+>    * Model download: https://drive.google.com/file/d/1BHjxeiC-a55vqnftYk2SK7Wvbgx6gMNv/view?usp=drive_link
+>    * Based on [tonera/FLUX.2-klein-9B-Nunchaku](https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku)
+
+>    <img width="563" height="416" alt="Image" src="https://github.com/user-attachments/assets/95a003b5-4e10-45b5-842d-498d9a045ea4" />
 
 > **V1.2.9 版本介绍 / Version Introduction** 2026-03-30
 
@@ -697,7 +721,71 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 >
 </details>
 
-### 10. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ K Sampler (SDNQ 模型加载器与 K 采样器)
+### 10. 🔮 Magic Nunchaku FLUX.2 Klein Loader (Nunchaku Klein 模型加载器)
+> **Simple nunchaku-flux2-klein9b model loader with full LoRA support.** / **简单易用的 nunchaku-flux2-klein9b 模型加载器，支持完整 LoRA 功能。**
+
+<details>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
+
+#### 节点简介 / Node Introduction
+
+本节点源技术来自 [tonera/FLUX.2-klein-9B-Nunchaku](https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku) 库的原作者，本人只是将作者未实现于 ComfyUI 的部分进行实现，因为我们仍未知道官方 nunchaku 什么时候才会更新。
+
+This node is based on the original author's implementation from [tonera/FLUX.2-klein-9B-Nunchaku](https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku). The author only implemented what was not yet available in ComfyUI, as we still don't know when the official nunchaku will be updated.
+
+#### 特性 / Features
+
+* **简单易用**: 只需将原有的 unet 加载器替换为本节点即可，无需复杂的配置
+* **完整 LoRA 支持**: 支持完整的 LoRA 功能，建议配合强力 LoRA 加载器使用，并开启自适应模式
+* **极速性能**: 速度提升是至今所有 klein9b 量化模型的 3-4 倍
+* **显存友好**: 推荐 30 系显卡和 40 系显卡用户使用
+
+* **Easy to use**: Simply replace your unet loader with this node, no complex configuration needed
+* **Full LoRA support**: Complete LoRA functionality, recommended with Magic Power LoRA Loader and adaptive mode enabled
+* **Fast performance**: 3-4x faster than any previous klein9b quantized model
+* **VRAM friendly**: Recommended for RTX 30 series and RTX 40 series users
+
+#### 模型下载 / Model Download
+
+> **下载地址**: https://drive.google.com/file/d/1BHjxeiC-a55vqnftYk2SK7Wvbgx6gMNv/view?usp=drive_link
+
+#### 首次使用 / First Time Setup
+
+1. 使用本节点前，请先下载并安装 nunchaku-flux2-klein9b 模型
+2. 首次使用时，点击设置会检测你是否已经安装了 wheel
+3. 如果检测到已安装，点击下方的"环境嵌入"即可正常使用
+
+1. Download and install nunchaku-flux2-klein9b model before using this node
+2. On first use, click Settings to check if wheel is installed
+3. If wheel is detected as installed, click "Embed Environment" below to start using
+
+<img width="427" height="473" alt="Image" src="https://github.com/user-attachments/assets/13e61a9a-cc27-4c22-a0f1-025c925bdfed" />
+
+#### 测试效果 / Test Results
+
+测试用工作流下载地址：https://drive.google.com/file/d/1BHjxeiC-a55vqnftYk2SK7Wvbgx6gMNv/view?usp=drive_link
+
+以下是测试效果：双图编辑 + 3 个超过 300MB 的 LoRA，速度仍然快到 **19s 一张**，且效果极好。
+
+Test workflow download: https://drive.google.com/file/d/1BHjxeiC-a55vqnftYk2SK7Wvbgx6gMNv/view?usp=drive_link
+
+Test results: Dual image editing + 3 LoRAs over 300MB each, still achieves **19s per image** with excellent quality.
+
+<img width="2260" height="1256" alt="Image" src="https://github.com/user-attachments/assets/4752f1ad-4190-4da8-82c6-e68c6abccf8f" />
+
+#### 使用建议 / Usage Tips
+
+* 建议配合**强力 LoRA 加载器**使用，并开启**自适应模式**
+* 首次使用请先安装 wheel 环境
+* 推荐显卡：RTX 30 系列、RTX 40 系列
+
+* Recommended to use with **Magic Power LoRA Loader** and enable **adaptive mode**
+* First time users should install wheel environment first
+* Recommended GPUs: RTX 30 series, RTX 40 series
+
+</details>
+
+### 11. 📦 Magic SDNQ Loader & 🎲 Magic SDNQ K Sampler (SDNQ 模型加载器与 K 采样器)
 > **Standalone SDNQ model loading and sampling, ComfyUI-style workflow.** / **独立的 SDNQ 模型加载与采样，贴近 ComfyUI 官方工作流。**
 
 <details>

@@ -3825,31 +3825,53 @@ async function showPromptEditorModal(node, nodeSeed) {
         // 首次定位前在 positionTagFloatBar 内测量并缓存（须先 display:flex，display:none 时宽高为 0）
         shell._magicTagFloatBarSize = { w: 0, h: 0, _initialized: false };
 
-        /** 单次 RAF 定位（首次须先 display:flex 再测宽高，否则 sz.h=0 会把条叠在芯片上） */
+        /** 单次 RAF 定位（首次须先 display:flex 再测宽高，否则 sz.h=0 会把条叠在芯片上）
+         *  首次定位时用两个 RAF 确保 number input 的 stepper 按钮尺寸被正确计算：
+         *  - RAF1: display:flex → layout 开始
+         *  - RAF2: 测量尺寸、设置位置并显示 → layout/repaint 已完成
+         */
         const positionTagFloatBar = (chip) => {
             if (!chip || !chip.isConnected || !floatBar.isConnected) return;
             const sz = shell._magicTagFloatBarSize;
             const margin = 8;
-            requestAnimationFrame(() => {
-                if (!chip.isConnected || !floatBar.isConnected) return;
-                const r = chip.getBoundingClientRect();
-                floatBar.style.display = "flex";
-                floatBar.style.transform = "translateX(-50%)";
-                if (!sz._initialized) {
+            if (sz._initialized) {
+                requestAnimationFrame(() => {
+                    if (!chip.isConnected || !floatBar.isConnected) return;
+                    const r = chip.getBoundingClientRect();
+                    floatBar.style.display = "flex";
+                    floatBar.style.transform = "translateX(-50%)";
+                    let top = r.top - sz.h - margin;
+                    if (top < 8) top = r.bottom + margin;
+                    let cx = r.left + r.width / 2;
+                    const half = sz.w / 2;
+                    cx = Math.max(8 + half, Math.min(cx, window.innerWidth - 8 - half));
+                    floatBar.style.left = Math.round(cx) + "px";
+                    floatBar.style.top = Math.round(top) + "px";
+                    floatBar.style.visibility = "visible";
+                });
+            } else {
+                requestAnimationFrame(() => {
+                    if (!chip.isConnected || !floatBar.isConnected) return;
+                    floatBar.style.display = "flex";
                     floatBar.style.visibility = "hidden";
+                    floatBar.style.transform = "translateX(-50%)";
+                });
+                requestAnimationFrame(() => {
+                    if (!chip.isConnected || !floatBar.isConnected) return;
                     sz.w = floatBar.offsetWidth;
                     sz.h = floatBar.offsetHeight;
                     sz._initialized = true;
-                }
-                let top = r.top - sz.h - margin;
-                if (top < 8) top = r.bottom + margin;
-                let cx = r.left + r.width / 2;
-                const half = sz.w / 2;
-                cx = Math.max(8 + half, Math.min(cx, window.innerWidth - 8 - half));
-                floatBar.style.left = Math.round(cx) + "px";
-                floatBar.style.top = Math.round(top) + "px";
-                floatBar.style.visibility = "visible";
-            });
+                    const r = chip.getBoundingClientRect();
+                    let top = r.top - sz.h - margin;
+                    if (top < 8) top = r.bottom + margin;
+                    let cx = r.left + r.width / 2;
+                    const half = sz.w / 2;
+                    cx = Math.max(8 + half, Math.min(cx, window.innerWidth - 8 - half));
+                    floatBar.style.left = Math.round(cx) + "px";
+                    floatBar.style.top = Math.round(top) + "px";
+                    floatBar.style.visibility = "visible";
+                });
+            }
         };
 
         const hideTagFloatBar = () => {

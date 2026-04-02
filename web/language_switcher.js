@@ -990,6 +990,89 @@ const magicPromptBoxTranslations = {
     "未找到匹配的权重信息": { zh: "未找到匹配的权重信息", en: "No matching weight info found" }
 };
 
+// 节点翻译映射表 - Magic Klein Loader (FLUX.2 Klein)
+const magicKleinLoaderTranslations = {
+    "⚙️ 设置": { zh: "⚙️ 设置", en: "⚙️ Settings" },
+    "📖 说明": { zh: "📖 说明", en: "📖 Help" },
+    "未知": { zh: "未知", en: "Unknown" },
+    "unknown": { zh: "未知", en: "unknown" },
+
+    "⚙️ Magic Klein 设置": { zh: "⚙️ Magic Klein 设置", en: "⚙️ Magic Klein Settings" },
+    "📦 环境状态": { zh: "📦 环境状态", en: "📦 Environment Status" },
+    "nunchaku 包:": { zh: "nunchaku 包:", en: "nunchaku package:" },
+    "transformer:": { zh: "transformer:", en: "transformer:" },
+    "torch_transfer_utils:": { zh: "torch_transfer_utils:", en: "torch_transfer_utils:" },
+    "wrappers/klein.py:": { zh: "wrappers/klein.py:", en: "wrappers/klein.py:" },
+    "ComfyUI Python:": { zh: "ComfyUI Python:", en: "ComfyUI Python:" },
+
+    "🔧 嵌入到环境": { zh: "🔧 嵌入到环境", en: "🔧 Install to Environment" },
+    "KLEIN_EMBED_DESC": {
+        zh: "独立安装包（pip）不包含 <code style='color:#a78bfa'>wrappers/klein.py</code>（ComfyUI 适配层），在已安装 nunchaku 且含 FLUX.2 运行库时，可点击下方按钮写入。",
+        en: "The standalone pip package does not include <code style='color:#a78bfa'>wrappers/klein.py</code> (ComfyUI bridge). After nunchaku + FLUX.2 runtime are present, use the button below.",
+    },
+    "🔧 嵌入到 nunchaku 环境": { zh: "🔧 嵌入到 nunchaku 环境", en: "🔧 Install to nunchaku Environment" },
+    "🔧 重新嵌入到 nunchaku 环境": { zh: "🔧 重新嵌入到 nunchaku 环境", en: "🔧 Re-install to nunchaku Environment" },
+    "⏳ 安装中...": { zh: "⏳ 安装中...", en: "⏳ Installing..." },
+    "正在写入文件...": { zh: "正在写入文件...", en: "Writing files..." },
+    "✅ 安装成功！wrappers/klein.py 已写入。": {
+        zh: "✅ 安装成功！wrappers/klein.py 已写入。",
+        en: "✅ Done! wrappers/klein.py has been written.",
+    },
+    "❌ 安装失败: ": { zh: "❌ 安装失败: ", en: "❌ Failed: " },
+    "❌ 请求失败: ": { zh: "❌ 请求失败: ", en: "❌ Request failed: " },
+
+    "__klein_hint_nunchaku__": {
+        zh: '请先安装 <strong>nunchaku</strong> 到 ComfyUI 正在使用的 Python（便携版一般为 <code style="color:#a78bfa;">python_embeded</code>）。官方安装文档：<a href="{{URL}}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">{{URL}}</a>',
+        en: 'Install the <strong>nunchaku</strong> package into the same Python ComfyUI uses (portable: <code style="color:#a78bfa;">python_embeded</code>). Official guide: <a href="{{URL}}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">installation docs</a>',
+    },
+    "__klein_hint_official__": {
+        zh: '若缺少 <code style="color:#a78bfa;">transformer_flux2</code> 或需对照环境，可参考官方 ComfyUI 插件仓库：<a href="{{GITHUB}}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">ComfyUI-nunchaku (GitHub)</a>',
+        en: 'If <code style="color:#a78bfa;">transformer_flux2</code> is missing or you want to compare setups, see the official plugin: <a href="{{GITHUB}}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">ComfyUI-nunchaku on GitHub</a>',
+    },
+
+    "🧠 支持的模型": { zh: "🧠 支持的模型", en: "🧠 Supported Models" },
+    "量化模型": { zh: "量化模型", en: "Quantized Model" },
+    "KLEIN_MODEL_CAPTION": {
+        zh: "量化者：tonera | 量化方式：FP4/INT4（SVDQuant/Nunchaku）",
+        en: "Quantized by: tonera | Method: FP4/INT4 (SVDQuant/Nunchaku)",
+    },
+
+    "📖 Magic Klein 说明": { zh: "📖 Magic Klein 说明", en: "📖 Magic Klein Documentation" },
+    "🔮 Magic Nunchaku FLUX.2 Klein Loader": {
+        zh: "🔮 Magic Nunchaku FLUX.2 Klein Loader",
+        en: "🔮 Magic Nunchaku FLUX.2 Klein Loader",
+    },
+    "KLEIN_INFO_INTRO": {
+        zh: "独立于官方 ComfyUI-nunchaku 的节点，用于加载 <strong>FLUX.2 Klein</strong> 量化模型。即使删除官方节点或卸载 pip 包，本节点仍可通过嵌入方式使用。",
+        en: "A standalone node for loading <strong>FLUX.2 Klein</strong> quantized models, independent of the official ComfyUI-nunchaku node. It still works via embedding even if the official node or pip package is removed.",
+    },
+    "支持的模型": { zh: "支持的模型", en: "Supported Models" },
+    "KLEIN_MODEL_LINE2": {
+        zh: "量化方式：FP4/INT4（由 tonera 使用 SVDQuant/Nunchaku 量化）",
+        en: "Quantization: FP4/INT4 by tonera using SVDQuant/Nunchaku",
+    },
+    "首次使用步骤": { zh: "首次使用步骤", en: "First-Time Setup" },
+    "KLEIN_STEP1": {
+        zh: "下载量化后的 safetensors 文件（如 <code style=\"color:#a78bfa;\">svdq-fp4_r32-FLUX.2-klein-9B-Nunchaku.safetensors</code>）",
+        en: "Download the quantized safetensors file (e.g. <code style=\"color:#a78bfa;\">svdq-fp4_r32-FLUX.2-klein-9B-Nunchaku.safetensors</code>)",
+    },
+    "KLEIN_STEP2": {
+        zh: "放入 ComfyUI 的 <code style=\"color:#a78bfa;\">models/diffusion_models/</code> 目录",
+        en: "Place it in ComfyUI's <code style=\"color:#a78bfa;\">models/diffusion_models/</code> folder",
+    },
+    "KLEIN_STEP3": {
+        zh: "点击节点上的 <strong>⚙️ 设置</strong> → <strong>嵌入到 nunchaku 环境</strong>",
+        en: "Click <strong>⚙️ Settings</strong> on this node → <strong>Install to nunchaku Environment</strong>",
+    },
+    "KLEIN_STEP4": { zh: "重新加载 ComfyUI 即可正常使用", en: "Reload ComfyUI and use normally" },
+    "量化说明（来自 HuggingFace）": { zh: "量化说明（来自 HuggingFace）", en: "Quantization Quality (from HuggingFace)" },
+    "指标": { zh: "指标", en: "Metric" },
+    "KLEIN_LICENSE_NOTE": {
+        zh: "License: FLUX Non-Commercial License（详见 HuggingFace 页面）",
+        en: "License: FLUX Non-Commercial License (see HuggingFace model page)",
+    },
+};
+
 // 所有翻译映射（按节点分类）
 const allTranslations = {
     "MagicPowerLoraLoader": loraLoaderTranslations,
@@ -1001,7 +1084,8 @@ const allTranslations = {
     "MagicSDNQLoader": sdnqTranslations,
     "MagicSDNQSampler": sdnqTranslations,
     "MagicCache": cacheTranslations,
-    "MagicPromptBox": magicPromptBoxTranslations
+    "MagicPromptBox": magicPromptBoxTranslations,
+    "MagicKleinLoader": magicKleinLoaderTranslations
 };
 
 // 翻译缓存（避免重复查找）
@@ -1916,6 +2000,8 @@ function interceptAppendChild() {
                                               parentText.includes('交换宽高') || parentText.includes('Swap W/H') ||
                                               parentText.includes('Magic Resize') || parentText.includes('Magic Resolution')) {
                                         detectedNodeType = "MagicResolutionResize";
+                                    } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                                        detectedNodeType = "MagicKleinLoader";
                                     } else if (parentText.includes('配置中心') || parentText.includes('Settings') ||
                                               parentText.includes('Magic Assistant 配置中心') || parentText.includes('Magic Assistant Settings Center') ||
                                               parentText.includes('规则编辑器') || parentText.includes('Rule Editor') ||
@@ -2040,6 +2126,8 @@ function interceptAppendChild() {
                                       parentText.includes('交换宽高') || parentText.includes('Swap W/H') ||
                                       parentText.includes('Magic Resize') || parentText.includes('Magic Resolution')) {
                                 detectedNodeType = "MagicResolutionResize";
+                            } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                                detectedNodeType = "MagicKleinLoader";
                             } else if (parentText.includes('配置中心') || parentText.includes('Settings') ||
                                       parentText.includes('Magic Assistant 配置中心') || parentText.includes('Magic Assistant Settings Center') ||
                                       parentText.includes('规则编辑器') || parentText.includes('Rule Editor') ||
@@ -2157,6 +2245,8 @@ function setupTranslationInterceptor() {
                                     nodeType = "MagicLogicCompute";
                                 } else if (text.includes('SDNQ') || text.includes('降噪') || text.includes('预览方式') || text.includes('正面条件') || text.includes('负面条件')) {
                                     nodeType = text.includes('Sampler') || text.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+                                } else if (text.includes('Magic Klein') || text.includes('Klein Loader') || text.includes('FLUX.2 Klein')) {
+                                    nodeType = "MagicKleinLoader";
                                 } else if (text.includes('Magic Cache') || text.includes('TeaCache') || text.includes('FBCache') ||
                                           text.includes('本节点新增支持') || text.includes('已修改源项目代码')) {
                                     nodeType = "MagicCache";
@@ -2276,6 +2366,7 @@ function isLoraNodeElement(element) {
             'SDNQ', 'SDNQ K Sampler', 'SDNQ K采样器', 'SDNQ模型', 'SDNQ采样', '降噪', '预览方式', '采样模式', 'Magic SDNQ', '正面条件', '负面条件',
             // Cache 相关
             'Magic Cache', 'TeaCache', 'FBCache', '本节点新增支持', '已修改源项目代码', 'flux2klein', '最新 Anima 模型', 'SDXL 模型', '原项目不支持',
+            'Magic Klein', 'Klein Loader', 'FLUX.2 Klein', '嵌入到 nunchaku', 'nunchaku 环境',
             // MagicPromptBox 相关
             'Magic 提示词编辑器', 'Magic Prompt Editor', '编辑提示词', 'Edit Prompt', 'Tag 预览', 'Tag Preview',
             '标签搜索', 'Tag Search', '编辑标签', 'Edit Tags', '运行历史', 'Run History',
@@ -2337,6 +2428,8 @@ function translateElementRecursive(element, lang, nodeType = null) {
                 nodeType = "MagicLogicCompute";
             } else if (text.includes('SDNQ') || text.includes('降噪') || text.includes('预览方式') || text.includes('正面条件') || text.includes('负面条件')) {
                 nodeType = text.includes('Sampler') || text.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+            } else if (text.includes('Magic Klein') || text.includes('Klein Loader') || text.includes('FLUX.2 Klein')) {
+                nodeType = "MagicKleinLoader";
             } else if (text.includes('Magic Cache') || text.includes('TeaCache') || text.includes('FBCache') ||
                       text.includes('本节点新增支持') || text.includes('已修改源项目代码')) {
                 nodeType = "MagicCache";
@@ -2843,6 +2936,8 @@ function translateElementRecursive(element, lang, nodeType = null) {
                                           parentText.includes('交换宽高') || parentText.includes('Swap W/H') ||
                                           parentText.includes('Magic Resize') || parentText.includes('Magic Resolution')) {
                                     detectedNodeType = "MagicResolutionResize";
+                                } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                                    detectedNodeType = "MagicKleinLoader";
                                 } else if (parentText.includes('配置中心') || parentText.includes('Settings') ||
                                           parentText.includes('Magic Assistant 配置中心') || parentText.includes('Magic Assistant Settings Center') ||
                                           parentText.includes('规则编辑器') || parentText.includes('Rule Editor') ||
@@ -2936,6 +3031,8 @@ function translateElementRecursive(element, lang, nodeType = null) {
                                           parentText.includes('交换宽高') || parentText.includes('Swap W/H') ||
                                           parentText.includes('Magic Resize') || parentText.includes('Magic Resolution')) {
                                     detectedNodeType = "MagicResolutionResize";
+                                } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                                    detectedNodeType = "MagicKleinLoader";
                                 } else if (parentText.includes('配置中心') || parentText.includes('Settings') ||
                                           parentText.includes('Magic Assistant 配置中心') || parentText.includes('Magic Assistant Settings Center') ||
                                           parentText.includes('规则编辑器') || parentText.includes('Rule Editor') ||
@@ -2971,6 +3068,8 @@ function translateElementRecursive(element, lang, nodeType = null) {
                     const parentText = parent.textContent || '';
                     if (parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor')) {
                         detectedNodeType = "MagicLogicCompute";
+                    } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                        detectedNodeType = "MagicKleinLoader";
                     } else if (parentText.includes('Magic 提示词编辑器') || parentText.includes('Magic Prompt Editor') ||
                               parentText.includes('编辑提示词') || parentText.includes('Tag 预览') || parentText.includes('标签搜索') ||
                               parentText.includes('运行历史') || parentText.includes('历史收藏') || parentText.includes('格式化') ||
@@ -3026,6 +3125,8 @@ function updateAllUITexts(lang) {
             if (buttonText.includes('逻辑') || buttonText.includes('Logic') || buttonText.includes('编辑器') || buttonText.includes('Editor') ||
                 parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor')) {
                 nodeType = "MagicLogicCompute";
+            } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                nodeType = "MagicKleinLoader";
             } else if (buttonText.includes('Magic 提示词编辑器') || buttonText.includes('Magic Prompt Editor') ||
                 buttonText.includes('编辑提示词') || buttonText.includes('Tag 预览') || buttonText.includes('标签搜索') ||
                 buttonText.includes('运行历史') || buttonText.includes('历史收藏') || buttonText.includes('格式化') ||
@@ -3073,6 +3174,8 @@ function updateAllUITexts(lang) {
             if (inputText.includes('逻辑') || inputText.includes('Logic') || inputText.includes('编辑器') || inputText.includes('Editor') ||
                 parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor')) {
                 nodeType = "MagicLogicCompute";
+            } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                nodeType = "MagicKleinLoader";
             } else if (inputText.includes('Magic 提示词编辑器') || inputText.includes('Magic Prompt Editor') ||
                 inputText.includes('编辑提示词') || inputText.includes('Tag 预览') || inputText.includes('标签搜索') ||
                 inputText.includes('运行历史') || inputText.includes('历史收藏') || inputText.includes('格式化') ||
@@ -3117,7 +3220,8 @@ function updateAllUITexts(lang) {
                         parent.textContent.includes('预览方式') ||
                         parent.textContent.includes('Magic Cache') ||
                         parent.textContent.includes('TeaCache') ||
-                        parent.textContent.includes('FBCache')
+                        parent.textContent.includes('FBCache') ||
+                        parent.textContent.includes('Magic Klein')
                     )) {
                         isRelevant = true;
                         break;
@@ -3137,6 +3241,8 @@ function updateAllUITexts(lang) {
                 detectedNodeType = "MagicLogicCompute";
             } else if (parentText.includes('SDNQ') || parentText.includes('降噪') || parentText.includes('预览方式') || parentText.includes('正面条件') || parentText.includes('负面条件')) {
                 detectedNodeType = parentText.includes('Sampler') || parentText.includes('采样') ? "MagicSDNQSampler" : "MagicSDNQLoader";
+            } else if (parentText.includes('Magic Klein') || parentText.includes('Klein Loader') || parentText.includes('FLUX.2 Klein')) {
+                detectedNodeType = "MagicKleinLoader";
             } else if (parentText.includes('Magic Cache') || parentText.includes('TeaCache') || parentText.includes('FBCache') ||
                       parentText.includes('本节点新增支持') || parentText.includes('已修改源项目代码')) {
                 detectedNodeType = "MagicCache";
