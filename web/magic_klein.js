@@ -249,14 +249,15 @@ app.registerExtension({
 
             const URL_NUNCHAKU_INSTALL =
                 "https://nunchaku.tech/docs/nunchaku/installation/installation.html";
-            const URL_COMFYUI_NUNCHAKU_PLUGIN =
-                "https://github.com/nunchaku-ai/ComfyUI-nunchaku";
-
             const nunchakuOk = !!env?.nunchaku_found;
             const transformerOk = !!env?.transformer_available;
             const torchTransferOk = !!env?.torch_transfer_utils_available;
-            /** 嵌入按钮在 nunchaku + transformer_flux2 + torch_transfer_utils 都具备时才可点 */
-            const canEmbedWrapper = nunchakuOk && transformerOk && torchTransferOk;
+            /**
+             * 嵌入：只要能在 ComfyUI 的 Python 里找到 nunchaku 包路径即可点击。
+             * 后端 install_wrapper_to_nunchaku 会写入缺失的 torch_transfer_utils、
+             * transformer_flux2 与 wrappers/klein.py；不要求这些文件事先已存在。
+             */
+            const canEmbedWrapper = nunchakuOk;
             const showNunchakuInstallHint = !nunchakuOk;
             const showOfficialPluginHint =
                 nunchakuOk && (!transformerOk || !torchTransferOk || !env?.wrapper_installed);
@@ -366,7 +367,7 @@ app.registerExtension({
                     `;
 
             const hintNunchakuHtml = t("__klein_hint_nunchaku__").replace(/\{\{URL\}\}/g, URL_NUNCHAKU_INSTALL);
-            const hintOfficialHtml = t("__klein_hint_official__").replace(/\{\{GITHUB\}\}/g, URL_COMFYUI_NUNCHAKU_PLUGIN);
+            const hintOfficialHtml = t("__klein_hint_official__");
 
             const installSection = document.createElement("div");
             installSection.style.cssText = "margin-bottom:18px;";

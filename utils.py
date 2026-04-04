@@ -383,6 +383,7 @@ class MagicUtils:
     }
     _DEFAULT_SETTINGS = {
         "dialog_size": {"width": 720, "height": 400, "textareaMinHeight": 160},
+        "edit_tags_modal_size": {"width": 720, "height": 560},
         # Magic 提示词编辑器 · 历史记录最大条数（存 settings.txt）
         "prompt_history_max": 20,
         # 内联补全单次最多返回/展示条数（1～500，与 utils 中 ma_prompt_autocomplete 上限一致）
@@ -2496,7 +2497,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.3.0"  # Current version / 当前版本号
+        current_version = "1.3.1"  # Current version / 当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:

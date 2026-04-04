@@ -13,7 +13,10 @@ Path resolution:
   - ComfyUI root:  ComfyUI/  (parent of custom_nodes/)
   - Python env:     ComfyUI_windows_portable/python_embeded/  (sibling of ComfyUI/)
 """
+import ast
 import os
+import re
+import sys
 
 _NUNCHAKU_BASE = None
 _COMFYUI_ROOT = None
@@ -67,32 +70,70 @@ def get_comfyui_python_lib() -> str | None:
     return None
 
 
+def _site_packages_from_python_exe(exe: str | None) -> str | None:
+    """site-packages next to python.exe (portable embed / typical Windows layout)."""
+    if not exe or not os.path.isfile(exe):
+        return None
+    root = os.path.dirname(os.path.abspath(exe))
+    for rel in ("Lib/site-packages", "lib/site-packages"):
+        sp = os.path.normpath(os.path.join(root, *rel.split("/")))
+        if os.path.isdir(sp):
+            return sp
+    return None
+
+
+def get_site_packages_candidates() -> list[str]:
+    """All site-packages roots to probe for nunchaku (deduped, normalized).
+
+    Prefer the interpreter ComfyUI is actually running under (sys.executable),
+    then the path inferred from this node's ComfyUI folder layout.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in (
+        _site_packages_from_python_exe(getattr(sys, "executable", None) or None),
+        get_comfyui_python_lib(),
+    ):
+        if p and os.path.isdir(p):
+            n = os.path.normpath(p)
+            if n not in seen:
+                seen.add(n)
+                out.append(n)
+    return out
+
+
 def get_nunchaku_base() -> str | None:
     """Get the nunchaku package path in ComfyUI's embedded Python, or None.
 
     Tries:
       1. import nunchaku; dirname(nunchaku.__file__)
-      2. Infer from ComfyUI root: {parent}/python_embeded/Lib/site-packages/nunchaku/
+      2. {sys.executable}/../Lib/site-packages/nunchaku/
+      3. Infer from ComfyUI root: {parent}/python_embeded/Lib/site-packages/nunchaku/
+
+    Import can fail with OSError (DLL load) or other errors while the package
+    directory still exists — those are not ImportError, so we always fall back
+    to filesystem detection. Cached path is dropped if the folder was removed.
     """
     global _NUNCHAKU_BASE
     if _NUNCHAKU_BASE is not None:
-        return _NUNCHAKU_BASE
+        if not os.path.isdir(_NUNCHAKU_BASE):
+            _NUNCHAKU_BASE = None
+        else:
+            return _NUNCHAKU_BASE
 
-    # Try import first
     try:
         import nunchaku
-        _NUNCHAKU_BASE = os.path.dirname(nunchaku.__file__)
+
+        _NUNCHAKU_BASE = os.path.normpath(os.path.dirname(nunchaku.__file__))
         return _NUNCHAKU_BASE
-    except ImportError:
+    except Exception:
         pass
 
-    # Fall back to path inference
-    lib_dir = get_comfyui_python_lib()
-    if lib_dir:
+    for lib_dir in get_site_packages_candidates():
         nun_path = os.path.join(lib_dir, "nunchaku")
-        if os.path.isdir(nun_path):
-            _NUNCHAKU_BASE = nun_path
-            return nun_path
+        if os.path.isdir(nun_path) and os.path.isfile(os.path.join(nun_path, "__init__.py")):
+            _NUNCHAKU_BASE = os.path.normpath(nun_path)
+            return _NUNCHAKU_BASE
 
     return None
 
@@ -106,42 +147,140 @@ def is_wrapper_installed() -> bool:
         return False
 
 
-def _ensure_init_exports(file_path: str, import_lines: list[str], export_names: list[str]) -> bool:
-    """Add import/export lines to an existing __init__.py, idempotently.
+_FLUX2_MODEL = "NunchakuFlux2Transformer2DModel"
 
-    Returns True if file was modified.
-    """
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
 
-    modified = False
-    for line in import_lines:
-        if line.strip() not in content:
-            content = content.rstrip() + "\n" + line + "\n"
-            modified = True
+def _scan_matching_bracket(content: str, open_idx: int, open_ch: str, close_ch: str) -> int:
+    """Return index of matching close bracket, or -1. Skips # comments and string literals."""
+    depth = 1
+    i = open_idx + 1
+    n = len(content)
+    while i < n:
+        c = content[i]
+        if c == "#":
+            while i < n and content[i] != "\n":
+                i += 1
+            continue
+        if c in ('"', "'"):
+            if i + 2 < n and content[i : i + 3] in ('"""', "'''"):
+                triple = content[i : i + 3]
+                i += 3
+                while i + 2 < n:
+                    if content[i : i + 3] == triple:
+                        i += 3
+                        break
+                    i += 1
+                continue
+            quote = c
+            i += 1
+            while i < n:
+                if content[i] == "\\":
+                    i += 2
+                    continue
+                if content[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == open_ch:
+            depth += 1
+        elif c == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return -1
 
-    import re
-    all_match = re.search(r"__all__\s*=\s*\[([^\]]*)\]", content, re.DOTALL)
-    if all_match:
-        existing_strs = re.findall(r'"([^"]*)"', all_match.group(1))
-        new_names = [n for n in export_names if n not in existing_strs]
-        if new_names:
-            new_all = re.sub(
-                r"(\s*\])",
-                ",\n    " + ",\n    ".join(repr(n) for n in new_names) + r"\1",
-                all_match.group(0),
-            )
-            content = content[:all_match.start()] + new_all + content[all_match.end():]
-            modified = True
-    else:
-        all_line = f"__all__ = [{', '.join(repr(n) for n in export_names)}]\n"
-        content = content.rstrip() + "\n" + all_line
-        modified = True
 
-    if modified:
-        with open(file_path, "w", encoding="utf-8") as f:
+def _find_import_open_paren(content: str, pattern: str) -> int | None:
+    m = re.search(pattern, content)
+    if not m:
+        return None
+    return m.end() - 1
+
+
+def _insert_before_closing_paren(content: str, open_paren_idx: int, insertion: str) -> str:
+    close_idx = _scan_matching_bracket(content, open_paren_idx, "(", ")")
+    if close_idx < 0:
+        raise ValueError("unbalanced parentheses in multiline import")
+    return content[:close_idx] + insertion + content[close_idx:]
+
+
+def _export_name_in_all_block(content: str, name: str) -> bool:
+    m = re.search(r"__all__\s*=\s*\[", content)
+    if not m:
+        return False
+    lb = m.end() - 1
+    rb = _scan_matching_bracket(content, lb, "[", "]")
+    if rb < 0:
+        return False
+    inner = content[lb : rb + 1]
+    return f'"{name}"' in inner or f"'{name}'" in inner
+
+
+def _add_export_to_all_list(content: str, name: str) -> tuple[str, bool]:
+    if _export_name_in_all_block(content, name):
+        return content, False
+    m = re.search(r"__all__\s*=\s*\[", content)
+    if not m:
+        return content, False
+    lb = m.end() - 1
+    rb = _scan_matching_bracket(content, lb, "[", "]")
+    if rb < 0:
+        return content, False
+    insert = f'\n    "{name}",'
+    return content[:rb] + insert + content[rb:], True
+
+
+def _patch_flux2_nunchaku_package_init(content: str) -> tuple[str, bool]:
+    """Align with upstream PR #924: extend from .models import (...) and __all__."""
+    c = content
+    changed = False
+    op = _find_import_open_paren(c, r"from\s+\.models\s+import\s*\(")
+    if op is not None:
+        ce = _scan_matching_bracket(c, op, "(", ")")
+        if ce >= 0 and _FLUX2_MODEL not in c[op : ce + 1]:
+            c = _insert_before_closing_paren(c, op, f"\n    {_FLUX2_MODEL},")
+            changed = True
+    c2, ch2 = _add_export_to_all_list(c, _FLUX2_MODEL)
+    return c2, changed or ch2
+
+
+def _patch_flux2_models_package_init(content: str) -> tuple[str, bool]:
+    c = content
+    changed = False
+    op = _find_import_open_paren(c, r"from\s+\.transformers\s+import\s*\(")
+    if op is not None:
+        ce = _scan_matching_bracket(c, op, "(", ")")
+        if ce >= 0 and _FLUX2_MODEL not in c[op : ce + 1]:
+            c = _insert_before_closing_paren(c, op, f"\n    {_FLUX2_MODEL},")
+            changed = True
+    c2, ch2 = _add_export_to_all_list(c, _FLUX2_MODEL)
+    return c2, changed or ch2
+
+
+def _patch_flux2_transformers_package_init(content: str) -> tuple[str, bool]:
+    c = content
+    changed = False
+    if not re.search(r"from\s+\.transformer_flux2\s+import", c):
+        line = "from .transformer_flux2 import NunchakuFlux2Transformer2DModel\n"
+        m = re.search(r"^__all__\s*=", c, re.MULTILINE)
+        if m:
+            c = c[: m.start()] + line + c[m.start() :]
+        else:
+            sep = "\n" if c.strip() else ""
+            c = c.rstrip() + sep + line
+        changed = True
+    c2, ch2 = _add_export_to_all_list(c, _FLUX2_MODEL)
+    return c2, changed or ch2
+
+
+def _flush_init_py_writes(pairs: list[tuple[str, str]]) -> None:
+    for path, content in pairs:
+        ast.parse(content, filename=path)
+    for path, content in pairs:
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
-    return modified
 
 
 def install_wrapper_to_nunchaku() -> tuple[bool, str]:
@@ -182,88 +321,42 @@ def install_wrapper_to_nunchaku() -> tuple[bool, str]:
             f.write(_TRANSFORMER_FLUX2_SOURCE)
         created.append(transformer_flux2_path)
 
-    # 3. nunchaku/__init__.py — add NunchakuFlux2Transformer2DModel export
+    # 3–5. __init__.py patches — same intent as nunchaku PR #924, without duplicating
+    # whole import blocks or breaking __all__ (regex on [^]] caused syntax errors).
+    init_writes: list[tuple[str, str]] = []
     init_path = os.path.join(nunchaku_base, "__init__.py")
     if os.path.exists(init_path):
-        added = _ensure_init_exports(
-            init_path,
-            [
-                "from .models import (\n"
-                "    NunchakuFluxTransformer2dModel,\n"
-                "    NunchakuFluxTransformer2DModelV2,\n"
-                "    NunchakuQwenImageTransformer2DModel,\n"
-                "    NunchakuSanaTransformer2DModel,\n"
-                "    NunchakuT5EncoderModel,\n"
-                "    NunchakuZImageTransformer2DModel,\n"
-                "    NunchakuFlux2Transformer2DModel,\n"
-                ")\n",
-            ],
-            [
-                "NunchakuFluxTransformer2dModel",
-                "NunchakuSanaTransformer2DModel",
-                "NunchakuT5EncoderModel",
-                "NunchakuFluxTransformer2DModelV2",
-                "NunchakuQwenImageTransformer2DModel",
-                "NunchakuZImageTransformer2DModel",
-                "NunchakuFlux2Transformer2DModel",
-            ],
-        )
-        if added:
-            modified.append(init_path)
+        with open(init_path, "r", encoding="utf-8") as f:
+            root_src = f.read()
+        new_root, root_changed = _patch_flux2_nunchaku_package_init(root_src)
+        if root_changed:
+            init_writes.append((init_path, new_root))
 
-    # 4. nunchaku/models/__init__.py — add NunchakuFlux2Transformer2DModel export
     models_init_path = os.path.join(nunchaku_base, "models", "__init__.py")
     if os.path.exists(models_init_path):
-        added = _ensure_init_exports(
-            models_init_path,
-            [
-                "from .text_encoders.t5_encoder import NunchakuT5EncoderModel\n",
-                "from .transformers import (\n"
-                "    NunchakuFluxTransformer2dModel,\n"
-                "    NunchakuFluxTransformer2DModelV2,\n"
-                "    NunchakuQwenImageTransformer2DModel,\n"
-                "    NunchakuSanaTransformer2DModel,\n"
-                "    NunchakuZImageTransformer2DModel,\n"
-                "    NunchakuFlux2Transformer2DModel,\n"
-                ")\n",
-            ],
-            [
-                "NunchakuFluxTransformer2dModel",
-                "NunchakuSanaTransformer2DModel",
-                "NunchakuT5EncoderModel",
-                "NunchakuFluxTransformer2DModelV2",
-                "NunchakuQwenImageTransformer2DModel",
-                "NunchakuZImageTransformer2DModel",
-                "NunchakuFlux2Transformer2DModel",
-            ],
-        )
-        if added:
-            modified.append(models_init_path)
+        with open(models_init_path, "r", encoding="utf-8") as f:
+            models_src = f.read()
+        new_models, models_changed = _patch_flux2_models_package_init(models_src)
+        if models_changed:
+            init_writes.append((models_init_path, new_models))
 
-    # 5. nunchaku/models/transformers/__init__.py — add NunchakuFlux2Transformer2DModel export
     tf_init_path = os.path.join(transformers_dir, "__init__.py")
     if os.path.exists(tf_init_path):
-        added = _ensure_init_exports(
-            tf_init_path,
-            [
-                "from .transformer_flux import NunchakuFluxTransformer2dModel\n",
-                "from .transformer_flux_v2 import NunchakuFluxTransformer2DModelV2\n",
-                "from .transformer_qwenimage import NunchakuQwenImageTransformer2DModel\n",
-                "from .transformer_sana import NunchakuSanaTransformer2DModel\n",
-                "from .transformer_zimage import NunchakuZImageTransformer2DModel\n",
-                "from .transformer_flux2 import NunchakuFlux2Transformer2DModel\n",
-            ],
-            [
-                "NunchakuFluxTransformer2dModel",
-                "NunchakuSanaTransformer2DModel",
-                "NunchakuFluxTransformer2DModelV2",
-                "NunchakuQwenImageTransformer2DModel",
-                "NunchakuZImageTransformer2DModel",
-                "NunchakuFlux2Transformer2DModel",
-            ],
-        )
-        if added:
-            modified.append(tf_init_path)
+        with open(tf_init_path, "r", encoding="utf-8") as f:
+            tf_src = f.read()
+        new_tf, tf_changed = _patch_flux2_transformers_package_init(tf_src)
+        if tf_changed:
+            init_writes.append((tf_init_path, new_tf))
+
+    if init_writes:
+        try:
+            _flush_init_py_writes(init_writes)
+        except SyntaxError as e:
+            return False, (
+                "Patch aborted: __init__.py would be invalid Python. "
+                f"Restore nunchaku with pip or fix files manually. Detail: {e}"
+            )
+        modified.extend(p[0] for p in init_writes)
 
     # 6. wrappers/klein.py (ComfyUI bridge — entire file)
     wrappers_dir = os.path.join(nunchaku_base, "wrappers")
@@ -335,6 +428,7 @@ def _check_environment_impl() -> dict:
     comfyui_root = _detect_comfyui_root()
     comfyui_python = get_comfyui_python()
     comfyui_python_lib = get_comfyui_python_lib()
+    site_packages_searched = get_site_packages_candidates()
     nunchaku_base = get_nunchaku_base()
     nunchaku_found = nunchaku_base is not None
 
@@ -367,9 +461,14 @@ def _check_environment_impl() -> dict:
 
     if not nunchaku_found:
         install_status = "missing_nunchaku"
+        tried = (
+            "; ".join(site_packages_searched)
+            if site_packages_searched
+            else (comfyui_python_lib or "未知")
+        )
         status_text = {
-            "zh": f"未找到 nunchaku 包（尝试路径：{comfyui_python_lib or '未知'}）",
-            "en": f"nunchaku package not found (tried path: {comfyui_python_lib or 'unknown'})",
+            "zh": f"未找到 nunchaku 包（已搜索 site-packages：{tried}）",
+            "en": f"nunchaku package not found (searched site-packages: {tried})",
         }
         suggestion = (
             "nunchaku pip package not found. "
@@ -416,6 +515,7 @@ def _check_environment_impl() -> dict:
         "comfyui_root": comfyui_root,
         "comfyui_python": comfyui_python,
         "comfyui_python_lib": comfyui_python_lib,
+        "site_packages_searched": site_packages_searched,
         "install_status": install_status,
         "status_text": status_text,
         "suggestion": suggestion,
@@ -424,11 +524,9 @@ def _check_environment_impl() -> dict:
 
 # ---------------------------------------------------------------------------
 # Embedded torch_transfer_utils.py
-# From: python_embeded/Lib/site-packages/nunchaku/torch_transfer_utils.py
+# From: https://github.com/nunchaku-ai/nunchaku/commit/a515fc2740a17410fa2fcef6dc59229744d82fa0/nunchaku/torch_transfer_utils.py
 # ---------------------------------------------------------------------------
-_TORCH_TRANSFER_UTILS_SOURCE = '''"""Torch transfer utilities for Nunchaku pipelines."""
-
-from __future__ import annotations
+_TORCH_TRANSFER_UTILS_SOURCE = '''from __future__ import annotations
 
 import os
 import platform
@@ -471,6 +569,7 @@ def _resolve_default_cuda_device() -> torch.device | None:
 def _parse_bool_or_auto(value: bool | str, *, name: str) -> bool | Literal["auto"]:
     if isinstance(value, bool):
         return value
+
     normalized = value.strip().lower()
     if normalized == "auto":
         return "auto"
@@ -484,8 +583,10 @@ def _parse_bool_or_auto(value: bool | str, *, name: str) -> bool | Literal["auto
 def _matches_default_h2d_staging_platform(device: torch.device) -> bool:
     if device.type != "cuda" or not torch.cuda.is_available():
         return False
+
     if platform.machine().lower() != "aarch64":
         return False
+
     index = 0 if device.index is None else device.index
     try:
         if index < 0 or index >= torch.cuda.device_count():
@@ -493,6 +594,7 @@ def _matches_default_h2d_staging_platform(device: torch.device) -> bool:
         capability = torch.cuda.get_device_capability(index)
     except Exception:
         return False
+
     return capability[0] == 12
 
 
@@ -520,10 +622,11 @@ def _pretouch_tensor(tensor: torch.Tensor, *, page_size: int) -> None:
     storage_size = len(storage)
     if storage_size == 0:
         return
+
     checksum = 0
     for offset in range(0, storage_size, page_size):
         checksum += int(storage[offset])
-    checksum += int(storage[storage_size - 1])
+        checksum += int(storage[storage_size - 1])
     _ = checksum
 
 
@@ -531,13 +634,16 @@ def _pretouch_module_cpu_tensors(module: nn.Module) -> tuple[int, bool]:
     tensors, signature = _scan_module_cpu_tensors(module)
     if not signature:
         return 0, False
+
     marker = signature
     if getattr(module, _PRETOUCHED_SIGNATURE_ATTR, None) == marker:
         return 0, False
+
     page_size = _resolve_page_size()
     with torch.no_grad():
         for tensor in tensors:
             _pretouch_tensor(tensor, page_size=page_size)
+
     setattr(module, _PRETOUCHED_SIGNATURE_ATTR, marker)
     return len(tensors), True
 
@@ -550,6 +656,7 @@ def _need_pretouch_static(device: torch.device) -> bool:
         return True
     if override in _FALSE_VALUES:
         return False
+
     return _matches_default_h2d_staging_platform(device)
 
 
@@ -566,6 +673,7 @@ def resolve_pin_memory(pin_memory: bool | str, device: str | torch.device) -> bo
     device = normalize_device(device)
     if device.type != "cuda":
         return False
+
     pin_memory = _parse_bool_or_auto(pin_memory, name="pin_memory")
     if pin_memory == "auto":
         return _need_pin_memory_static(device)
@@ -596,13 +704,16 @@ def resolve_pretouch_cpu_tensors(
     device = normalize_device(device)
     if device.type != "cuda":
         return False
+
     pretouch = _parse_bool_or_auto(pretouch, name="pretouch")
     if pretouch != "auto":
         return pretouch
+
     decisions = getattr(pipe, _PIPELINE_PRETOUCH_DECISIONS_ATTR, None)
     if not isinstance(decisions, dict):
         decisions = {}
-        setattr(pipe, _PIPELINE_PRETOUCH_DECISIONS_ATTR, decisions)
+    setattr(pipe, _PIPELINE_PRETOUCH_DECISIONS_ATTR, decisions)
+
     key = (
         device.type,
         device.index,
@@ -613,12 +724,30 @@ def resolve_pretouch_cpu_tensors(
     )
     if key in decisions:
         return decisions[key]
+
     decision = _need_pretouch_static(device)
     decisions[key] = decision
     return decision
 
 
 def should_pretouch(device: str | torch.device | None = None) -> bool:
+    """
+    Return whether Nunchaku's default policy recommends pretouching CPU tensors.
+
+    This is a public recommendation API. It does not trigger pretouch by
+    itself; callers should use it to decide whether to invoke
+    :func:`pretouch_pipeline_cpu_tensors` explicitly before ``pipe.to("cuda")``
+    or before a CPU offload flow that will move model weights back to CUDA.
+
+    When ``device`` is omitted, the current CUDA device is used if CUDA is
+    available. This keeps the common single-GPU case concise while still
+    allowing explicit multi-GPU selection.
+
+    The default policy enables pretouch on ``aarch64`` systems with
+    Blackwell-class CUDA GPUs (compute capability major version 12).
+    Environment overrides via ``NUNCHAKU_PRETOUCH_CPU_TENSORS`` or
+    ``NUNCHAKU_PRETOUCH_PIPELINE_CPU_TENSORS`` take precedence.
+    """
     if device is None:
         resolved_device = _resolve_default_cuda_device()
         if resolved_device is None:
@@ -633,6 +762,17 @@ def pretouch_pipeline_cpu_tensors(
     component_attrs: Sequence[str] = DEFAULT_PIPELINE_COMPONENT_ATTRS,
     on_component: Callable[[str], None] | None = None,
 ) -> bool:
+    """
+    Pretouch common pipeline components on CPU before CUDA transfer.
+
+    This is the main explicit execution API. It walks the known CPU-side
+    pipeline components, touches one byte per memory page for each tensor,
+    and skips components whose CPU tensor signature has not changed since the
+    previous pretouch call.
+
+    Returns ``True`` when at least one component was newly pretouched and
+    ``False`` when nothing needed touching.
+    """
     touched_any = False
     for attr in component_attrs:
         if not hasattr(pipe, attr):
@@ -656,6 +796,14 @@ def maybe_pretouch_pipeline_cpu_tensors(
     component_attrs: Sequence[str] = DEFAULT_PIPELINE_COMPONENT_ATTRS,
     on_component: Callable[[str], None] | None = None,
 ) -> bool:
+    """
+    Conditionally pretouch pipeline CPU tensors using an explicit policy.
+
+    This helper is still explicit: callers opt in by invoking it. When
+    ``pretouch="auto"``, the decision follows :func:`should_pretouch` and the
+    environment-variable overrides. When ``pretouch`` is a boolean, that value
+    is used directly.
+    """
     if not resolve_pretouch_cpu_tensors(
         pretouch,
         pipe,
@@ -674,7 +822,7 @@ def maybe_pretouch_pipeline_cpu_tensors(
 
 # ---------------------------------------------------------------------------
 # Embedded transformer_flux2.py
-# From: python_embeded/Lib/site-packages/nunchaku/models/transformers/transformer_flux2.py
+# From: https://github.com/nunchaku-ai/nunchaku/commit/a515fc2740a17410fa2fcef6dc59229744d82fa0/nunchaku/models/transformers/transformer_flux2.py
 # ---------------------------------------------------------------------------
 _TRANSFORMER_FLUX2_SOURCE = '''"""
 Python-only Nunchaku runtime for FLUX.2 transformers.
@@ -773,6 +921,8 @@ def _pack_flux2_rotary_emb(freqs_cis: tuple[torch.Tensor, torch.Tensor]) -> torc
     cos, sin = freqs_cis
     if cos.ndim != 2 or sin.ndim != 2 or cos.shape != sin.shape:
         raise ValueError("Expected Flux.2 rotary embeddings as a (cos, sin) tuple with shape (seq_len, dim).")
+
+    # Flux.2 uses repeat_interleave_real=True, so every rotary pair shares the same cos/sin values.
     rotemb = torch.stack([sin[:, 0::2], cos[:, 0::2]], dim=-1).unsqueeze(0).unsqueeze(-2).contiguous()
     return pack_rotemb(pad_tensor(rotemb, 256, 1))
 
@@ -816,7 +966,7 @@ class NunchakuFlux2Attention(Flux2Attention):
 
         with torch.device("meta"):
             to_qkv = fuse_linears([other.to_q, other.to_k, other.to_v])
-        self.to_qkv = SVDQW4A4Linear.from_linear(to_qkv, **kwargs)
+            self.to_qkv = SVDQW4A4Linear.from_linear(to_qkv, **kwargs)
 
         if self.added_kv_proj_dim is not None:
             self.norm_added_q = other.norm_added_q
@@ -824,7 +974,7 @@ class NunchakuFlux2Attention(Flux2Attention):
             self.to_add_out = SVDQW4A4Linear.from_linear(other.to_add_out, **kwargs)
             with torch.device("meta"):
                 to_added_qkv = fuse_linears([other.add_q_proj, other.add_k_proj, other.add_v_proj])
-            self.to_added_qkv = SVDQW4A4Linear.from_linear(to_added_qkv, **kwargs)
+                self.to_added_qkv = SVDQW4A4Linear.from_linear(to_added_qkv, **kwargs)
 
     def forward(
         self,
@@ -936,22 +1086,22 @@ class NunchakuFlux2Attention(Flux2Attention):
             query = self.norm_q(query)
             key = self.norm_k(key)
 
-            encoder_seq_len = 0
-            if encoder_hidden_states is not None and self.added_kv_proj_dim is not None:
-                encoder_query, encoder_key, encoder_value = self.to_added_qkv(encoder_hidden_states).chunk(3, dim=-1)
-                encoder_query = encoder_query.unflatten(-1, (self.heads, -1))
-                encoder_key = encoder_key.unflatten(-1, (self.heads, -1))
-                encoder_value = encoder_value.unflatten(-1, (self.heads, -1))
-                encoder_query = self.norm_added_q(encoder_query)
-                encoder_key = self.norm_added_k(encoder_key)
-                encoder_seq_len = encoder_hidden_states.shape[1]
-                query = torch.cat([encoder_query, query], dim=1)
-                key = torch.cat([encoder_key, key], dim=1)
-                value = torch.cat([encoder_value, value], dim=1)
+        encoder_seq_len = 0
+        if encoder_hidden_states is not None and self.added_kv_proj_dim is not None:
+            encoder_query, encoder_key, encoder_value = self.to_added_qkv(encoder_hidden_states).chunk(3, dim=-1)
+            encoder_query = encoder_query.unflatten(-1, (self.heads, -1))
+            encoder_key = encoder_key.unflatten(-1, (self.heads, -1))
+            encoder_value = encoder_value.unflatten(-1, (self.heads, -1))
+            encoder_query = self.norm_added_q(encoder_query)
+            encoder_key = self.norm_added_k(encoder_key)
+            encoder_seq_len = encoder_hidden_states.shape[1]
+            query = torch.cat([encoder_query, query], dim=1)
+            key = torch.cat([encoder_key, key], dim=1)
+            value = torch.cat([encoder_value, value], dim=1)
 
-            if image_rotary_emb is not None:
-                query = apply_rotary_emb(query, image_rotary_emb, sequence_dim=1)
-                key = apply_rotary_emb(key, image_rotary_emb, sequence_dim=1)
+        if image_rotary_emb is not None:
+            query = apply_rotary_emb(query, image_rotary_emb, sequence_dim=1)
+            key = apply_rotary_emb(key, image_rotary_emb, sequence_dim=1)
 
         if kv_cache_mode == "extract" and kv_cache is not None and num_ref_tokens > 0:
             ref_start = encoder_seq_len
@@ -982,10 +1132,10 @@ class NunchakuFlux2Attention(Flux2Attention):
                 [encoder_seq_len, hidden_states.shape[1] - encoder_seq_len], dim=1
             )
             encoder_hidden_states = self.to_add_out(encoder_hidden_states)
-        hidden_states = self.to_out[0](hidden_states)
-        hidden_states = self.to_out[1](hidden_states)
-        if encoder_seq_len:
-            return hidden_states, encoder_hidden_states
+            hidden_states = self.to_out[0](hidden_states)
+            hidden_states = self.to_out[1](hidden_states)
+            if encoder_seq_len:
+                return hidden_states, encoder_hidden_states
         return hidden_states
 
 
@@ -995,6 +1145,8 @@ class NunchakuFlux2FeedForward(Flux2FeedForward):
         self.linear_in = SVDQW4A4Linear.from_linear(other.linear_in, **kwargs)
         self.act_fn = other.act_fn
         self.linear_out = SVDQW4A4Linear.from_linear(other.linear_out, **kwargs)
+        # FLUX.2 PTQ does not currently apply ShiftedLinear on these SwiGLU down-projections,
+        # so int4 must keep the signed activation path.
         self.linear_out.act_unsigned = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -1021,6 +1173,7 @@ class NunchakuFlux2ParallelSelfAttention(Flux2ParallelSelfAttention):
         self._attention_backend = getattr(processor, "_attention_backend", None)
         self._parallel_config = getattr(processor, "_parallel_config", None)
 
+        # Keep clear parameter names for export/runtime alignment.
         with torch.device("meta"):
             qkv_proj = torch.nn.Linear(other.query_dim, other.inner_dim * 3, bias=other.use_bias)
             mlp_fc1 = torch.nn.Linear(other.query_dim, other.mlp_hidden_dim * other.mlp_mult_factor, bias=other.use_bias)
@@ -1033,6 +1186,8 @@ class NunchakuFlux2ParallelSelfAttention(Flux2ParallelSelfAttention):
         self.norm_k = other.norm_k
         self.out_proj = SVDQW4A4Linear.from_linear(out_proj, **kwargs)
         self.mlp_fc2 = SVDQW4A4Linear.from_linear(mlp_fc2, **kwargs)
+        # FLUX.2 PTQ does not currently apply ShiftedLinear on these SwiGLU down-projections,
+        # so int4 must keep the signed activation path.
         self.mlp_fc2.act_unsigned = False
 
     def forward(
@@ -1089,9 +1244,9 @@ class NunchakuFlux2ParallelSelfAttention(Flux2ParallelSelfAttention):
             value = value.unflatten(-1, (self.heads, -1))
             query = self.norm_q(query)
             key = self.norm_k(key)
-            if image_rotary_emb is not None:
-                query = apply_rotary_emb(query, image_rotary_emb, sequence_dim=1)
-                key = apply_rotary_emb(key, image_rotary_emb, sequence_dim=1)
+        if image_rotary_emb is not None:
+            query = apply_rotary_emb(query, image_rotary_emb, sequence_dim=1)
+            key = apply_rotary_emb(key, image_rotary_emb, sequence_dim=1)
 
         if kv_cache_mode == "extract" and kv_cache is not None and num_ref_tokens > 0:
             ref_start = num_txt_tokens
@@ -1357,7 +1512,7 @@ class NunchakuFlux2Transformer2DModel(Flux2Transformer2DModel, NunchakuModelLoad
                             image_rotary_emb=(rotary_emb_img, rotary_emb_txt),
                             joint_attention_kwargs=kv_attn_kwargs,
                         )
-                self.transformer_block_offload_manager.step(compute_stream)
+                    self.transformer_block_offload_manager.step(compute_stream)
         else:
             for index_block, block in enumerate(self.transformer_blocks):
                 if torch.is_grad_enabled() and self.gradient_checkpointing:
@@ -1405,7 +1560,7 @@ class NunchakuFlux2Transformer2DModel(Flux2Transformer2DModel, NunchakuModelLoad
                             image_rotary_emb=rotary_emb_single,
                             joint_attention_kwargs=kv_attn_kwargs_single,
                         )
-                self.single_transformer_block_offload_manager.step(compute_stream)
+                    self.single_transformer_block_offload_manager.step(compute_stream)
         else:
             for index_block, block in enumerate(self.single_transformer_blocks):
                 if torch.is_grad_enabled() and self.gradient_checkpointing:
@@ -1463,8 +1618,8 @@ class NunchakuFlux2Transformer2DModel(Flux2Transformer2DModel, NunchakuModelLoad
             precision = get_precision_from_quantization_config(quantization_config)
             if torch.device(device).type == "cuda":
                 check_hardware_compatibility(quantization_config, device)
-        else:
-            precision = get_precision(device=device)
+            else:
+                precision = get_precision(device=device)
             if precision == "fp4":
                 precision = "nvfp4"
 

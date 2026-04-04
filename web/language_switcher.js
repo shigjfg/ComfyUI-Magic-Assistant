@@ -1026,8 +1026,8 @@ const magicKleinLoaderTranslations = {
         en: 'Install the <strong>nunchaku</strong> package into the same Python ComfyUI uses (portable: <code style="color:#a78bfa;">python_embeded</code>). Official guide: <a href="{{URL}}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">installation docs</a>',
     },
     "__klein_hint_official__": {
-        zh: '若缺少 <code style="color:#a78bfa;">transformer_flux2</code> 或需对照环境，可参考官方 ComfyUI 插件仓库：<a href="{{GITHUB}}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">ComfyUI-nunchaku (GitHub)</a>',
-        en: 'If <code style="color:#a78bfa;">transformer_flux2</code> is missing or you want to compare setups, see the official plugin: <a href="{{GITHUB}}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">ComfyUI-nunchaku on GitHub</a>',
+        zh: "必须嵌入环境后才能正常使用Nunchakuflux2klein9b模型哦~",
+        en: "Embed into the environment first — then the Nunchaku FLUX.2 Klein 9B model will work normally.",
     },
 
     "🧠 支持的模型": { zh: "🧠 支持的模型", en: "🧠 Supported Models" },

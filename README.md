@@ -10,7 +10,24 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-04-02**
+> Latest Update / 最新更新：**2026-04-04**
+
+> **V1.3.1 版本介绍 / Version Introduction** 2026-04-04
+
+> 1. **🔍 新增**: Tag 编辑弹窗 - 收藏/自建提示词的搜索
+>    * 在标签编辑弹窗中新增了收藏标签组和自建标签组的搜索功能，方便快速查找
+>    * Added search functionality for favorite tag groups and custom tag groups in the tag editing popup
+>
+>    <img width="473" height="383" alt="Image" src="https://github.com/user-attachments/assets/09c154d1-e5c4-4e83-a13a-3e415a4110a8" />
+
+> 2. **🐛 修复**: 修复部分节点的已知 bug
+>    * Fixed known bugs in some nodes
+>
+> 3. **🔧 优化**: Magic Nunchaku FLUX.2 Klein Loader - 环境嵌入优化
+>    * 修复了 nunchaku-flux2-klein 节点中环境嵌入的问题
+>    * 增强了环境检测的机制，提升使用体验
+>    * Fixed environment embedding issues in the nunchaku-flux2-klein node
+>    * Enhanced environment detection mechanism for better user experience
 
 > **V1.3.0 版本介绍 / Version Introduction** 2026-04-02
 
@@ -21,13 +38,13 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > 2. **✨ 新增节点**: Magic Nunchaku FLUX.2 Klein Loader ⭐
 >    * 新增 nunchaku-flux2-klein9b 模型加载节点，完全兼容 ComfyUI 工作流
 >    * 使用极其简单，只需将原有的 unet 加载器替换为本节点即可！
->    * 支持完整 LoRA 功能（建议配合强力 LoRA 加载器，并开启自适应模式）
+>    * 注意：**本节点暂时不适配 LoRA，请等待后续支持**
 >    * 速度提升是至今所有 klein9b 量化模型的 3-4 倍
 >    * 强烈推荐 30 系显卡和 40 系显卡用户使用
 >    * 本节点技术基于 [tonera/FLUX.2-klein-9B-Nunchaku](https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku) 实现
 >    * New Magic Nunchaku FLUX.2 Klein Loader node for nunchaku-flux2-klein9b models
 >    * Simple to use: just replace your unet loader with this node
->    * Full LoRA support (recommended with Magic Power LoRA Loader, enable adaptive mode)
+>    * **Note: LoRA is not yet supported for this node. Please wait for future support.**
 >    * Speed improvement: 3-4x faster than any previous klein9b quantized model
 >    * Strongly recommended for RTX 30 series and RTX 40 series users
 >    * Based on [tonera/FLUX.2-klein-9B-Nunchaku](https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku)
@@ -43,7 +60,10 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > 2. **🐛 修复**: Tag 预览器 bug 修复
 >    * 修复了 tag 预览器的绝大部分已知 bug，提升使用体验
 >    * Fixed most known bugs in the tag preview for better user experience
->
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.2.8 版本介绍 / Version Introduction** 2026-03-26
 
 > 1. **🔍 新增 danbooru 数据模式**: 在设置下改为 danbooru 数据后，补全功能和标签搜索功能将会去使用 danbooru 的标签
@@ -89,9 +109,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * Fix the conditioning issue.
 >   
 >    <img width="1375" height="1037" alt="Image" src="https://github.com/user-attachments/assets/3af2f79d-56bd-4b31-863c-94480e5ac9f2" />
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.5 版本介绍 / Version Introduction** 2026-03-24
 
@@ -720,7 +737,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 </details>
 
 ### 10. 🔮 Magic Nunchaku FLUX.2 Klein Loader (Nunchaku Klein 模型加载器)
-> **Simple nunchaku-flux2-klein9b model loader with full LoRA support.** / **简单易用的 nunchaku-flux2-klein9b 模型加载器，支持完整 LoRA 功能。**
+> **Nunchaku flux2-klein9b model loader.** / **nunchaku-flux2-klein9b 模型加载器。**
 
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
@@ -734,12 +751,12 @@ This node is based on the original author's implementation from [tonera/FLUX.2-k
 #### 特性 / Features
 
 * **简单易用**: 只需将原有的 unet 加载器替换为本节点即可，无需复杂的配置
-* **完整 LoRA 支持**: 支持完整的 LoRA 功能，建议配合强力 LoRA 加载器使用，并开启自适应模式
+* **暂时不适配 LoRA**: 本节点目前暂不支持 LoRA，请等待后续更新
 * **极速性能**: 速度提升是至今所有 klein9b 量化模型的 3-4 倍
 * **显存友好**: 推荐 30 系显卡和 40 系显卡用户使用
 
 * **Easy to use**: Simply replace your unet loader with this node, no complex configuration needed
-* **Full LoRA support**: Complete LoRA functionality, recommended with Magic Power LoRA Loader and adaptive mode enabled
+* **LoRA not supported**: LoRA is not yet supported for this node; please wait for future updates
 * **Fast performance**: 3-4x faster than any previous klein9b quantized model
 * **VRAM friendly**: Recommended for RTX 30 series and RTX 40 series users
 
@@ -763,21 +780,21 @@ This node is based on the original author's implementation from [tonera/FLUX.2-k
 
 测试用工作流下载地址：https://drive.google.com/file/d/1BHjxeiC-a55vqnftYk2SK7Wvbgx6gMNv/view?usp=drive_link
 
-以下是测试效果：双图编辑 + 3 个超过 300MB 的 LoRA，速度仍然快到 **19s 一张**，且效果极好。
+以下是测试效果：双图编辑模式，速度快且效果极好。
 
 Test workflow download: https://drive.google.com/file/d/1BHjxeiC-a55vqnftYk2SK7Wvbgx6gMNv/view?usp=drive_link
 
-Test results: Dual image editing + 3 LoRAs over 300MB each, still achieves **19s per image** with excellent quality.
+Test results: Two-Image Edit Mode, fast speed with excellent quality.
 
 <img width="2260" height="1256" alt="Image" src="https://github.com/user-attachments/assets/4752f1ad-4190-4da8-82c6-e68c6abccf8f" />
 
 #### 使用建议 / Usage Tips
 
-* 建议配合**强力 LoRA 加载器**使用，并开启**自适应模式**
+* **注意**: 本节点目前暂不支持 LoRA，请等待后续更新
 * 首次使用请先安装 wheel 环境
 * 推荐显卡：RTX 30 系列、RTX 40 系列
 
-* Recommended to use with **Magic Power LoRA Loader** and enable **adaptive mode**
+* **Note**: LoRA is not yet supported for this node; please wait for future updates
 * First time users should install wheel environment first
 * Recommended GPUs: RTX 30 series, RTX 40 series
 

@@ -491,6 +491,21 @@ async function magicPostTagSets(body) {
 }
 
 /**
+ * 持久化「编辑标签」弹窗尺寸到 userdata/settings.txt（与主弹窗 dialog_size 共用一套 /ma/settings 接口）。
+ * @param {HTMLElement} modal
+ */
+function persistMagicEditTagsModalSize(modal) {
+    if (!modal) return;
+    const w = modal.offsetWidth;
+    const h = modal.offsetHeight;
+    fetch("/ma/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ edit_tags_modal_size: { width: w, height: h } }),
+    }).catch(() => {});
+}
+
+/**
  * 「编辑标签」弹窗：三区域 UI（新建标签 / 收藏标签 可折叠卡片区 + 标签搜索表）。
  * 非模态：shell pointer-events:none，仅本窗体可点。
  * 搜索逻辑与提示词补全一致：GET /ma/prompt_autocomplete?q=&limit=（本地模式）
@@ -500,9 +515,19 @@ async function magicPostTagSets(body) {
  * @param {function} [ctx.afterInsert] 插入后回调（同步 editorText 等）
  * @param {boolean} [ctx.danbooruMode] 是否为 Danbooru 远端模式
  */
-function showMagicEditTagsModal(shell, ctx = {}) {
+async function showMagicEditTagsModal(shell, ctx = {}) {
     if (!shell) return;
     shell.querySelectorAll("[data-magic-edit-tags-modal='1']").forEach((el) => el.remove());
+
+    // 读取保存的弹窗尺寸
+    let modalSize = { width: 720, height: 560 };
+    try {
+        const r = await fetch("/ma/settings", { credentials: "same-origin" });
+        if (r.ok) {
+            const all = await r.json();
+            if (all.edit_tags_modal_size) modalSize = all.edit_tags_modal_size;
+        }
+    } catch (_) { /* use defaults */ }
 
     const getTa = () => (typeof ctx.getTextarea === "function" ? ctx.getTextarea() : null);
     const doAfterInsert = () => {
@@ -527,7 +552,8 @@ function showMagicEditTagsModal(shell, ctx = {}) {
         position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
         z-index: 100070;
         pointer-events: auto;
-        width: min(96vw, 720px); max-height: min(88vh, 720px);
+        width: ${modalSize.width}px; height: ${modalSize.height}px;
+        max-width: 96vw; max-height: 88vh;
         background: ${THEME.bg}; color: ${THEME.text};
         border: 1px solid ${THEME.border}; border-radius: 8px;
         box-shadow: 0 16px 48px rgba(0,0,0,0.72);
@@ -536,6 +562,15 @@ function showMagicEditTagsModal(shell, ctx = {}) {
         box-sizing: border-box;
     `;
     preventConflict(inner);
+
+    // 右下角缩放把手（与主弹窗一致）
+    makeDialogResizable(inner, {
+        minWidth: 420,
+        minHeight: 360,
+        onResizeEnd: () => {
+            persistMagicEditTagsModalSize(inner);
+        },
+    });
 
     const hdr = document.createElement("div");
     hdr.style.cssText = `
@@ -591,15 +626,63 @@ function showMagicEditTagsModal(shell, ctx = {}) {
 
     const newTagBar = document.createElement("div");
     newTagBar.style.cssText = `margin-bottom: 12px; flex-shrink: 0;`;
+    const newTagTopRow = document.createElement("div");
+    newTagTopRow.style.cssText = `
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+        width: 100%; box-sizing: border-box;
+    `;
+    preventConflict(newTagTopRow);
+
     const newTagToggle = document.createElement("button");
     newTagToggle.type = "button";
     newTagToggle.textContent = magicT("➕ 新建标签组");
     newTagToggle.style.cssText = `
         padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer;
         border: 1px solid ${THEME.accent}; background: rgba(156, 39, 176, 0.15);
-        color: #e1bee7; font-weight: 600;
+        color: #e1bee7; font-weight: 600; flex-shrink: 0;
     `;
     preventConflict(newTagToggle);
+
+    // 搜索自建/收藏（与「新建标签组」同一行，短输入框）
+    const tagSearchInp = document.createElement("input");
+    tagSearchInp.type = "text";
+    tagSearchInp.placeholder = magicT("🔍 自建/收藏…");
+    tagSearchInp.title = magicT("按中文名称或英文 tag 内容筛选自建与收藏标签组");
+    tagSearchInp.setAttribute("aria-label", magicT("搜索自建与收藏标签组"));
+    tagSearchInp.style.cssText = `
+        width: 11em; max-width: min(200px, 38vw); min-width: 7em;
+        padding: 5px 8px; border-radius: 6px;
+        border: 1px solid ${THEME.border}; background: ${THEME.bg3}; color: ${THEME.text};
+        font-size: 12px; box-sizing: border-box; outline: none; flex-shrink: 0;
+    `;
+    preventConflict(tagSearchInp);
+    let _tagSearchNewExpanded = false;
+    let _tagSearchFavExpanded = false;
+    const _doTagSearch = () => {
+        const q = tagSearchInp.value.trim();
+        if (q) {
+            const ql = q.toLowerCase();
+            const filteredNew = localNew.filter((it) => {
+                const nm = ((it.name || "") + " " + (it.content || "")).toLowerCase();
+                return nm.includes(ql);
+            });
+            const filteredFav = localFav.filter((it) => {
+                const nm = ((it.name || "") + " " + (it.content || "")).toLowerCase();
+                return nm.includes(ql);
+            });
+            secNew.renderCards(filteredNew);
+            secFav.renderCards(filteredFav);
+            secNew._expandCollapse(true);
+            secFav._expandCollapse(true);
+        } else {
+            secNew.renderCards(localNew);
+            secFav.renderCards(localFav);
+            secNew._expandCollapse(_tagSearchNewExpanded);
+            secFav._expandCollapse(_tagSearchFavExpanded);
+        }
+    };
+    tagSearchInp.addEventListener("input", _doTagSearch);
+
     const newTagForm = document.createElement("div");
     newTagForm.style.cssText = `
         display: none; margin-top: 10px; padding: 12px;
@@ -656,7 +739,9 @@ function showMagicEditTagsModal(shell, ctx = {}) {
     newTagForm.appendChild(lblEn);
     newTagForm.appendChild(taEnNew);
     newTagForm.appendChild(formBtnRow);
-    newTagBar.appendChild(newTagToggle);
+    newTagTopRow.appendChild(newTagToggle);
+    newTagTopRow.appendChild(tagSearchInp);
+    newTagBar.appendChild(newTagTopRow);
     newTagBar.appendChild(newTagForm);
 
     const resetNewFormDraft = () => {
@@ -788,7 +873,7 @@ function showMagicEditTagsModal(shell, ctx = {}) {
                     const btns = document.createElement("div");
                     btns.style.cssText = "display: flex; flex-shrink: 0; gap: 4px; align-items: flex-start;";
                     const bEdit = mkIconBtn("✎", magicT("修改中文名与英文 tag 组合"), () => {
-                        editingNewIndex = index;
+                        editingNewIndex = localNew.indexOf(it);
                         inpCnNew.value = it.name || "";
                         taEnNew.value = (it.content || "").trim();
                         newFormVisible = true;
@@ -800,15 +885,16 @@ function showMagicEditTagsModal(shell, ctx = {}) {
                         const name = (it.name || magicT("未命名")).trim();
                         if (!confirm(magicT("确定删除标签组「") + name + magicT("」？\n删除后不可恢复。"))) return;
                         const prev = localNew.slice();
-                        localNew.splice(index, 1);
+                        const delIdx = localNew.indexOf(it);
+                        localNew.splice(delIdx, 1);
                         try {
                             await magicPostTagSets({ new_tagsets: localNew });
-                            if (editingNewIndex === index) {
+                            if (editingNewIndex === delIdx) {
                                 newFormVisible = false;
                                 newTagForm.style.display = "none";
                                 newTagToggle.textContent = magicT("➕ 新建标签组");
                                 resetNewFormDraft();
-                            } else if (editingNewIndex !== null && editingNewIndex > index) {
+                            } else if (editingNewIndex !== null && delIdx >= 0 && editingNewIndex > delIdx) {
                                 editingNewIndex -= 1;
                             }
                             secNew.renderCards(localNew);
@@ -831,7 +917,8 @@ function showMagicEditTagsModal(shell, ctx = {}) {
                         const name = (it.name || magicT("收藏")).trim();
                         if (!confirm(magicT("确定从收藏中删除「") + name + magicT("」？"))) return;
                         const prev = localFav.slice();
-                        localFav.splice(index, 1);
+                        const delIdx = localFav.indexOf(it);
+                        localFav.splice(delIdx, 1);
                         try {
                             await magicPostTagSets({ favorites: localFav });
                             secFav.renderCards(localFav);
@@ -875,11 +962,17 @@ function showMagicEditTagsModal(shell, ctx = {}) {
             expanded = !expanded;
             panel.style.display = expanded ? "block" : "none";
             chev.textContent = expanded ? "▼" : "▶";
+            if (cardMode === "newTags") _tagSearchNewExpanded = expanded;
+            else if (cardMode === "favorites") _tagSearchFavExpanded = expanded;
         });
 
         block.appendChild(headBtn);
         block.appendChild(panel);
-        return { block, renderCards };
+        return { block, renderCards, _expandCollapse: (open) => {
+            expanded = !!open;
+            panel.style.display = expanded ? "block" : "none";
+            chev.textContent = expanded ? "▼" : "▶";
+        } };
     };
 
     let secNew;
@@ -900,6 +993,7 @@ function showMagicEditTagsModal(shell, ctx = {}) {
         newTagForm.style.display = newFormVisible ? "block" : "none";
         newTagToggle.textContent = newFormVisible ? magicT("➖ 收起新建表单") : magicT("➕ 新建标签组");
         if (willShow) resetNewFormDraft();
+        if (!newFormVisible) _tagSearchNewExpanded = false;
     });
     btnCancelNew.addEventListener("click", () => {
         newFormVisible = false;
@@ -1563,6 +1657,8 @@ function showMagicEditTagsModal(shell, ctx = {}) {
             localFav = Array.isArray(d.favorites) ? d.favorites : [];
             secNew.renderCards(localNew);
             secFav.renderCards(localFav);
+            secNew._expandCollapse(_tagSearchNewExpanded);
+            secFav._expandCollapse(_tagSearchFavExpanded);
             syncShellFavorites();
         } catch (e) {
             if (e.name !== "AbortError") console.warn("[MagicText] tag_sets load", e);
@@ -1570,6 +1666,7 @@ function showMagicEditTagsModal(shell, ctx = {}) {
     })();
 
     const close = () => {
+        persistMagicEditTagsModalSize(inner);
         try {
             tagSetsAbort.abort();
         } catch (_) { /* ignore */ }
@@ -5123,8 +5220,8 @@ async function showPromptEditorModal(node, nodeSeed) {
             color: ${THEME.text}; border-radius: 5px; cursor: pointer; font-size: 12px;
         `;
         preventConflict(editTagsBtn);
-        editTagsBtn.addEventListener("click", () =>
-            showMagicEditTagsModal(shell, {
+        editTagsBtn.addEventListener("click", async () =>
+            await showMagicEditTagsModal(shell, {
                 getTextarea: () => textarea,
                 afterInsert: () => {
                     editorText = textarea.value;
