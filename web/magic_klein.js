@@ -414,6 +414,15 @@ app.registerExtension({
                                 ${t("KLEIN_MODEL_CAPTION")}
                             </span>
                         </div>
+                        <div style="margin-top:14px;">
+                            <a href="https://huggingface.co/tonera/FLUX.2-klein-9b-kv-Nunchaku/tree/main"
+                               target="_blank" rel="noopener noreferrer" style="color:#60a5fa;">
+                                tonera/FLUX.2-klein-9b-kv-Nunchaku
+                            </a>
+                            <br><span style="color:#888;">
+                                ${t("KLEIN_MODEL_CAPTION_KV")}
+                            </span>
+                        </div>
                     </div>
                 </div>
             `;
@@ -542,6 +551,11 @@ app.registerExtension({
                             <a href="https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku" target="_blank" rel="noopener noreferrer"
                                style="color:#60a5fa;">tonera/FLUX.2-klein-9B-Nunchaku</a>
                             <br><span style="color:#888;">${t("KLEIN_MODEL_LINE2")}</span>
+                        </li>
+                        <li style="margin-top:10px;">
+                            <a href="https://huggingface.co/tonera/FLUX.2-klein-9b-kv-Nunchaku/tree/main" target="_blank" rel="noopener noreferrer"
+                               style="color:#60a5fa;">tonera/FLUX.2-klein-9b-kv-Nunchaku</a>
+                            <br><span style="color:#888;">${t("KLEIN_MODEL_LINE2_KV")}</span>
                         </li>
                     </ul>
 

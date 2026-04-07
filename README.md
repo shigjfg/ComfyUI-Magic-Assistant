@@ -10,7 +10,25 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-04-04**
+> Latest Update / 最新更新：**2026-04-07**
+
+> **V1.3.2 版本介绍 / Version Introduction** 2026-04-07
+
+> 1. **🔍 新增**: Magic Power LoRA Loader - LoRA 检测功能
+>    * LoRA 添加窗口新增 LoRA 检测功能，可以根据路径选择全部 LoRA 进行 LoRA 的查重和检测更新
+>    * Added LoRA detection functionality in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs
+>
+>    <img width="535" height="473" alt="Image" src="https://github.com/user-attachments/assets/c2d5a67a-3654-423e-8cac-7ca95370950a" />
+
+> 2. **🐛 修复**: 修复提示词编辑弹窗 tag 预览区的已知 bug
+>    * Fixed known bugs in the tag preview area of the prompt editor popup
+
+> 3. **🔧 更新**: Magic Nunchaku FLUX.2 Klein Loader - 新增 klein9bkv 量化支持
+>    * Nunchaku 插件更新支持 klein9bkv 量化，下载地址依然是同个作者的量化
+>    * 使用时不需要重新插入环境文件，亲测环境文件是一样的，如果是初次使用则需要插入
+>    * Updated nunchaku plugin to support klein9bkv quantization
+>    * The download link remains the same author's quantization
+>    * No need to re-embed the environment file (same as previous); first-time users still need to embed
 
 > **V1.3.1 版本介绍 / Version Introduction** 2026-04-04
 
@@ -51,6 +69,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 >    <img width="563" height="416" alt="Image" src="https://github.com/user-attachments/assets/95a003b5-4e10-45b5-842d-498d9a045ea4" />
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.2.9 版本介绍 / Version Introduction** 2026-03-30
 
 > 1. **🔧 优化**: 屏蔽符号改为 `*`，防止用 `!` 进行组合的 tag 失效
@@ -60,9 +81,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 > 2. **🐛 修复**: Tag 预览器 bug 修复
 >    * 修复了 tag 预览器的绝大部分已知 bug，提升使用体验
 >    * Fixed most known bugs in the tag preview for better user experience
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.8 版本介绍 / Version Introduction** 2026-03-26
 
@@ -552,31 +570,31 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 
 #### 节点概览 / Node Overview
 
-点击节点底部的 **「📝 编辑提示词」** 按钮，打开 **Magic 提示词编辑器** 弹窗。节点支持 `prepend_text` 前置文本接口、`clip` 输入，直接输出 `final_text`、`conditioning` 和 `clip`。以 `!` 开头的段为「屏蔽」：保留在节点内但不参与编码与输出。
+点击节点底部的 **「📝 编辑提示词」** 按钮，打开 **Magic 提示词编辑器** 弹窗。节点支持 `prepend_text` 前置文本接口、`clip` 输入，直接输出 `final_text`、`conditioning` 和 `clip`。以 `*` 开头的段为「屏蔽」：保留在节点内但不参与编码与输出。
 
-Click the **"📝 编辑提示词"** button at the bottom of the node to open the **Magic Prompt Editor** modal. The node supports `prepend_text` input, `clip` input, and outputs `final_text`, `conditioning`, and `clip`. Segments starting with `!` are "masked": kept in the node but excluded from encoding and output.
+Click the **"📝 编辑提示词"** button at the bottom of the node to open the **Magic Prompt Editor** modal. The node supports `prepend_text` input, `clip` input, and outputs `final_text`, `conditioning`, and `clip`. Segments starting with `*` are "masked": kept in the node but excluded from encoding and output.
 
 #### 编辑 Tab / Edit Tab
 
 * **工具栏**: 格式化、去重、清空全部、清空屏蔽、复制、编辑标签、一键翻译所有 Tag
 * **主编辑区**: 支持任意语言输入；Enter 可将短词转为 tag；**WeiLin 风格补全**：输入时显示下拉列表，左侧英文 tag、右侧中文释义，浮层跟随光标；切换 Danbooru 模式后补全列表显示 tag **分类**与**热度**，按热度排序
-* **Tag 卡片区**: 将文本解析为可拖拽卡片，支持修改权重、加 `()` / `[]` / `{}` 括号、删除、排序、双击屏蔽、翻译成中文
+* **Tag 卡片区**: 将文本解析为可拖拽卡片，支持修改权重、加 `()` / `[]` / `{}` 括号、删除、排序、双击翻译区域屏蔽、翻译成中文
 * **单行翻译**: 输入中文或短概念，按 Enter 调用 LLM 译为英文 tag 并插入
 
 * **Toolbar**: Format, Deduplicate, Clear All, Clear Masked, Copy, Edit Tags, One-click Translate All Tags
 * **Main Editor**: Input any language; Enter converts short words to tags; **WeiLin-style autocomplete**: dropdown with EN tag + CN description, follows cursor; Danbooru mode shows tag **category** and **popularity**, sorted by popularity
-* **Tag Chips**: Parsed into draggable cards; adjust weight, add `()` / `[]` / `{}`, delete, sort, double-click to mask, translate to Chinese
+* **Tag Chips**: Parsed into draggable cards; adjust weight, add `()` / `[]` / `{}`, delete, sort, double-click translate area to mask, translate to Chinese
 * **Inline Translate**: Type Chinese or concepts, press Enter to LLM-translate to English tags and insert
 
 #### 编辑标签 / Edit Tags Modal
 
 * **标签组管理**: 新建标签组、收藏标签组，分组管理常用 tag 集合
-* **标签搜索**: 中英文双向搜索（不区分大小写），自建标签组优先显示；支持一键添加 tag 到当前提示词
+* **标签搜索**: 中英文双向搜索（不区分大小写），支持**收藏标签组搜索**和**自建标签组搜索**；自建标签组优先显示；支持一键添加 tag 到当前提示词
 * **数据源**: 预设库（22 万+ 条 `中文,英文tag`）+ 用户自建标签组 + 收藏标签组
 * **Danbooru 数据搜索**: 切换 Danbooru 模式后，搜索结果实时连接 Danbooru 远端，返回英文 tag / 中文释义 / 分类 / 热度；本地 danbooru预设库 提供毫秒级本地搜索兜底，自带中英文对照；支持分类过滤与分页加载
 
 * **Tag Group Management**: Create new tag groups, favorite tag groups; organize reusable tag sets
-* **Tag Search**: Bilingual search (case-insensitive); custom groups prioritized; one-click add to prompt
+* **Tag Search**: Bilingual search (case-insensitive); supports **favorite tag group search** and **custom tag group search**; custom groups prioritized; one-click add to prompt
 * **Data Sources**: Preset library (220k+ entries) + user-created tag groups + favorite tag groups
 * **Danbooru Data Search**: After switching to Danbooru mode, search connects to Danbooru remote in real-time, returning EN tag / CN description / category / popularity; local danbooru预设库 provides millisecond-level local search fallback with built-in Chinese/English mapping; supports category filtering and pagination
 
@@ -615,7 +633,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 | **格式化 / 去重** | 清理逗号、修复括号、移除重复 tag |
 | **LLM 翻译** | 一键翻译所有 Tag，或单行翻译输入；共享 LLM 配置 |
 | **运行历史** | 工作流成功后自动保存，支持收藏与复用 |
-| **屏蔽机制** | 以 `!` 开头的段不参与输出，便于临时禁用 |
+| **屏蔽机制** | 以 `*` 开头的段不参与输出，便于临时禁用 |
 | **Danbooru 模式** | 切换为 Danbooru 远端数据，补全显示分类与热度，实时连接检测 |
 | **补全开关** | 可在设置中关闭/开启编辑区补全弹窗 |
 
@@ -637,6 +655,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Folder Toggle**: One-click toggle button to enable/disable all LoRAs in a folder.
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
+* **LoRA Detection**: New LoRA detection feature in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs.
 * **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
 * **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器).
 * **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
@@ -650,6 +669,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **文件夹开关**: 文件夹开关按钮，一键启用/禁用文件夹下所有 lora。
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
+* **LoRA 检测功能**: LoRA 添加窗口新增 LoRA 检测功能，可以根据路径选择全部 LoRA 进行 LoRA 的查重和检测更新。
 * **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
 * **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器) 配合使用。
 * **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
@@ -754,15 +774,23 @@ This node is based on the original author's implementation from [tonera/FLUX.2-k
 * **暂时不适配 LoRA**: 本节点目前暂不支持 LoRA，请等待后续更新
 * **极速性能**: 速度提升是至今所有 klein9b 量化模型的 3-4 倍
 * **显存友好**: 推荐 30 系显卡和 40 系显卡用户使用
+* **klein9bkv 量化支持**: 新增支持 klein9bkv 量化，使用时不需要重新插入环境文件（亲测环境文件一样），初次使用则需要插入
 
 * **Easy to use**: Simply replace your unet loader with this node, no complex configuration needed
 * **LoRA not supported**: LoRA is not yet supported for this node; please wait for future updates
 * **Fast performance**: 3-4x faster than any previous klein9b quantized model
 * **VRAM friendly**: Recommended for RTX 30 series and RTX 40 series users
+* **klein9bkv quantization support**: Added support for klein9bkv quantization; no need to re-embed environment file (same as previous), first-time users still need to embed
 
 #### 模型下载 / Model Download
 
-> **下载地址**: https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku/tree/main
+> **下载地址/Download Link 1（klein9b）**: https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku/tree/main
+>
+> **下载地址/Download Link 2（klein9bkv）**: https://huggingface.co/tonera/FLUX.2-klein-9b-kv-Nunchaku/tree/main
+>
+> 两个链接均为同作者量化，环境文件通用，无需重复嵌入。
+> 
+> Both links are quantized by the same author and share the same environment files; no repeated embedding is required.
 
 #### 首次使用 / First Time Setup
 

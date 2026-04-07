@@ -21,6 +21,44 @@ async function loadLoraImageList() {
 // 初始化时加载图片列表
 loadLoraImageList();
 
+/** 与「添加 Lora」弹窗相同的目录树（用于检测范围导航） */
+function buildMplFolderTree(allFiles) {
+    const folderTree = {};
+    const rootFiles = [];
+    (allFiles || []).forEach(file => {
+        const parts = file.split(/[/\\]/);
+        if (parts.length === 1) {
+            rootFiles.push(file);
+        } else {
+            let current = folderTree;
+            for (let i = 0; i < parts.length - 1; i++) {
+                const folderName = parts[i];
+                if (!current[folderName]) {
+                    current[folderName] = { files: [], folders: {} };
+                }
+                if (i === parts.length - 2) {
+                    current[folderName].files.push(file);
+                } else {
+                    if (!current[folderName].folders) {
+                        current[folderName].folders = {};
+                    }
+                    current = current[folderName].folders;
+                }
+            }
+        }
+    });
+    return { folderTree, rootFiles };
+}
+
+function mplGetSubfolderNames(folderTree, pathParts) {
+    let map = folderTree;
+    for (const p of pathParts) {
+        if (!map[p] || !map[p].folders) return [];
+        map = map[p].folders;
+    }
+    return Object.keys(map).sort();
+}
+
 app.registerExtension({
     name: "Magic.Power.Lora",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -381,16 +419,18 @@ app.registerExtension({
                 if (!this._adaptiveModeWidget) {
                     this._adaptiveModeWidget = this.widgets?.find(w => w.name === "adaptive_mode");
                 }
+                const adaptiveBool = this.adaptiveMode === true || this.adaptiveMode === "true"
+                    || this.properties["adaptive_mode"] === true || this.properties["adaptive_mode"] === "true";
                 if (this._adaptiveModeWidget) {
-                    const adaptiveMode = this.adaptiveMode || this.properties["adaptive_mode"] || false;
-                    this._adaptiveModeWidget.value = String(adaptiveMode);
+                    this._adaptiveModeWidget.value = String(adaptiveBool);
                 }
 
                 this.properties["lora_data_state"] = JSON.stringify(this.loraData);
                 this.properties["int8_mode"] = this.int8Mode || "none";
                 this.properties["sdnq_mode"] = this.sdnqMode || "none";
-                // 确保保存为布尔值 true/false，而不是字符串
-                this.properties["adaptive_mode"] = this.adaptiveMode === true;
+                // 与隐藏 widget、设置弹窗一致：始终用严格布尔，避免 "false" 字符串导致 !adaptiveMode 误判
+                this.adaptiveMode = adaptiveBool;
+                this.properties["adaptive_mode"] = adaptiveBool;
             };
 
             const onConfigure = nodeType.prototype.onConfigure;
@@ -993,19 +1033,7 @@ app.registerExtension({
                     dialog.style.left = '';
                     dialog.style.right = '';
                     dialog.style.bottom = '';
-                    
-                    // 如果父元素是flex居中，需要移除flex定位
-                    const parent = dialog.parentElement;
-                    if (parent && parent.style.display === 'flex') {
-                        parent.style.display = 'block';
-                        parent.style.position = 'fixed';
-                        parent.style.top = '0';
-                        parent.style.left = '0';
-                        parent.style.width = '100%';
-                        parent.style.height = '100%';
-                    }
-                    
-                    // 确保dialog使用fixed定位
+                    // 确保dialog使用fixed定位（父 overlay 已是 fixed，直接用 transform 移动即可，无需改父样式）
                     dialog.style.position = 'fixed';
                     
                     // 应用transform
@@ -3278,7 +3306,24 @@ app.registerExtension({
                     selectedCount.textContent = "已选择 0 个 LoRA";
                     
                     const footerButtons = document.createElement("div");
-                    footerButtons.style.cssText = "display:flex;gap:10px;";
+                    footerButtons.style.cssText = "display:flex;gap:10px;align-items:center;";
+                    
+                    const detectBtn = document.createElement("button");
+                    detectBtn.type = "button";
+                    detectBtn.textContent = "🚨 LoRA 检测";
+                    detectBtn.title = "检测重复文件（哈希）与 LoRA 更新（Civitai）";
+                    detectBtn.style.cssText = "padding:8px 16px;background:#455a64;border:1px solid #607d8b;color:#eceff1;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap;";
+                    detectBtn.onmouseenter = () => { detectBtn.style.background = "#546e7a"; detectBtn.style.borderColor = "#78909c"; };
+                    detectBtn.onmouseleave = () => { detectBtn.style.background = "#455a64"; detectBtn.style.borderColor = "#607d8b"; };
+                    detectBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.showLoraDetectModal({
+                            initialPath: currentPath.slice(),
+                            initialShowAll: showAllMode,
+                            allFiles,
+                            folderTree,
+                        });
+                    };
                     
                     const addBtn = document.createElement("button");
                     addBtn.textContent = "添加选中 LoRA";
@@ -3292,6 +3337,7 @@ app.registerExtension({
                     closeBtn.onmouseenter = () => closeBtn.style.background = "#777";
                     closeBtn.onmouseleave = () => closeBtn.style.background = "#666";
                     
+                    footerButtons.appendChild(detectBtn);
                     footerButtons.appendChild(addBtn);
                     footerButtons.appendChild(closeBtn);
                     footer.appendChild(selectedCount);
@@ -3773,6 +3819,461 @@ app.registerExtension({
                 } catch(e) { alert("Error: "+e); }
             };
 
+            nodeType.prototype.showLoraDetectModal = async function(opts) {
+                opts = opts || {};
+                let currentPath = Array.isArray(opts.initialPath) ? opts.initialPath.slice() : [];
+                let showAllMode = !!opts.initialShowAll;
+                let allFiles = opts.allFiles;
+                let folderTree = opts.folderTree;
+                try {
+                    if (!allFiles || !folderTree) {
+                        const resp = await api.fetchApi("/ma/lora/list");
+                        const data = await resp.json();
+                        allFiles = data.files || [];
+                        const built = buildMplFolderTree(allFiles);
+                        folderTree = built.folderTree;
+                    }
+
+                    // 直接挂 body，不用 overlay（参考 magic_resolution.js 的做法）
+                    const dialog = document.createElement("div");
+                    dialog.style.cssText = `
+                        position: fixed;
+                        top: 50%; left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: min(720px, 96vw);
+                        max-height: 88vh;
+                        background: #25292d;
+                        border: 1px solid #4a515a;
+                        border-radius: 8px;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.75);
+                        display: flex;
+                        flex-direction: column;
+                        font-family: sans-serif;
+                        color: #e0e0e0;
+                        z-index: 10050;
+                        overflow: hidden;
+                    `;
+
+                    const header = document.createElement("div");
+                    header.style.cssText = "padding:12px 16px;border-bottom:1px solid #333;background:#1a1a1a;border-radius:8px 8px 0 0;cursor:move;user-select:none;display:flex;justify-content:space-between;align-items:center;";
+                    const title = document.createElement("div");
+                    title.textContent = "LoRA 检测（重复 + 更新）";
+                    title.style.cssText = "font-weight:bold;font-size:15px;";
+                    const closeX = document.createElement("button");
+                    closeX.textContent = "✕";
+                    closeX.style.cssText = "background:none;border:none;color:#aaa;cursor:pointer;font-size:18px;padding:0 8px;";
+                    header.appendChild(title);
+                    header.appendChild(closeX);
+
+                    const pathBar = document.createElement("div");
+                    pathBar.style.cssText = "padding:8px 16px;border-bottom:1px solid #333;background:#222;display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+                    const allTab = document.createElement("div");
+                    allTab.textContent = "全部";
+                    allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                    const pathDisplay = document.createElement("div");
+                    pathDisplay.style.cssText = "color:#888;font-size:12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:1;";
+
+                    const scopeHint = document.createElement("div");
+                    scopeHint.style.cssText = "padding:8px 16px;background:#1e2428;font-size:12px;color:#90caf9;border-bottom:1px solid #333;";
+
+                    const folderRow = document.createElement("div");
+                    folderRow.style.cssText = "padding:8px 16px;border-bottom:1px solid #333;background:#1a1a1a;display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-height:100px;overflow-y:auto;";
+
+                    const fmtSize = (n) => {
+                        if (n == null) return "";
+                        if (n < 1024) return n + " B";
+                        if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+                        return (n / 1048576).toFixed(1) + " MB";
+                    };
+                    const fmtTime = (ts) => {
+                        try { return new Date(ts * 1000).toLocaleString(); } catch (_) { return String(ts); }
+                    };
+
+                    const updateScopeUI = () => {
+                        if (showAllMode) {
+                            scopeHint.textContent = "检测范围：全部 LoRA 文件（可能较慢）";
+                            allTab.textContent = "取消全部";
+                            allTab.style.cssText = "padding:4px 8px;background:#f44336;border:1px solid #f44336;border-radius:4px;color:#fff;cursor:pointer;font-size:12px;";
+                            pathDisplay.innerHTML = "";
+                            folderRow.innerHTML = "<span style='color:#888;font-size:12px;'>全部模式下可点击下方「开始检测」扫描所有目录。</span>";
+                            return;
+                        }
+                        allTab.textContent = "全部";
+                        allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                        if (currentPath.length === 0) {
+                            scopeHint.textContent = "检测范围：根目录 — 仅 loras 根下的文件（不包含子文件夹内文件）。进入子文件夹可检测该文件夹及其下所有子目录。";
+                        } else {
+                            scopeHint.textContent = "检测范围：文件夹「" + currentPath.join("/") + "」及其所有子目录内的 LoRA。";
+                        }
+                        pathDisplay.innerHTML = "";
+                        const rootSpan = document.createElement("span");
+                        rootSpan.textContent = "根目录";
+                        rootSpan.style.cssText = "color:#4CAF50;cursor:pointer;text-decoration:underline;";
+                        rootSpan.onclick = () => { showAllMode = false; currentPath = []; updateScopeUI(); };
+                        pathDisplay.appendChild(rootSpan);
+                        currentPath.forEach((folderName, index) => {
+                            const sep = document.createElement("span");
+                            sep.textContent = " > ";
+                            sep.style.color = "#666";
+                            pathDisplay.appendChild(sep);
+                            const sp = document.createElement("span");
+                            sp.textContent = folderName;
+                            sp.style.cssText = "color:#4CAF50;cursor:pointer;text-decoration:underline;";
+                            sp.onclick = () => { currentPath = currentPath.slice(0, index + 1); updateScopeUI(); };
+                            pathDisplay.appendChild(sp);
+                        });
+                        folderRow.innerHTML = "";
+                        const subs = mplGetSubfolderNames(folderTree, currentPath);
+                        if (!subs.length) {
+                            const t = document.createElement("span");
+                            t.style.cssText = "color:#666;font-size:12px;";
+                            t.textContent = "当前层级无子文件夹，可直接开始检测。";
+                            folderRow.appendChild(t);
+                        } else {
+                            subs.forEach(name => {
+                                const b = document.createElement("button");
+                                b.type = "button";
+                                b.textContent = "📁 " + name;
+                                b.style.cssText = "padding:4px 10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                                b.onclick = () => { currentPath = currentPath.concat([name]); updateScopeUI(); };
+                                folderRow.appendChild(b);
+                            });
+                        }
+                    };
+
+                    allTab.onclick = () => {
+                        if (showAllMode) {
+                            showAllMode = false;
+                            currentPath = [];
+                        } else {
+                            showAllMode = true;
+                        }
+                        updateScopeUI();
+                    };
+
+                    pathBar.appendChild(allTab);
+                    pathBar.appendChild(pathDisplay);
+
+                    const bodyScroll = document.createElement("div");
+                    bodyScroll.style.cssText = "flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:14px;min-height:220px;";
+
+                    const mkSectionTitle = (txt, color) => {
+                        const d = document.createElement("div");
+                        d.textContent = txt;
+                        d.style.cssText = "font-size:13px;font-weight:600;color:" + (color || "#fff") + ";margin-bottom:4px;";
+                        return d;
+                    };
+                    const dupBox = document.createElement("div");
+                    dupBox.style.cssText = "min-height:72px;padding:10px;background:#1f2428;border-radius:6px;border:1px solid #444;";
+                    dupBox.innerHTML = "<div style='color:#888;font-size:12px;'>点击右下角「开始检测」后显示：内容完全相同（SHA256 一致）的重复 LoRA。</div>";
+                    const updBox = document.createElement("div");
+                    updBox.style.cssText = "min-height:72px;padding:10px;background:#1f2428;border-radius:6px;border:1px solid #444;";
+                    updBox.innerHTML = "<div style='color:#888;font-size:12px;'>点击右下角「检测 LoRA 更新」后，通过 SHA256 查询 Civitai，匹配到则对比本地版本与 Civitai 最新版本号，显示有更新的 LoRA。</div>";
+
+                    bodyScroll.appendChild(mkSectionTitle("① 重复 LoRA（哈希相同）", "#ef9a9a"));
+                    bodyScroll.appendChild(dupBox);
+                    bodyScroll.appendChild(mkSectionTitle("② LoRA 更新（Civitai）", "#81c784"));
+                    bodyScroll.appendChild(updBox);
+
+                    const footer = document.createElement("div");
+                    footer.style.cssText = "padding:12px 16px;border-top:1px solid #333;background:#1a1a1a;border-radius:0 0 8px 8px;display:flex;justify-content:flex-end;align-items:center;gap:10px;";
+
+                    const dupBtn = document.createElement("button");
+                    dupBtn.type = "button";
+                    dupBtn.textContent = "🔍 检测重复 LoRA";
+                    dupBtn.style.cssText = "padding:8px 16px;background:#d32f2f;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;";
+
+                    const updBtn = document.createElement("button");
+                    updBtn.type = "button";
+                    updBtn.textContent = "🌐 检测 LoRA 更新";
+                    updBtn.style.cssText = "padding:8px 16px;background:#1976D2;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;";
+
+                    const allBtn = document.createElement("button");
+                    allBtn.type = "button";
+                    allBtn.textContent = "🚀 全部检测";
+                    allBtn.style.cssText = "padding:8px 16px;background:#4CAF50;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;";
+
+                    const parseJsonResp = async (resp) => {
+                        const status = resp.status;
+                        const text = await resp.text();
+                        try {
+                            return text ? JSON.parse(text) : null;
+                        } catch (je) {
+                            const hint = (text || "").replace(/\s+/g, " ").trim().slice(0, 200);
+                            throw new Error(
+                                (je && je.message ? je.message : String(je)) +
+                                (hint ? " · 响应开头: " + hint : "") +
+                                " (HTTP " + status + ")"
+                            );
+                        }
+                    };
+
+                    const renderDupResults = (data) => {
+                        if (!data || !data.ok) {
+                            dupBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>检测失败：" + (data && data.error ? data.error : "未知错误") + "</div>";
+                            return;
+                        }
+                        const summary = "<div style='color:#888;font-size:11px;margin-bottom:8px;'>本次扫描：范围内 " + data.scoped_count + " 个 LoRA 路径，已读取 " + data.scanned + " 个文件。</div>";
+                        dupBox.innerHTML = summary;
+                        if (!data.duplicates || !data.duplicates.length) {
+                            dupBox.innerHTML += "<div style='color:#a5d6a7;font-size:12px;'>未发现内容完全相同的重复文件。</div>";
+                        } else {
+                            data.duplicates.forEach(g => {
+                                const div = document.createElement("div");
+                                div.style.cssText = "margin-bottom:10px;padding:8px;background:#332a2a;border-radius:6px;border-left:3px solid #f44336;";
+                                const h = document.createElement("div");
+                                h.style.cssText = "color:#ffab91;font-size:11px;margin-bottom:6px;word-break:break-all;";
+                                h.textContent = "相同 SHA256 · " + (g.hash || "").slice(0, 24) + "…";
+                                div.appendChild(h);
+                                (g.files || []).forEach(f => {
+                                    const row = document.createElement("div");
+                                    row.style.cssText = "color:#ccc;font-size:11px;padding:2px 0;word-break:break-all;";
+                                    row.textContent = (f.path || "") + "  ·  " + fmtTime(f.mtime) + "  ·  " + fmtSize(f.size);
+                                    div.appendChild(row);
+                                });
+                                dupBox.appendChild(div);
+                            });
+                        }
+                    };
+
+                    const renderUpdResults = (data) => {
+                        if (!data || !data.ok) {
+                            updBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>检测失败：" + (data && data.error ? data.error : "未知错误") + "</div>";
+                            return;
+                        }
+                        const summary = "<div style='color:#888;font-size:11px;margin-bottom:8px;'>本次扫描：范围内 " + data.scoped_count + " 个 LoRA 路径，已读取 " + data.scanned + " 个文件，查询 Civitai 中…</div>";
+                        updBox.innerHTML = summary;
+                        if (!data.updates || !data.updates.length) {
+                            updBox.innerHTML += "<div style='color:#a5d6a7;font-size:12px;'>所有 LoRA 都已是 Civitai 上的最新版本，或无法在 Civitai 找到匹配记录。</div>";
+                        } else {
+                            data.updates.forEach(u => {
+                                const div = document.createElement("div");
+                                div.style.cssText = "margin-bottom:10px;padding:8px;background:#2a332a;border-radius:6px;border-left:3px solid #4CAF50;";
+                                const t = document.createElement("div");
+                                t.style.cssText = "color:#a5d6a7;font-size:11px;margin-bottom:4px;word-break:break-all;";
+                                const lat = (u.latest_label && String(u.latest_label).trim()) ? String(u.latest_label).trim() : ("v" + u.latest_version);
+                                const locv = (u.local_label && String(u.local_label).trim()) ? String(u.local_label).trim() : ("v" + u.local_version);
+                                t.textContent = (u.model_name || u.path) + "  ·  Civitai 最新: " + lat;
+                                div.appendChild(t);
+                                const loc = document.createElement("div");
+                                loc.style.cssText = "color:#fff;font-size:11px;margin-bottom:2px;";
+                                let locText = "本地版本: " + locv + "  ·  文件: " + u.path;
+                                if (u.local_base_model) locText += "  ·  Base: " + u.local_base_model;
+                                loc.textContent = locText;
+                                div.appendChild(loc);
+                                div.appendChild(loc);
+                                if (u.model_url) {
+                                    const lnk = document.createElement("a");
+                                    lnk.href = u.model_url;
+                                    lnk.target = "_blank";
+                                    lnk.style.cssText = "color:#90caf9;font-size:11px;";
+                                    lnk.textContent = "在 Civitai 查看 →";
+                                    div.appendChild(lnk);
+                                }
+                                updBox.appendChild(div);
+                            });
+                        }
+                    };
+
+                    const setLoading = (btn, label, loading) => {
+                        btn.disabled = loading;
+                        btn.textContent = loading ? "处理中…" : label;
+                        btn.style.opacity = loading ? "0.7" : "1";
+                    };
+
+                    dupBtn.onclick = async () => {
+                        setLoading(dupBtn, "🔍 检测重复 LoRA", true);
+                        try {
+                            const r = await api.fetchApi("/ma/lora/detect_scan", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    scope: showAllMode ? "all" : "folder",
+                                    path: currentPath,
+                                }),
+                            });
+                            renderDupResults(await parseJsonResp(r));
+                        } catch (err) {
+                            renderDupResults({ ok: false, error: String(err) });
+                        } finally {
+                            setLoading(dupBtn, "🔍 检测重复 LoRA", false);
+                        }
+                    };
+
+                    updBtn.onclick = async () => {
+                        setLoading(updBtn, "🌐 检测 LoRA 更新", true);
+                        try {
+                            const r = await api.fetchApi("/ma/lora/update_check", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    scope: showAllMode ? "all" : "folder",
+                                    path: currentPath,
+                                }),
+                            });
+                            renderUpdResults(await parseJsonResp(r));
+                        } catch (err) {
+                            renderUpdResults({ ok: false, error: String(err) });
+                        } finally {
+                            setLoading(updBtn, "🌐 检测 LoRA 更新", false);
+                        }
+                    };
+
+                    allBtn.onclick = async () => {
+                        setLoading(allBtn, "🚀 全部检测", true);
+                        dupBtn.disabled = true;
+                        updBtn.disabled = true;
+                        dupBox.innerHTML = "<div style='color:#888;font-size:12px;'>检测中…</div>";
+                        updBox.innerHTML = "<div style='color:#888;font-size:12px;'>检测中…</div>";
+                        try {
+                            const [dupRes, updRes] = await Promise.all([
+                                api.fetchApi("/ma/lora/detect_scan", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        scope: showAllMode ? "all" : "folder",
+                                        path: currentPath,
+                                    }),
+                                }),
+                                api.fetchApi("/ma/lora/update_check", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        scope: showAllMode ? "all" : "folder",
+                                        path: currentPath,
+                                    }),
+                                }),
+                            ]);
+                            try {
+                                renderDupResults(await parseJsonResp(dupRes));
+                            } catch (e) {
+                                dupBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>重复检测失败：" + e + "</div>";
+                            }
+                            try {
+                                renderUpdResults(await parseJsonResp(updRes));
+                            } catch (e) {
+                                updBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>更新检测失败：" + e + "</div>";
+                            }
+                        } catch (err) {
+                            dupBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>检测失败：" + err + "</div>";
+                            updBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>检测失败：" + err + "</div>";
+                        } finally {
+                            setLoading(allBtn, "🚀 全部检测", false);
+                            dupBtn.disabled = false;
+                            updBtn.disabled = false;
+                        }
+                    };
+
+                    footer.appendChild(dupBtn);
+                    footer.appendChild(updBtn);
+                    footer.appendChild(allBtn);
+
+                    dialog.appendChild(header);
+                    dialog.appendChild(pathBar);
+                    dialog.appendChild(scopeHint);
+                    dialog.appendChild(folderRow);
+                    dialog.appendChild(bodyScroll);
+                    dialog.appendChild(footer);
+                    document.body.appendChild(dialog);
+
+                    updateScopeUI();
+
+                    // 拖拽实现：与 magic_resolution.js 完全一致的策略
+                    // 初始居中用 top/left + transform，拖动时切 top/left，不碰 transform
+                    let isDragging = false;
+                    let offsetX = 0;
+                    let offsetY = 0;
+                    let hasMovedToFixed = false; // 只在首次拖动时切换一次
+
+                    const dragStart = (e) => {
+                        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' ||
+                            e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                            return;
+                        }
+                        const rect = dialog.getBoundingClientRect();
+                        let mouseX, mouseY;
+                        if (e.type === "mousedown") {
+                            mouseX = e.clientX;
+                            mouseY = e.clientY;
+                        } else if (e.type === "touchstart") {
+                            mouseX = e.touches[0].clientX;
+                            mouseY = e.touches[0].clientY;
+                        } else {
+                            return;
+                        }
+                        offsetX = mouseX - rect.left;
+                        offsetY = mouseY - rect.top;
+                        isDragging = true;
+                        e.preventDefault();
+                    };
+
+                    const drag = (e) => {
+                        if (!isDragging) return;
+                        e.preventDefault();
+                        let mouseX, mouseY;
+                        if (e.type === "mousemove") {
+                            mouseX = e.clientX;
+                            mouseY = e.clientY;
+                        } else if (e.type === "touchmove") {
+                            mouseX = e.touches[0].clientX;
+                            mouseY = e.touches[0].clientY;
+                        } else {
+                            return;
+                        }
+                        let newX = mouseX - offsetX;
+                        let newY = mouseY - offsetY;
+
+                        const minX = 0;
+                        const minY = 0;
+                        const maxX = window.innerWidth - dialog.offsetWidth;
+                        const maxY = window.innerHeight - dialog.offsetHeight;
+                        newX = Math.max(minX, Math.min(newX, maxX));
+                        newY = Math.max(minY, Math.min(newY, maxY));
+
+                        // 首次拖动：从居中 transform 切换到 top/left 定位（只执行一次）
+                        if (!hasMovedToFixed) {
+                            hasMovedToFixed = true;
+                            dialog.style.transform = '';
+                            dialog.style.top = newY + 'px';
+                            dialog.style.left = newX + 'px';
+                        } else {
+                            dialog.style.top = newY + 'px';
+                            dialog.style.left = newX + 'px';
+                        }
+                    };
+
+                    const dragEnd = () => {
+                        isDragging = false;
+                    };
+
+                    header.addEventListener("mousedown", dragStart);
+                    header.addEventListener("touchstart", dragStart);
+                    document.addEventListener("mousemove", drag);
+                    document.addEventListener("touchmove", drag);
+                    document.addEventListener("mouseup", dragEnd);
+                    document.addEventListener("touchend", dragEnd);
+
+                    const escHandler = (e) => {
+                        if (e.key !== "Escape" || !dialog.parentNode) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        closeDetectModal();
+                    };
+                    const closeDetectModal = () => {
+                        document.removeEventListener("keydown", escHandler, true);
+                        document.removeEventListener("mousemove", drag);
+                        document.removeEventListener("touchmove", drag);
+                        document.removeEventListener("mouseup", dragEnd);
+                        document.removeEventListener("touchend", dragEnd);
+                        if (dialog.parentNode) document.body.removeChild(dialog);
+                    };
+                    closeX.onclick = () => closeDetectModal();
+                    document.addEventListener("keydown", escHandler, true);
+                } catch (e) {
+                    alert("LoRA 检测: " + e);
+                }
+            };
+
             nodeType.prototype.saveFolderPreset = async function(folder) {
                 const name = prompt("Save Preset As:", folder.name);
                 if(!name) return;
@@ -3785,12 +4286,21 @@ app.registerExtension({
             };
 
             nodeType.prototype.showSettingsModal = function() {
-                // 获取当前模式设置
-                const currentInt8Mode = this.int8Mode || this.properties["int8_mode"] || "none";
-                const currentSdnqMode = this.sdnqMode || this.properties["sdnq_mode"] || "none";
-                
-                // 判断是否使用默认模式（两个模式都是 none）
-                const isDefaultMode = currentInt8Mode === "none" && currentSdnqMode === "none";
+                // 从节点 / 属性 / 隐藏 widget 读取并归一化（避免 adaptive_mode 为字符串 "false" 时 !this.adaptiveMode 误判）
+                const parseAdaptive = (v) => v === true || v === "true" || v === 1;
+                const int8Raw = this.int8Mode ?? this.properties["int8_mode"] ?? this._int8ModeWidget?.value ?? "none";
+                const sdnqRaw = this.sdnqMode ?? this.properties["sdnq_mode"] ?? this._sdnqModeWidget?.value ?? "none";
+                const adaptiveRaw = this.adaptiveMode ?? this.properties["adaptive_mode"] ?? this._adaptiveModeWidget?.value;
+                const currentInt8Mode = String(int8Raw || "none").toLowerCase();
+                const currentSdnqMode = String(sdnqRaw || "none").toLowerCase();
+                const isAdaptive = parseAdaptive(adaptiveRaw);
+                const int8On = currentInt8Mode === "stochastic" || currentInt8Mode === "dynamic";
+                const sdnqOn = currentSdnqMode === "sdnq";
+                // 与确定按钮逻辑一致：自适应 > SDNQ > INT8 > 默认（标准）
+                let primaryMode = "default";
+                if (isAdaptive) primaryMode = "adaptive";
+                else if (sdnqOn) primaryMode = "sdnq";
+                else if (int8On) primaryMode = currentInt8Mode;
                 
                 // 创建遮罩层
                 const overlay = document.createElement("div");
@@ -3866,7 +4376,7 @@ app.registerExtension({
                 radioAdaptive.type = "radio";
                 radioAdaptive.name = "global_mode";
                 radioAdaptive.value = "adaptive";
-                radioAdaptive.checked = this.adaptiveMode === true;
+                radioAdaptive.checked = primaryMode === "adaptive";
                 radioAdaptive.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 const labelAdaptive = document.createElement("div");
                 labelAdaptive.style.cssText = "flex: 1;";
@@ -3889,7 +4399,7 @@ app.registerExtension({
                 radioDefault.type = "radio";
                 radioDefault.name = "global_mode";
                 radioDefault.value = "default";
-                radioDefault.checked = !this.adaptiveMode && isDefaultMode;
+                radioDefault.checked = primaryMode === "default";
                 radioDefault.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 const labelDefault = document.createElement("div");
                 labelDefault.style.cssText = "flex: 1;";
@@ -3904,10 +4414,6 @@ app.registerExtension({
                 defaultMode.appendChild(radioDefault);
                 defaultMode.appendChild(labelDefault);
                 defaultModeContainer.appendChild(defaultMode);
-
-                defaultSection.appendChild(defaultTitle);
-                defaultSection.appendChild(defaultModeContainer);
-                settingsContainer.appendChild(defaultSection);
 
                 // 模式选中状态更新
                 const updateModeSelection = () => {
@@ -3991,7 +4497,7 @@ app.registerExtension({
                 radioStochastic.type = "radio";
                 radioStochastic.name = "int8_mode";
                 radioStochastic.value = "stochastic";
-                radioStochastic.checked = currentInt8Mode === "stochastic";
+                radioStochastic.checked = primaryMode === "stochastic";
                 radioStochastic.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 const labelStochastic = document.createElement("div");
                 labelStochastic.style.cssText = "flex: 1;";
@@ -4013,7 +4519,7 @@ app.registerExtension({
                 radioDynamic.type = "radio";
                 radioDynamic.name = "int8_mode";
                 radioDynamic.value = "dynamic";
-                radioDynamic.checked = currentInt8Mode === "dynamic";
+                radioDynamic.checked = primaryMode === "dynamic";
                 radioDynamic.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 const labelDynamic = document.createElement("div");
                 labelDynamic.style.cssText = "flex: 1;";
@@ -4099,7 +4605,7 @@ app.registerExtension({
                 radioSdnqSdnq.type = "radio";
                 radioSdnqSdnq.name = "sdnq_mode";
                 radioSdnqSdnq.value = "sdnq";
-                radioSdnqSdnq.checked = currentSdnqMode === "sdnq";
+                radioSdnqSdnq.checked = primaryMode === "sdnq";
                 radioSdnqSdnq.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
                 const labelSdnqSdnq = document.createElement("div");
                 labelSdnqSdnq.style.cssText = "flex: 1;";
@@ -4180,10 +4686,13 @@ app.registerExtension({
                     // 检查是否选择了全局默认模式
                     const isDefaultSelected = radioDefault.checked;
 
+                    // 仅在当前弹窗内查找，避免命中页面上其他同名 radio
+                    const scope = overlay;
+
                     // 保存 INT8 模式设置
                     let selectedInt8Mode = "none";
                     if (!isDefaultSelected && !isAdaptiveSelected) {
-                        selectedInt8Mode = document.querySelector('input[name="int8_mode"]:checked')?.value || "none";
+                        selectedInt8Mode = scope.querySelector('input[name="int8_mode"]:checked')?.value || "none";
                     }
                     this.int8Mode = selectedInt8Mode;
                     this.properties["int8_mode"] = selectedInt8Mode;
@@ -4191,7 +4700,7 @@ app.registerExtension({
                     // 保存 SDNQ 模式设置
                     let selectedSdnqMode = "none";
                     if (!isDefaultSelected && !isAdaptiveSelected) {
-                        selectedSdnqMode = document.querySelector('input[name="sdnq_mode"]:checked')?.value || "none";
+                        selectedSdnqMode = scope.querySelector('input[name="sdnq_mode"]:checked')?.value || "none";
                     }
                     this.sdnqMode = selectedSdnqMode;
                     this.properties["sdnq_mode"] = selectedSdnqMode;

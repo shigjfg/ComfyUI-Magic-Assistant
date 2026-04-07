@@ -4012,6 +4012,10 @@ async function showPromptEditorModal(node, nodeSeed) {
         const clearPinnedToolbar = () => {
             blurChipTagInlineInputIfAny();
             shell._magicChipToolbarPinnedIndex = null;
+            if (shell._magicTagUiTimer) {
+                clearTimeout(shell._magicTagUiTimer);
+                shell._magicTagUiTimer = null;
+            }
             cancelHideTagFloatBar();
             hideTagFloatBar();
             if (tagChipsRow) {
@@ -4613,7 +4617,9 @@ async function showPromptEditorModal(node, nodeSeed) {
                         background: ${THEME.bg3}; border: 1px solid ${THEME.border}; border-radius: 6px;
                         display: flex; flex-direction: column; align-items: center; justify-content: center;
                         font-size: 18px; color: #ccc; user-select: none; padding: 4px 0;
-                        transition: box-shadow 0.14s ease, outline 0.14s ease;
+                        /* Bug fix: z-index 高于 floatBar (100055)，确保浮动条不会遮挡芯片点击区域 */
+                        z-index: 100065;
+                        transition: box-shadow 0.14s ease, outline 0.14s ease, z-index 0s;
                     `;
                     const sym = document.createElement("span");
                     sym.textContent = "↵";
@@ -4665,7 +4671,9 @@ async function showPromptEditorModal(node, nodeSeed) {
                     background: ${tagItem.disabled ? THEME.bg3 : "rgba(93, 64, 55, 0.72)"};
                     border: 1px solid ${THEME.border}; border-radius: 6px;
                     overflow: hidden; font-size: 12px; user-select: none;
-                    transition: box-shadow 0.14s ease, outline 0.14s ease, filter 0.14s ease;
+                    /* Bug fix: z-index 高于 floatBar (100055)，确保浮动条不会遮挡芯片点击区域 */
+                    z-index: 100065;
+                    transition: box-shadow 0.14s ease, outline 0.14s ease, filter 0.14s ease, z-index 0s;
                     ${tagItem.disabled ? "opacity:0.58;" : ""}
                     ${
                         shell._magicChipSelSet && shell._magicChipSelSet.has(index)

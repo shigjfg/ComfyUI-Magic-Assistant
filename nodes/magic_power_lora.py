@@ -16,6 +16,10 @@ import urllib.parse
 import re
 import shutil
 import time
+import asyncio
+import functools
+from datetime import datetime
+from collections import defaultdict
 
 try:
     import cv2
@@ -284,6 +288,32 @@ class MagicPowerLoraLoader:
     FUNCTION = "apply_loras"
     CATEGORY = "✨ Magic Assistant"
 
+    # 类级别缓存：存储已加载的 LoRA 数据
+    # 键: (lora_path, weight) 元组
+    # 值: 加载的 lora dict
+    _loaded_loras = {}
+
+    def _get_cached_lora(self, lora_path, weight):
+        """从缓存获取 LoRA 数据，或加载并缓存"""
+        cache_key = (lora_path, weight)
+        if cache_key in self._loaded_loras:
+            print(f"   💾 [Cache Hit] {os.path.basename(lora_path)} (weight={weight})")
+            return self._loaded_loras[cache_key]
+        
+        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+        self._loaded_loras[cache_key] = lora
+        return lora
+
+    def _clear_lora_cache(self, lora_path=None):
+        """清除缓存，可指定清除特定路径或全部"""
+        if lora_path is None:
+            self._loaded_loras.clear()
+        else:
+            # 清除与该路径相关的所有缓存项
+            keys_to_remove = [k for k in self._loaded_loras if k[0] == lora_path]
+            for k in keys_to_remove:
+                del self._loaded_loras[k]
+
     # 检测模型是否为 INT8 量化模型
     @staticmethod
     def is_int8_model(model):
@@ -490,8 +520,8 @@ class MagicPowerLoraLoader:
                     continue
 
                 try:
-                    # 加载 LoRA 文件
-                    lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                    # 使用缓存加载 LoRA 文件
+                    lora = self._get_cached_lora(lora_path, weight)
                     
                     # 克隆 model patcher
                     model_patcher = out_model.clone()
@@ -558,7 +588,7 @@ class MagicPowerLoraLoader:
                     print(f"   ❌ Failed (INT8 Stochastic): {lora_name} -> {e}")
                     # 回退到标准模式
                     try:
-                        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                        lora = self._get_cached_lora(lora_path, weight)
                         out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
                         print(f"   ✅ Applied (Fallback): {lora_name}")
                     except Exception as e2:
@@ -591,8 +621,8 @@ class MagicPowerLoraLoader:
                     continue
 
                 try:
-                    # 加载 LoRA 文件
-                    lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                    # 使用缓存加载 LoRA 文件
+                    lora = self._get_cached_lora(lora_path, weight)
                     
                     # 克隆 model patcher
                     model_patcher = out_model.clone()
@@ -631,7 +661,7 @@ class MagicPowerLoraLoader:
                     print(f"   ❌ Failed (INT8 Dynamic): {lora_name} -> {e}")
                     # 回退到标准模式
                     try:
-                        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                        lora = self._get_cached_lora(lora_path, weight)
                         out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
                         print(f"   ✅ Applied (Fallback): {lora_name}")
                     except Exception as e2:
@@ -768,7 +798,8 @@ class MagicPowerLoraLoader:
                     continue
 
                 try:
-                    lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+                    # 使用缓存加载 LoRA
+                    lora = self._get_cached_lora(lora_path, weight)
                     out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
                     print(f"   ✅ Applied: {lora_name}")
                 except Exception as e:
@@ -797,6 +828,182 @@ class MagicPowerLoraLoader:
 
 # --- API 接口 ---
 
+async def _run_blocking(fn, *args, **kwargs):
+    """Run sync work off the event loop (Python 3.8: no asyncio.to_thread)."""
+    if kwargs:
+        call = functools.partial(fn, *args, **kwargs)
+    else:
+        call = lambda: fn(*args)
+    if hasattr(asyncio, "to_thread"):
+        if kwargs:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, call)
+        return await asyncio.to_thread(fn, *args)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, call)
+
+
+def _coerce_version_number(v):
+    """Civitai versionNumber may be int, float, str, or null; avoid TypeError on compare."""
+    if v is None:
+        return 0.0
+    if isinstance(v, bool):
+        return float(int(v))
+    if isinstance(v, (int, float)):
+        x = float(v)
+        if x != x or x in (float("inf"), float("-inf")):
+            return 0.0
+        return x
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return 0.0
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _normalize_civitai_version_id(vid):
+    if vid is None or isinstance(vid, bool):
+        return None
+    if isinstance(vid, int):
+        return vid
+    if isinstance(vid, float):
+        if vid != vid or vid in (float("inf"), float("-inf")):
+            return None
+        return int(vid)
+    if isinstance(vid, str) and vid.strip().isdigit():
+        return int(vid.strip())
+    return None
+
+
+def _civitai_version_display(ver):
+    """Civitai often omits versionNumber on model.modelVersions[]; use name or id."""
+    if not isinstance(ver, dict):
+        return ""
+    num = ver.get("versionNumber")
+    if num is not None and str(num).strip() != "":
+        n = _coerce_version_number(num)
+        if n == int(n):
+            return f"v{int(n)}"
+        return f"v{n}"
+    name = (ver.get("name") or "").strip()
+    if name:
+        return name
+    iv = _normalize_civitai_version_id(ver.get("id"))
+    if iv is not None:
+        return f"#{iv}"
+    return "?"
+
+
+def _parse_civitai_dt(s):
+    if not s or not isinstance(s, str):
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _klein_b_variant(s):
+    """
+    Flux.2 Klein 4B / 9B 等需区分，不能笼统归为 flux。
+    返回 '4' | '9' | ''；避免 14b 误匹配 4b。
+    """
+    if not s:
+        return ""
+    low = s.lower()
+    if re.search(r"(?<![0-9])9\s*b\b", low) or re.search(r"(?<![0-9a-z])9b(?![0-9a-z])", low):
+        return "9"
+    if re.search(r"(?<![0-9])4\s*b\b", low) or re.search(r"(?<![0-9a-z])4b(?![0-9a-z])", low):
+        return "4"
+    return ""
+
+
+def _normalize_base_model(bm):
+    """将 baseModel 字符串归一化为可比对的内部标识符（含 Klein 4B/9B 等细粒度）。"""
+    if not bm or not isinstance(bm, str):
+        return ""
+    s = bm.strip().lower()
+    s_nospace = re.sub(r"\s+", "", s)
+
+    # Flux.2 Klein 4B / 9B（须在通用 flux 匹配之前）
+    if "klein" in s or "klein" in s_nospace:
+        kb = _klein_b_variant(s)
+        if kb == "9":
+            return "flux2klein9b"
+        if kb == "4":
+            return "flux2klein4b"
+        return "flux2klein_other"
+
+    # 较长子串优先（避免 flux.1 被 flux 吞掉）
+    _ordered = [
+        ("flux.1 schnell", "flux1schnell"),
+        ("flux.1 dev", "flux1dev"),
+        ("flux.1", "flux1"),
+        ("stable diffusion xl", "sdxl"),
+        ("sdxl 1.0", "sdxl"),
+        ("sdxl", "sdxl"),
+        ("stable diffusion 2.1", "sd21"),
+        ("sd 2.1", "sd21"),
+        ("stable diffusion 2", "sd2"),
+        ("sd 2", "sd2"),
+        ("stable diffusion 1.5", "sd15"),
+        ("sd 1.5", "sd15"),
+        ("stable diffusion 1", "sd1"),
+        ("sd 1", "sd1"),
+        ("pony diffusion", "pony"),
+        ("pony", "pony"),
+        ("illustrious", "illustrious"),
+        ("firefly", "firefly"),
+        ("kolors", "kolors"),
+        ("lumina", "lumina"),
+        ("playground", "playground"),
+    ]
+    for pat, key in _ordered:
+        if pat in s:
+            return key
+    if "flux" in s:
+        return "flux_other"
+    return re.sub(r"[\s\-_]+", "", s)
+
+
+def _sanitize_for_json(obj):
+    """Make payloads safe for JSON (RFC / browser JSON.parse): no NaN/Infinity."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    if isinstance(obj, float):
+        if obj != obj or obj in (float("inf"), float("-inf")):
+            return None
+    return obj
+
+
+def _ma_json_response(data, status=200):
+    """JSON response that JavaScript JSON.parse always accepts."""
+    try:
+        payload = json.dumps(_sanitize_for_json(data), ensure_ascii=False, allow_nan=False)
+    except Exception as e:
+        payload = json.dumps(
+            {"ok": False, "error": f"响应序列化失败: {e}", "duplicates": [], "updates": []},
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        status = 500
+    try:
+        return web.Response(
+            body=payload.encode("utf-8"),
+            status=status,
+            content_type="application/json",
+        )
+    except Exception as e:
+        fb = json.dumps({"ok": False, "error": str(e), "updates": [], "duplicates": []})
+        return web.Response(body=fb.encode("utf-8"), status=500, content_type="application/json")
+
+
 @PromptServer.instance.routes.get("/ma/lora/list")
 async def get_lora_list(request):
     try:
@@ -804,6 +1011,30 @@ async def get_lora_list(request):
         return web.json_response({"files": lora_names})
     except Exception as e:
         return web.json_response({"files": [], "error": str(e)})
+
+@PromptServer.instance.routes.post("/ma/lora/detect_scan")
+async def lora_detect_scan(request):
+    """按目录或全部扫描 LoRA：检测重复文件（SHA256）。"""
+    try:
+        data = await request.json()
+        scope = data.get("scope") or "folder"
+        path_parts = data.get("path") or []
+        result = await _run_blocking(_run_lora_detect_scan, scope, path_parts)
+        return _ma_json_response(result)
+    except Exception as e:
+        return _ma_json_response({"ok": False, "error": str(e), "duplicates": []}, status=500)
+
+@PromptServer.instance.routes.post("/ma/lora/update_check")
+async def lora_update_check(request):
+    """从 Civitai API 检查 LoRA 更新：遍历范围内的 LoRA，通过 SHA256 查询 Civitai 获取最新版本信息。"""
+    try:
+        data = await request.json()
+        scope = data.get("scope") or "folder"
+        path_parts = data.get("path") or []
+        result = await _run_blocking(_safe_run_lora_update_check, scope, path_parts)
+        return _ma_json_response(result)
+    except Exception as e:
+        return _ma_json_response({"ok": False, "error": str(e), "updates": []}, status=500)
 
 @PromptServer.instance.routes.get("/ma/lora/images")
 async def get_lora_images(request):
@@ -939,11 +1170,394 @@ def calculate_sha256(filepath):
             sha256.update(chunk)
     return sha256.hexdigest()
 
+# --- LoRA 检测（重复 / 可能新版本）---
+
+_LORA_FILE_SUFFIXES = (".safetensors", ".ckpt", ".pt", ".pt2", ".bin", ".pth", ".sft", ".pkl")
+
+def _norm_lora_rel(p):
+    return (p or "").replace("\\", "/").strip()
+
+def _is_lora_extension(filename):
+    n = (filename or "").lower()
+    return any(n.endswith(ext) for ext in _LORA_FILE_SUFFIXES)
+
+def _list_lora_rel_paths_for_scope(all_rels, scope, path_parts):
+    """
+    scope: 'all' | 'folder'
+    path_parts: [] = 仅 loras 根目录下的文件（无子路径）；['a','b'] = 路径 a/b/ 下（含子目录）全部 LoRA
+    """
+    path_parts = [str(x).replace("\\", "/").strip("/") for x in (path_parts or []) if str(x).strip()]
+    prefix = "/".join(path_parts)
+    out = []
+    for rel in all_rels:
+        nr = _norm_lora_rel(rel)
+        base = nr.split("/")[-1]
+        if not _is_lora_extension(base):
+            continue
+        if scope == "all":
+            out.append(rel)
+            continue
+        if not prefix:
+            if "/" not in nr:
+                out.append(rel)
+        else:
+            pref = prefix + "/"
+            if nr == prefix or nr.startswith(pref):
+                out.append(rel)
+    return out
+
+def _read_safetensors_meta(path):
+    try:
+        from safetensors import safe_open
+        with safe_open(path, framework="np") as f:
+            return dict(f.metadata() or {})
+    except Exception:
+        return {}
+
+def _extract_base_model(meta):
+    if not meta:
+        return ""
+    for k in ("ss_base_model_name", "modelspec.architecture", "ss_sd_model_name", "modelspec.sai_model_spec", "base_model"):
+        v = meta.get(k)
+        if v is not None and str(v).strip():
+            return str(v).strip()[:200]
+    return ""
+
+
+def _extract_base_model_from_sidecar(rel_path):
+    """
+    从爬取保存的介绍文件读「基础模型」（magicloradate/*.json 常为纯文本，非严格 JSON）。
+    """
+    fp = folder_paths.get_full_path("loras", rel_path)
+    if not fp or not os.path.isfile(fp):
+        return ""
+    lora_dir = os.path.dirname(fp)
+    stem = os.path.splitext(os.path.basename(fp))[0]
+    paths_try = [
+        os.path.join(lora_dir, "magicloradate", f"{stem}.json"),
+        os.path.join(lora_dir, f"{stem}.json"),
+        os.path.join(lora_dir, "magicloradate", f"{stem}.log"),
+    ]
+    for p in paths_try:
+        if not os.path.isfile(p):
+            continue
+        try:
+            with open(p, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read(131072)
+            m = re.search(r"^\s*基础模型\s*[:：]\s*(.+)$", text, re.MULTILINE)
+            if m:
+                return m.group(1).strip()[:200]
+            m2 = re.search(r"^\s*base\s*model\s*[:：]\s*(.+)$", text, re.MULTILINE | re.IGNORECASE)
+            if m2:
+                return m2.group(1).strip()[:200]
+            try:
+                j = json.loads(text)
+                if isinstance(j, dict):
+                    for k in ("baseModel", "base_model", "base_model_name"):
+                        v = j.get(k)
+                        if v is not None and str(v).strip():
+                            return str(v).strip()[:200]
+            except Exception:
+                pass
+        except Exception:
+            continue
+    return ""
+
+def _normalize_lora_stem(rel_path):
+    stem = os.path.splitext(os.path.basename(rel_path))[0].lower()
+    stem = re.sub(r"\s*\(\d+\)\s*$", "", stem)
+    stem = re.sub(r"[_\s-]+(v|ver)\d+(\.\d+)?\s*$", "", stem, flags=re.IGNORECASE)
+    stem = re.sub(r"[_\s.-]+\d{4}[-_]\d{2}[-_]\d{2}\s*$", "", stem)
+    stem = stem.strip("._- \t")
+    if not stem:
+        stem = os.path.splitext(os.path.basename(rel_path))[0].lower()
+    return stem
+
+def _run_lora_detect_scan(scope, path_parts):
+    scope = (scope or "folder").lower()
+    if scope not in ("all", "folder"):
+        scope = "folder"
+    if not isinstance(path_parts, list):
+        path_parts = []
+
+    all_names = folder_paths.get_filename_list("loras")
+    rels = _list_lora_rel_paths_for_scope(all_names, scope, path_parts)
+
+    entries = []
+    errors = []
+    for rel in rels:
+        fp = folder_paths.get_full_path("loras", rel)
+        if not fp or not os.path.isfile(fp):
+            continue
+        try:
+            st = os.stat(fp)
+            mtime = int(st.st_mtime)
+            size = st.st_size
+            h = calculate_sha256(fp)
+            meta = {}
+            low = rel.lower()
+            if low.endswith(".safetensors") or low.endswith(".sft"):
+                meta = _read_safetensors_meta(fp)
+            base = (_extract_base_model(meta) or "").lower()[:200]
+            stem = _normalize_lora_stem(rel)
+            entries.append({
+                "path": _norm_lora_rel(rel),
+                "hash": h,
+                "mtime": mtime,
+                "size": size,
+                "base_model": base,
+                "stem": stem,
+            })
+        except Exception as ex:
+            errors.append({"path": rel, "error": str(ex)})
+
+    by_hash = defaultdict(list)
+    for e in entries:
+        by_hash[e["hash"]].append(e)
+    duplicates = []
+    for h, lst in by_hash.items():
+        if len(lst) > 1:
+            duplicates.append({
+                "hash": h,
+                "files": sorted(lst, key=lambda x: x["path"]),
+            })
+
+    by_key_meta = defaultdict(list)
+    by_key_weak = defaultdict(list)
+    for e in entries:
+        parent = os.path.dirname(e["path"]) or ""
+        parent = parent.replace("\\", "/")
+        if e["base_model"]:
+            by_key_meta[(e["base_model"], e["stem"])].append(e)
+        else:
+            by_key_weak[(parent, e["stem"])].append(e)
+
+    updates = []
+    for (bm, stem), lst in by_key_meta.items():
+        if len(lst) < 2 or len({e["hash"] for e in lst}) < 2:
+            continue
+        lst_sorted = sorted(lst, key=lambda x: x["mtime"], reverse=True)
+        updates.append({
+            "base_model": bm,
+            "stem": stem,
+            "newest": lst_sorted[0],
+            "older": lst_sorted[1:],
+        })
+
+    updates_weak = []
+    for (parent, stem), lst in by_key_weak.items():
+        if len(lst) < 2 or len({e["hash"] for e in lst}) < 2:
+            continue
+        lst_sorted = sorted(lst, key=lambda x: x["mtime"], reverse=True)
+        updates_weak.append({
+            "parent": parent,
+            "stem": stem,
+            "newest": lst_sorted[0],
+            "older": lst_sorted[1:],
+        })
+
+    return {
+        "ok": True,
+        "scoped_count": len(rels),
+        "scanned": len(entries),
+        "duplicates": duplicates,
+        "errors": errors[:80],
+    }
+
+
+def _safe_run_lora_update_check(scope, path_parts):
+    try:
+        return _run_lora_update_check(scope, path_parts)
+    except Exception as e:
+        import traceback
+        print(f"[ComfyUI-Magic-Assistant] lora update_check: {e}\n{traceback.format_exc()}")
+        return {
+            "ok": False,
+            "error": str(e) or type(e).__name__,
+            "updates": [],
+            "scoped_count": 0,
+            "scanned": 0,
+            "errors": [],
+        }
+
+
+def _run_lora_update_check(scope, path_parts):
+    """从 Civitai API 检查 LoRA 更新：遍历范围内的 LoRA，通过 SHA256 查询 Civitai 获取最新版本信息。"""
+    scope = (scope or "folder").lower()
+    if scope not in ("all", "folder"):
+        scope = "folder"
+    if not isinstance(path_parts, list):
+        path_parts = []
+
+    all_names = folder_paths.get_filename_list("loras")
+    rels = _list_lora_rel_paths_for_scope(all_names, scope, path_parts)
+
+    entries = []
+    errors = []
+    for rel in rels:
+        fp = folder_paths.get_full_path("loras", rel)
+        if not fp or not os.path.isfile(fp):
+            continue
+        try:
+            st = os.stat(fp)
+            mtime = int(st.st_mtime)
+            size = st.st_size
+            h = calculate_sha256(fp)
+            low = rel.lower()
+            is_safetensors = low.endswith(".safetensors") or low.endswith(".sft")
+            entries.append({
+                "path": _norm_lora_rel(rel),
+                "hash": h,
+                "mtime": mtime,
+                "size": size,
+                "is_safetensors": is_safetensors,
+                "base_model": "",   # 稍后填充
+            })
+        except Exception as ex:
+            errors.append({"path": rel, "error": str(ex)})
+
+    # 批量读取 safetensors metadata（本地 base model）
+    _bm_exts = (".safetensors", ".sft")
+    for e in entries:
+        if not e["is_safetensors"]:
+            continue
+        fp2 = folder_paths.get_full_path("loras", e["path"])
+        if fp2 and os.path.isfile(fp2):
+            try:
+                meta = _read_safetensors_meta(fp2)
+                e["base_model"] = _extract_base_model(meta)
+            except Exception:
+                pass
+        if not (e.get("base_model") or "").strip():
+            side = _extract_base_model_from_sidecar(e["path"])
+            if side:
+                e["base_model"] = side
+
+    # 按 SHA256 分组，每组只需查询一次 Civitai
+    by_hash = defaultdict(list)
+    for e in entries:
+        by_hash[e["hash"]].append(e)
+
+    updates = []
+    for h, group in by_hash.items():
+        try:
+            cv_data = fetch_civitai_data_by_hash(h)
+            if not cv_data:
+                continue
+            local_vid = _normalize_civitai_version_id(cv_data.get("id"))
+            local_version = _coerce_version_number(cv_data.get("versionNumber", 0))
+            model = cv_data.get("model", {})
+            if not isinstance(model, dict):
+                model = {}
+            versions = model.get("modelVersions")
+            if not isinstance(versions, list):
+                versions = []
+            if not versions:
+                continue
+            local_bm_raw = (group[0].get("base_model") or "").strip()
+            local_bm_norm = _normalize_base_model(local_bm_raw)
+            # 优先用 hash 命中版本的 baseModel（比 ss_metadata 更准，因为是上传者填的）
+            cv_bm_raw = (cv_data.get("baseModel") or "").strip()
+            cv_bm_norm = _normalize_base_model(cv_bm_raw)
+
+            # 在所有 modelVersions 中，先按 baseModel 分组，再在同组内找 max id
+            # 只在「与本地 base model 相同的组」里找最新版
+            bm_groups = defaultdict(list)
+            for v in versions:
+                if not isinstance(v, dict):
+                    continue
+                vid = _normalize_civitai_version_id(v.get("id"))
+                if vid is None:
+                    continue
+                bm = _normalize_base_model(v.get("baseModel") or "")
+                bm_groups[bm].append((vid, v))
+
+            # 选用与本地 base model 匹配的那个分组；否则降级为 hash 命中版本的 base model
+            target_bm = local_bm_norm if local_bm_norm else cv_bm_norm
+            if not target_bm:
+                target_bm = None
+
+            candidates = []
+            if target_bm and target_bm in bm_groups:
+                candidates = bm_groups[target_bm]
+            elif not target_bm:
+                # 无 base model 时，对所有版本取 max id（避免漏报）
+                for lst in bm_groups.values():
+                    candidates.extend(lst)
+
+            if not candidates:
+                continue
+
+            best_vid, best_ver = max(candidates, key=lambda x: x[0])
+            max_vid = best_vid
+
+            best_bm_norm = _normalize_base_model(best_ver.get("baseModel") or "")
+            if target_bm and best_bm_norm and best_bm_norm != target_bm:
+                continue
+            # 本地已识别底模时，与 Civitai 最新版再比一次（防止归一化分组键一致但实际文案不同）
+            if local_bm_norm and best_bm_norm and local_bm_norm != best_bm_norm:
+                continue
+
+            latest_version = _coerce_version_number(best_ver.get("versionNumber", 0))
+            latest_version_id = best_ver.get("id")
+            latest_download_url = None
+            latest_published_at = None
+            files = best_ver.get("files", [])
+            if not isinstance(files, list):
+                files = []
+            for f in files:
+                if not isinstance(f, dict):
+                    continue
+                if f.get("type") == "Model":
+                    latest_download_url = f.get("downloadUrl") or f.get("url")
+                    latest_published_at = f.get("publishedAt")
+                    break
+
+            newer_by_number = latest_version > local_version
+            newer_by_id = local_vid is not None and max_vid > local_vid
+            newer_by_date = False
+            if not newer_by_number and not newer_by_id and local_vid is None:
+                t_loc = _parse_civitai_dt(cv_data.get("createdAt"))
+                t_best = _parse_civitai_dt(best_ver.get("createdAt") or best_ver.get("updatedAt"))
+                if t_loc and t_best and t_best > t_loc:
+                    newer_by_date = True
+            if newer_by_number or newer_by_id or newer_by_date:
+                updates.append({
+                    "hash": h,
+                    "path": group[0]["path"],
+                    "local_version": local_version,
+                    "latest_version": latest_version,
+                    "local_label": _civitai_version_display(cv_data),
+                    "latest_label": _civitai_version_display(best_ver),
+                    "local_base_model": local_bm_raw,
+                    "latest_base_model": (best_ver.get("baseModel") or "").strip(),
+                    "latest_version_id": latest_version_id,
+                    "latest_download_url": latest_download_url,
+                    "model_url": f"https://civitai.com/models/{cv_data.get('modelId')}",
+                    "model_name": model.get("name") if isinstance(model, dict) else "",
+                    "published_at": latest_published_at,
+                })
+        except Exception as ex:
+            errors.append({"path": group[0]["path"], "error": str(ex)})
+
+    return {
+        "ok": True,
+        "scoped_count": len(rels),
+        "scanned": len(entries),
+        "updates": updates,
+        "errors": errors[:80],
+    }
+
 def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5):
     """从Civitai API获取数据（带重试机制）"""
+    hnorm = (hash_string or "").strip()
+    if not hnorm:
+        return None
+    # 官方示例里 SHA256 为大写；本地 hashlib 多为小写
+    hash_for_url = hnorm.upper()
     for attempt in range(max_retries):
         try:
-            url = f"https://civitai.com/api/v1/model-versions/by-hash/{hash_string}"
+            url = f"https://civitai.com/api/v1/model-versions/by-hash/{hash_for_url}"
             if attempt > 0:
                 time.sleep(api_delay * (2 ** attempt))
             else:
@@ -956,14 +1570,24 @@ def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5):
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=30) as response:
                 if response.status == 200:
-                    data = json.loads(response.read().decode('utf-8'))
+                    raw = response.read().decode("utf-8", errors="replace")
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(data, dict) or "modelId" not in data:
+                        continue
                     model_url = f"https://civitai.com/api/v1/models/{data['modelId']}"
                     model_req = urllib.request.Request(model_url, headers=headers)
                     with urllib.request.urlopen(model_req, timeout=30) as model_response:
                         if model_response.status == 200:
-                            data['model'] = json.loads(model_response.read().decode('utf-8'))
+                            mraw = model_response.read().decode("utf-8", errors="replace")
+                            try:
+                                data["model"] = json.loads(mraw)
+                            except json.JSONDecodeError:
+                                data["model"] = {}
                         else:
-                            data['model'] = {}
+                            data["model"] = {}
                     return data
         except urllib.error.HTTPError as e:
             if e.code == 429:

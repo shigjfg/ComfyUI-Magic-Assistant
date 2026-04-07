@@ -78,6 +78,7 @@ const loraLoaderTranslations = {
     "已选择": { zh: "已选择", en: "selected" },
     "个 LoRA": { zh: "个 LoRA", en: " LoRAs" },
     "添加选中 LoRA": { zh: "添加选中 LoRA", en: "Add Selected LoRAs" },
+    "🚨 LoRA 检测": { zh: "🚨 LoRA 检测", en: "🚨 LoRA Scan" },
     "关闭": { zh: "关闭", en: "Close" },
     "No Image": { zh: "无图片", en: "No Image" },
     
@@ -158,7 +159,42 @@ const loraLoaderTranslations = {
     // LoRA 串连功能相关
     "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。": { zh: "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。", en: "lora串接受 received invalid data. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader, not from other text or nodes." },
     "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。": { zh: "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。", en: "lora串接受 received data that is not in LoRA chain format. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader." },
-    "链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。": { zh: "链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。", en: "Chain-end node (node that does not connect lora串输出 to other loaders) must connect model and clip." }
+    "链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。": { zh: "链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。", en: "Chain-end node (node that does not connect lora串输出 to other loaders) must connect model and clip." },
+
+    // LoRA 检测窗口
+    "LoRA 检测（重复 + 更新）": { zh: "LoRA 检测（重复 + 更新）", en: "LoRA Scan (Duplicates + Updates)" },
+    "检测范围：全部 LoRA 文件（可能较慢）": { zh: "检测范围：全部 LoRA 文件（可能较慢）", en: "Scope: All LoRA files (may be slow)" },
+    "检测范围：根目录 — 仅 loras 根下的文件（不包含子文件夹内文件）。进入子文件夹可检测该文件夹及其下所有子目录。": { zh: "检测范围：根目录 — 仅 loras 根下的文件（不包含子文件夹内文件）。进入子文件夹可检测该文件夹及其下所有子目录。", en: "Scope: Root directory — only files directly under loras (excluding subfolders). Enter a subfolder to scan it and all its subdirectories." },
+    "检测范围：文件夹": { zh: "检测范围：文件夹", en: "Scope: Folder" },
+    "及其所有子目录内的 LoRA。": { zh: "及其所有子目录内的 LoRA。", en: " and all subdirectories within it." },
+    "全部模式下可点击下方「开始检测」扫描所有目录。": { zh: "全部模式下可点击下方「开始检测」扫描所有目录。", en: "In All mode, click Start Detection below to scan all directories." },
+    "当前层级无子文件夹，可直接开始检测。": { zh: "当前层级无子文件夹，可直接开始检测。", en: "No subfolders at this level, you can start detection directly." },
+    "点击右下角「开始检测」后显示：内容完全相同（SHA256 一致）的重复 LoRA。": { zh: "点击右下角「开始检测」后显示：内容完全相同（SHA256 一致）的重复 LoRA。", en: "After clicking Start Detection below: shows duplicate LoRAs with identical content (same SHA256)." },
+    "点击右下角「检测 LoRA 更新」后，通过 SHA256 查询 Civitai，匹配到则对比本地版本与 Civitai 最新版本号，显示有更新的 LoRA。": { zh: "点击右下角「检测 LoRA 更新」后，通过 SHA256 查询 Civitai，匹配到则对比本地版本与 Civitai 最新版本号，显示有更新的 LoRA。", en: "After clicking Detect LoRA Updates: queries Civitai by SHA256, compares local version with Civitai latest, shows LoRAs with available updates." },
+    "① 重复 LoRA（哈希相同）": { zh: "① 重复 LoRA（哈希相同）", en: "① Duplicate LoRA (Same Hash)" },
+    "② LoRA 更新（Civitai）": { zh: "② LoRA 更新（Civitai）", en: "② LoRA Updates (Civitai)" },
+    "🔍 检测重复 LoRA": { zh: "🔍 检测重复 LoRA", en: "🔍 Detect Duplicate LoRAs" },
+    "🌐 检测 LoRA 更新": { zh: "🌐 检测 LoRA 更新", en: "🌐 Detect LoRA Updates" },
+    "🚀 全部检测": { zh: "🚀 全部检测", en: "🚀 Detect All" },
+    "检测重复文件（哈希）与 LoRA 更新（Civitai）": { zh: "检测重复文件（哈希）与 LoRA 更新（Civitai）", en: "Detect duplicate files (hash) and LoRA updates (Civitai)" },
+    "检测失败：": { zh: "检测失败：", en: "Scan failed: " },
+    "未知错误": { zh: "未知错误", en: "Unknown error" },
+    "未发现内容完全相同的重复文件。": { zh: "未发现内容完全相同的重复文件。", en: "No duplicate files with identical content found." },
+    "相同 SHA256 · ": { zh: "相同 SHA256 · ", en: "Same SHA256 · " },
+    "本地版本: ": { zh: "本地版本: ", en: "Local version: " },
+    "在 Civitai 查看 →": { zh: "在 Civitai 查看 →", en: "View on Civitai →" },
+    "检测中…": { zh: "检测中…", en: "Scanning..." },
+    "处理中…": { zh: "处理中…", en: "Processing..." },
+    "重复检测失败：": { zh: "重复检测失败：", en: "Duplicate scan failed: " },
+    "更新检测失败：": { zh: "更新检测失败：", en: "Update scan failed: " },
+    "所有 LoRA 都已是 Civitai 上的最新版本，或无法在 Civitai 找到匹配记录。": { zh: "所有 LoRA 都已是 Civitai 上的最新版本，或无法在 Civitai 找到匹配记录。", en: "All LoRAs are already the latest version on Civitai, or no matching records found on Civitai." },
+    "本次扫描：范围内 ": { zh: "本次扫描：范围内 ", en: "This scan: " },
+    " 个 LoRA 路径，已读取 ": { zh: " 个 LoRA 路径，已读取 ", en: " LoRA paths, scanned " },
+    " 个文件。": { zh: " 个文件。", en: " files." },
+    " 个文件，查询 Civitai 中…": { zh: " 个文件，查询 Civitai 中…", en: " files, querying Civitai..." },
+    "Civitai 最新: ": { zh: "Civitai 最新: ", en: "Civitai latest: " },
+    "  ·  文件: ": { zh: "  ·  文件: ", en: "  ·  File: " },
+    "LoRA 检测: ": { zh: "LoRA 检测: ", en: "LoRA Scan: " }
 };
 
 // 节点翻译映射表 - Magic SDNQ Loader & Sampler
@@ -1031,10 +1067,14 @@ const magicKleinLoaderTranslations = {
     },
 
     "🧠 支持的模型": { zh: "🧠 支持的模型", en: "🧠 Supported Models" },
-    "量化模型": { zh: "量化模型", en: "Quantized Model" },
+    "量化模型": { zh: "量化模型", en: "Quantized Models" },
     "KLEIN_MODEL_CAPTION": {
         zh: "量化者：tonera | 量化方式：FP4/INT4（SVDQuant/Nunchaku）",
         en: "Quantized by: tonera | Method: FP4/INT4 (SVDQuant/Nunchaku)",
+    },
+    "KLEIN_MODEL_CAPTION_KV": {
+        zh: "量化者：tonera | 量化方式：FP4/INT4 + KV Cache（SVDQuant/Nunchaku）",
+        en: "Quantized by: tonera | Method: FP4/INT4 + KV cache (SVDQuant/Nunchaku)",
     },
 
     "📖 Magic Klein 说明": { zh: "📖 Magic Klein 说明", en: "📖 Magic Klein Documentation" },
@@ -1050,6 +1090,10 @@ const magicKleinLoaderTranslations = {
     "KLEIN_MODEL_LINE2": {
         zh: "量化方式：FP4/INT4（由 tonera 使用 SVDQuant/Nunchaku 量化）",
         en: "Quantization: FP4/INT4 by tonera using SVDQuant/Nunchaku",
+    },
+    "KLEIN_MODEL_LINE2_KV": {
+        zh: "量化方式：FP4/INT4 + KV Cache（由 tonera 使用 SVDQuant/Nunchaku 量化）",
+        en: "Quantization: FP4/INT4 + KV cache by tonera using SVDQuant/Nunchaku",
     },
     "首次使用步骤": { zh: "首次使用步骤", en: "First-Time Setup" },
     "KLEIN_STEP1": {
@@ -1321,7 +1365,60 @@ function translateText(text, lang, nodeType = null) {
         }
         return text;
     }
-    
+
+    // 处理LoRA检测窗口动态文本：`检测范围：文件夹「xxx」及其所有子目录内的 LoRA。`
+    const detectScopeFolderMatch = text.match(/^检测范围：文件夹[「"]?([^」"\\/\s]+)[」"]?及其所有子目录内的 LoRA。$/);
+    if (detectScopeFolderMatch) {
+        const folderName = detectScopeFolderMatch[1];
+        if (lang === "en") {
+            return `Scope: Folder "${folderName}" and all subdirectories within it.`;
+        }
+        return text;
+    }
+
+    // 处理LoRA检测窗口扫描结果：`本次扫描：范围内 xxx 个 LoRA 路径，已读取 xxx 个文件。`
+    const scanResultMatch = text.match(/^本次扫描：范围内\s*(\d+)\s*个\s*LoRA\s*路径，已读取\s*(\d+)\s*个\s*文件。$/);
+    if (scanResultMatch) {
+        const loraCount = scanResultMatch[1];
+        const fileCount = scanResultMatch[2];
+        if (lang === "en") {
+            return `This scan: ${loraCount} LoRA paths in scope, scanned ${fileCount} files.`;
+        }
+        return text;
+    }
+
+    // 处理LoRA检测窗口扫描结果（含Civitai）：`本次扫描：范围内 xxx 个 LoRA 路径，已读取 xxx 个文件，查询 Civitai 中…`
+    const scanResultCivitaiMatch = text.match(/^本次扫描：范围内\s*(\d+)\s*个\s*LoRA\s*路径，已读取\s*(\d+)\s*个\s*文件，查询 Civitai 中…$/);
+    if (scanResultCivitaiMatch) {
+        const loraCount = scanResultCivitaiMatch[1];
+        const fileCount = scanResultCivitaiMatch[2];
+        if (lang === "en") {
+            return `This scan: ${loraCount} LoRA paths in scope, scanned ${fileCount} files, querying Civitai...`;
+        }
+        return text;
+    }
+
+    // 处理Civitai更新信息：`xxx  ·  Civitai 最新: vxxx`
+    const civitaiVersionMatch = text.match(/^(.+?)\s*·\s*Civitai 最新:\s*(.+)$/);
+    if (civitaiVersionMatch && nodeType === "MagicPowerLoraLoader") {
+        const modelName = civitaiVersionMatch[1];
+        const latestVersion = civitaiVersionMatch[2];
+        if (lang === "en") {
+            return `${modelName} · Civitai latest: ${latestVersion}`;
+        }
+        return text;
+    }
+
+    // 处理LoRA检测标题alert：`LoRA 检测: xxx`
+    const loraDetectAlertMatch = text.match(/^LoRA 检测:\s*(.+)$/);
+    if (loraDetectAlertMatch) {
+        const errorMsg = loraDetectAlertMatch[1];
+        if (lang === "en") {
+            return `LoRA Scan: ${errorMsg}`;
+        }
+        return text;
+    }
+
     // 尝试部分匹配（处理动态文本，如"编辑 LoRA 内容: xxx"）
     // 按长度从长到短排序，优先匹配更长的文本
     const searchTranslations = nodeType && allTranslations[nodeType] ? allTranslations[nodeType] : {};
