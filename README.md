@@ -3,14 +3,24 @@
 **A powerful 10-in-1 suite designed to simplify your workflow.**
 **一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
 
-Our goal is to replace complex node chains with single, intelligent nodes.
-我们的目标是用单个智能节点替代繁琐的"面条式"连线。
+> 💬 **Join our Discord community for support, feature requests, and latest updates!**
+> 💬 **加入我们的 Discord 社区，获取技术支持、功能请求！**
+
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/H9YFdJAs4R)
 
 ---
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-04-07**
+> Latest Update / 最新更新：**2026-04-10**
+
+> **V1.3.3 版本介绍 / Version Introduction** 2026-04-10
+
+> 1. **🐛 修复**: Magic Nunchaku FLUX.2 Klein Loader - 修复 klein 节点嵌入环境的问题
+>    * 修复了 nunchaku-flux2-klein 节点中环境嵌入的已知问题
+>    * 增强了环境检测和嵌入的稳定性，提升使用体验
+>    * Fixed environment embedding issues in the nunchaku-flux2-klein node
+>    * Enhanced environment detection and embedding stability for better user experience
 
 > **V1.3.2 版本介绍 / Version Introduction** 2026-04-07
 
@@ -47,6 +57,9 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * Fixed environment embedding issues in the nunchaku-flux2-klein node
 >    * Enhanced environment detection mechanism for better user experience
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.0 版本介绍 / Version Introduction** 2026-04-02
 
 > 1. **🐛 修复**: Tag 预览悬浮功能条 Bug 修复
@@ -68,9 +81,6 @@ Our goal is to replace complex node chains with single, intelligent nodes.
 >    * Based on [tonera/FLUX.2-klein-9B-Nunchaku](https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku)
 
 >    <img width="563" height="416" alt="Image" src="https://github.com/user-attachments/assets/95a003b5-4e10-45b5-842d-498d9a045ea4" />
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.2.9 版本介绍 / Version Introduction** 2026-03-30
 

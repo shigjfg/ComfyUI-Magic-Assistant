@@ -85,20 +85,66 @@ def _site_packages_from_python_exe(exe: str | None) -> str | None:
 def get_site_packages_candidates() -> list[str]:
     """All site-packages roots to probe for nunchaku (deduped, normalized).
 
-    Prefer the interpreter ComfyUI is actually running under (sys.executable),
-    then the path inferred from this node's ComfyUI folder layout.
+    Uses sys.path to find site-packages, which works for any ComfyUI installation:
+    - Portable version (python_embeded)
+    - Aki (秋叶版)
+    - Desktop version (system Python)
+    - Any custom installation
     """
     seen: set[str] = set()
     out: list[str] = []
-    for p in (
-        _site_packages_from_python_exe(getattr(sys, "executable", None) or None),
-        get_comfyui_python_lib(),
-    ):
-        if p and os.path.isdir(p):
-            n = os.path.normpath(p)
-            if n not in seen:
-                seen.add(n)
-                out.append(n)
+
+    # Primary: use sys.path which always reflects the actual Python environment
+    if sys.path:
+        import site
+        # site.getsitepackages() returns all site-packages directories
+        # This works regardless of how Python was installed
+        try:
+            site_packages_dirs = site.getsitepackages()
+        except AttributeError:
+            # Python < 3.3 doesn't have getsitepackages
+            site_packages_dirs = []
+
+        # Also add sys.path entries that look like site-packages
+        for p in sys.path:
+            p_norm = os.path.normpath(p)
+            if p_norm not in seen:
+                # Check if it's a site-packages directory
+                if "site-packages" in p_norm.lower():
+                    if os.path.isdir(p):
+                        seen.add(p_norm)
+                        out.append(p_norm)
+                        continue
+                # Or use the directories from site.getsitepackages()
+                for sp in site_packages_dirs:
+                    sp_norm = os.path.normpath(sp)
+                    if sp_norm == p_norm and sp_norm not in seen:
+                        seen.add(sp_norm)
+                        out.append(sp_norm)
+
+        # Ensure the explicit site.getsitepackages() results are included
+        for sp in site_packages_dirs:
+            sp_norm = os.path.normpath(sp)
+            if sp_norm not in seen and os.path.isdir(sp_norm):
+                seen.add(sp_norm)
+                out.append(sp_norm)
+
+    # Fallback: try paths from sys.executable (works for embedded Python)
+    exe_sp = _site_packages_from_python_exe(getattr(sys, "executable", None) or None)
+    if exe_sp and os.path.isdir(exe_sp):
+        exe_sp_norm = os.path.normpath(exe_sp)
+        if exe_sp_norm not in seen:
+            seen.add(exe_sp_norm)
+            out.append(exe_sp_norm)
+
+    # Last fallback: infer from ComfyUI root (portable version layout)
+    comfyui_lib = get_comfyui_python_lib()
+    if comfyui_lib and os.path.isdir(comfyui_lib):
+        comfyui_lib_norm = os.path.normpath(comfyui_lib)
+        if comfyui_lib_norm not in seen:
+            seen.add(comfyui_lib_norm)
+            out.append(comfyui_lib_norm)
+
     return out
 
 
@@ -305,21 +351,27 @@ def install_wrapper_to_nunchaku() -> tuple[bool, str]:
     created = []
     modified = []
 
-    # 1. torch_transfer_utils.py (entire file)
+    # 1. torch_transfer_utils.py (entire file - always write to ensure correct version)
     torch_transfer_utils_path = os.path.join(nunchaku_base, "torch_transfer_utils.py")
-    if not os.path.exists(torch_transfer_utils_path):
-        with open(torch_transfer_utils_path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(_TORCH_TRANSFER_UTILS_SOURCE)
-        created.append(torch_transfer_utils_path)
+    with open(torch_transfer_utils_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_TORCH_TRANSFER_UTILS_SOURCE)
+    created.append(torch_transfer_utils_path)
 
-    # 2. models/transformers/transformer_flux2.py (entire file)
+    # 2. models/transformers/transformer_flux2.py (entire file - always write to ensure correct version)
     transformers_dir = os.path.join(nunchaku_base, "models", "transformers")
     os.makedirs(transformers_dir, exist_ok=True)
     transformer_flux2_path = os.path.join(transformers_dir, "transformer_flux2.py")
-    if not os.path.exists(transformer_flux2_path):
-        with open(transformer_flux2_path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(_TRANSFORMER_FLUX2_SOURCE)
-        created.append(transformer_flux2_path)
+    with open(transformer_flux2_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_TRANSFORMER_FLUX2_SOURCE)
+    created.append(transformer_flux2_path)
+
+    # 2b. models/transformers/utils.py (CRITICAL: this contains patch_scale_key used by transformer_flux2.py)
+    # The transformer_flux2.py imports patch_scale_key from .utils, so we MUST provide the matching version
+    # ALWAYS write to ensure compatibility - user's old version may cause AssertionError on .wcscales
+    transformers_utils_path = os.path.join(transformers_dir, "utils.py")
+    with open(transformers_utils_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_TRANSFORMERS_UTILS_SOURCE)
+    created.append(transformers_utils_path)
 
     # 3–5. __init__.py patches — same intent as nunchaku PR #924, without duplicating
     # whole import blocks or breaking __all__ (regex on [^]] caused syntax errors).
@@ -478,13 +530,13 @@ def _check_environment_impl() -> dict:
     elif nunchaku_found and not core_files_ok:
         install_status = "missing_core_files"
         status_text = {
-            "zh": "nunchaku 已安装但缺少核心文件（transformer_flux2.py / torch_transfer_utils.py），"
+            "zh": "nunchaku 已安装但缺少核心文件（transformer_flux2.py / torch_transfer_utils.py / transformers/utils.py），"
                   "点击「嵌入到环境」按钮添加",
-            "en": "nunchaku found but core files are missing (transformer_flux2.py / torch_transfer_utils.py), "
+            "en": "nunchaku found but core files are missing (transformer_flux2.py / torch_transfer_utils.py / transformers/utils.py), "
                   "click 'Install to Environment' to add them",
         }
         suggestion = (
-            "nunchaku found but transformer_flux2.py or torch_transfer_utils.py is missing. "
+            "nunchaku found but transformer_flux2.py, torch_transfer_utils.py, or transformers/utils.py is missing. "
             "Magic Klein Loader will automatically add them - no manual action needed."
         )
     elif needs_patch:
@@ -817,6 +869,194 @@ def maybe_pretouch_pipeline_cpu_tensors(
         component_attrs=component_attrs,
         on_component=on_component,
     )
+'''
+# ---------------------------------------------------------------------------
+# Embedded models/transformers/utils.py
+# From: https://github.com/nunchaku-ai/nunchaku/commit/a515fc2740a17410fa2fcef6dc59229744d82fa0/nunchaku/models/transformers/utils.py
+# ---------------------------------------------------------------------------
+_TRANSFORMERS_UTILS_SOURCE = '''"""
+Utilities for Nunchaku transformer model loading.
+"""
+
+import json
+import logging
+import os
+from pathlib import Path
+
+import torch
+from diffusers import __version__
+from huggingface_hub import constants, hf_hub_download
+from torch import nn
+
+from ...utils import load_state_dict_in_safetensors
+from ..linear import SVDQW4A4Linear
+
+# Get log level from environment variable (default to INFO)
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# Configure logging
+logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
+
+class NunchakuModelLoaderMixin:
+    """
+    Mixin for standardized model loading in Nunchaku transformer models.
+    """
+
+    @classmethod
+    def _build_model(
+        cls, pretrained_model_name_or_path: str | os.PathLike[str], **kwargs
+    ) -> tuple[nn.Module, dict[str, torch.Tensor], dict[str, str]]:
+        """
+        Build a transformer model from a safetensors file.
+
+        Parameters
+        ----------
+        pretrained_model_name_or_path : str or os.PathLike
+            Path to the safetensors file.
+        **kwargs
+            Additional keyword arguments (e.g., ``torch_dtype``).
+
+        Returns
+        -------
+        tuple
+            (transformer, state_dict, metadata)
+        """
+        if isinstance(pretrained_model_name_or_path, str):
+            pretrained_model_name_or_path = Path(pretrained_model_name_or_path)
+        state_dict, metadata = load_state_dict_in_safetensors(pretrained_model_name_or_path, return_metadata=True)
+
+        config = json.loads(metadata["config"])
+
+        with torch.device("meta"):
+            transformer = cls.from_config(config).to(kwargs.get("torch_dtype", torch.bfloat16))
+
+        return transformer, state_dict, metadata
+
+    @classmethod
+    def _build_model_legacy(
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
+    ) -> tuple[nn.Module, str, str]:
+        """
+        Build a transformer model from a legacy folder structure.
+
+        .. warning::
+            This method is deprecated and will be removed in December 2025.
+            Please use :meth:`_build_model` instead.
+
+        Parameters
+        ----------
+        pretrained_model_name_or_path : str or os.PathLike
+            Path to the folder containing model weights.
+        **kwargs
+            Additional keyword arguments for HuggingFace Hub download and config loading.
+
+        Returns
+        -------
+        tuple
+            (transformer, unquantized_part_path, transformer_block_path)
+        """
+        logger.warning(
+            "Loading models from a folder will be deprecated in December 2025. "
+            "Please download the latest safetensors model, or use one of the following tools to "
+            "merge your model into a single file: the CLI utility `python -m nunchaku.merge_safetensors` "
+            "or the ComfyUI workflow `merge_safetensors.json`."
+        )
+        subfolder = kwargs.get("subfolder", None)
+        if os.path.exists(pretrained_model_name_or_path):
+            dirname = (
+                pretrained_model_name_or_path
+                if subfolder is None
+                else os.path.join(pretrained_model_name_or_path, subfolder)
+            )
+            unquantized_part_path = os.path.join(dirname, "unquantized_layers.safetensors")
+            transformer_block_path = os.path.join(dirname, "transformer_blocks.safetensors")
+        else:
+            download_kwargs = {
+                "subfolder": subfolder,
+                "repo_type": "model",
+                "revision": kwargs.get("revision", None),
+                "cache_dir": kwargs.get("cache_dir", None),
+                "local_dir": kwargs.get("local_dir", None),
+                "user_agent": kwargs.get("user_agent", None),
+                "force_download": kwargs.get("force_download", False),
+                "proxies": kwargs.get("proxies", None),
+                "etag_timeout": kwargs.get("etag_timeout", constants.DEFAULT_ETAG_TIMEOUT),
+                "token": kwargs.get("token", None),
+                "local_files_only": kwargs.get("local_files_only", None),
+                "headers": kwargs.get("headers", None),
+                "endpoint": kwargs.get("endpoint", None),
+                "resume_download": kwargs.get("resume_download", None),
+                "force_filename": kwargs.get("force_filename", None),
+                "local_dir_use_symlinks": kwargs.get("local_dir_use_symlinks", "auto"),
+            }
+            unquantized_part_path = hf_hub_download(
+                repo_id=str(pretrained_model_name_or_path), filename="unquantized_layers.safetensors", **download_kwargs
+            )
+            transformer_block_path = hf_hub_download(
+                repo_id=str(pretrained_model_name_or_path), filename="transformer_blocks.safetensors", **download_kwargs
+            )
+
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", None)
+        token = kwargs.pop("token", None)
+        revision = kwargs.pop("revision", None)
+        config, _, _ = cls.load_config(
+            pretrained_model_name_or_path,
+            subfolder=subfolder,
+            cache_dir=cache_dir,
+            return_unused_kwargs=True,
+            return_commit_hash=True,
+            force_download=force_download,
+            proxies=proxies,
+            local_files_only=local_files_only,
+            token=token,
+            revision=revision,
+            user_agent={"diffusers": __version__, "file_type": "model", "framework": "pytorch"},
+            **kwargs,
+        )
+
+        with torch.device("meta"):
+            transformer = cls.from_config(config).to(kwargs.get("torch_dtype", torch.bfloat16))
+        return transformer, unquantized_part_path, transformer_block_path
+
+
+def patch_scale_key(transformer_from_config: nn.Module, state_dict_from_checkpoint: dict):
+    """
+    Modify scale parameters so that the state dict from the checkpoint file can be loaded to the transformer model created from the config.
+
+    Parameters
+    ----------
+    transformer_from_config : nn.Module
+        The transformer model created from the `config.json`
+    state_dict_from_checkpoint : dict
+        The state dict loaded from the checkpoint file (typically .safetensors)
+    """
+    state_dict = transformer_from_config.state_dict()
+    for k in state_dict.keys():
+        if k not in state_dict_from_checkpoint:
+            assert ".wcscales" in k
+            state_dict_from_checkpoint[k] = torch.ones_like(state_dict[k])
+
+    for n, m in transformer_from_config.named_modules():
+        if isinstance(m, SVDQW4A4Linear):
+            if m.wtscale is not None:
+                m.wtscale = state_dict_from_checkpoint.pop(f"{n}.wtscale", 1.0)
+
+
+def convert_fp16(transformer_from_config: nn.Module, state_dict_from_checkpoint: dict):
+    state_dict = transformer_from_config.state_dict()
+    for k in state_dict.keys():
+        if state_dict[k].dtype != state_dict_from_checkpoint[k].dtype:
+            assert (
+                state_dict[k].dtype == torch.float16 and state_dict_from_checkpoint[k].dtype == torch.bfloat16
+            ), f"Unexpected dtype difference for key: {k}, model dtype: {state_dict[k].dtype}, checkpoint dtype: {state_dict_from_checkpoint[k].dtype}"
+            state_dict_from_checkpoint[k] = torch.nan_to_num(
+                state_dict_from_checkpoint[k].to(torch.float16), nan=0.0, posinf=65504, neginf=-65504
+            )
 '''
 
 
