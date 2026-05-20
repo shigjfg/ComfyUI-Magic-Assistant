@@ -17,11 +17,17 @@ _parent_dir = os.path.dirname(_current_dir)
 if _parent_dir not in sys.path:
     sys.path.insert(0, _parent_dir)
 
-from core.sdnq_config import get_dtype_from_string
-from core.sdnq_registry import get_model_names_for_dropdown, get_repo_id_from_name, get_model_info
-from core.sdnq_downloader import download_model, check_model_cached, get_cached_model_path
-from core.sdnq_wrapper import wrap_pipeline_components, DiffusersVAEFromComfy
-from core.sdnq_body_only import load_body_only_pipeline
+from core.sdnq_lazy import (
+    get_dtype_from_string,
+    get_model_names_for_dropdown,
+    get_repo_id_from_name,
+    get_model_info,
+    download_model,
+    check_model_cached,
+    get_cached_model_path,
+    wrap_pipeline_components,
+)
+from core.sdnq_lazy import load_body_only_pipeline, DiffusersVAEFromComfy
 
 
 def _cleanup_resources(pipeline=None, force=True):

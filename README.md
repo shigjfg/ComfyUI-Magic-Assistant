@@ -12,7 +12,38 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-04-10**
+> Latest Update / 最新更新：**2026-05-20**
+
+> **V1.3.4 版本介绍 / Version Introduction** 2026-05-20
+
+> 1. **🔧 更新**: Magic 提示词编辑器 - 编辑标签页重构为 3 个独立界面
+>    * 将原有的编辑标签功能拆分为「收藏标签」「自建标签」「预设标签」三个独立 Tab 界面
+>    * 新增默认标签分类支持，方便用户按分类快速查找和管理预设标签
+>    * 界面更加清晰整洁，标签管理效率大幅提升
+>    * Refactored the tag editing feature into 3 independent tab interfaces: "Favorite Tags", "Custom Tags", and "Preset Tags"
+>    * Added default tag category support for easier browsing and management of preset tags
+>    * Cleaner interface design with significantly improved tag management efficiency
+>    <img width="574" height="479" alt="Image" src="https://github.com/user-attachments/assets/0af41144-763b-444a-adfb-25015a797676" />
+>    <img width="564" height="466" alt="Image" src="https://github.com/user-attachments/assets/b347ac00-9f35-4ed5-9034-59eaa2e4430a" />
+>    <img width="575" height="478" alt="Image" src="https://github.com/user-attachments/assets/31e39612-1e52-4a96-a6f0-c7253312701e" />
+
+> 2. **🐛 修复**: SDNQ 节点懒加载机制优化
+>    * 修复了不使用 SDNQ 时环境仍强制检测 SDNQ 的问题
+>    * SDNQ 相关节点现在采用真正的懒加载模式，仅在需要时才导入依赖
+>    * 未安装 SDNQ 时插件可正常加载，其他所有功能不受影响
+>    * Optimized SDNQ node lazy loading mechanism
+>    * Fixed the issue where the environment would force-check SDNQ even when not using it
+>    * SDNQ nodes now use true lazy loading - dependencies are only imported when needed
+>    * When SDNQ is not installed, the plugin loads normally and all other features work without issues
+
+> 3. **⚡ 优化**: Magic Power LoRA Loader - 性能与稳定性优化
+>    * 优化了 LoRA 缓存机制，减少重复加载提升性能
+>    * 改进了 SDNQ 模式下的 LoRA 应用逻辑，错误处理更完善
+>    * 优化了预览图加载流程，内存占用更少
+>    * Performance and stability optimizations for Magic Power LoRA Loader
+>    * Optimized LoRA caching mechanism to reduce duplicate loading and improve performance
+>    * Improved SDNQ mode LoRA application logic with better error handling
+>    * Optimized preview image loading process with reduced memory footprint
 
 > **V1.3.3 版本介绍 / Version Introduction** 2026-04-10
 
@@ -40,6 +71,9 @@
 >    * The download link remains the same author's quantization
 >    * No need to re-embed the environment file (same as previous); first-time users still need to embed
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.1 版本介绍 / Version Introduction** 2026-04-04
 
 > 1. **🔍 新增**: Tag 编辑弹窗 - 收藏/自建提示词的搜索
@@ -56,9 +90,6 @@
 >    * 增强了环境检测的机制，提升使用体验
 >    * Fixed environment embedding issues in the nunchaku-flux2-klein node
 >    * Enhanced environment detection mechanism for better user experience
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.0 版本介绍 / Version Introduction** 2026-04-02
 
@@ -598,12 +629,18 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 
 #### 编辑标签 / Edit Tags Modal
 
-* **标签组管理**: 新建标签组、收藏标签组，分组管理常用 tag 集合
+编辑标签功能已重构为 **3 个独立 Tab 界面**，界面更加清晰整洁：
+
+* **收藏标签 Tab**: 管理收藏的标签组，支持搜索和一键添加到当前提示词
+* **自建标签 Tab**: 管理用户自定义的标签组，支持新建、编辑、删除和搜索
+* **预设标签 Tab**: 浏览内置的 22 万+ 预设标签，支持**默认标签分类**筛选（如通用、画师、版权、角色等），方便按分类快速查找
+
 * **标签搜索**: 中英文双向搜索（不区分大小写），支持**收藏标签组搜索**和**自建标签组搜索**；自建标签组优先显示；支持一键添加 tag 到当前提示词
 * **数据源**: 预设库（22 万+ 条 `中文,英文tag`）+ 用户自建标签组 + 收藏标签组
 * **Danbooru 数据搜索**: 切换 Danbooru 模式后，搜索结果实时连接 Danbooru 远端，返回英文 tag / 中文释义 / 分类 / 热度；本地 danbooru预设库 提供毫秒级本地搜索兜底，自带中英文对照；支持分类过滤与分页加载
 
-* **Tag Group Management**: Create new tag groups, favorite tag groups; organize reusable tag sets
+* **Tag Group Management**: Organized into **3 independent tabs** — Favorite Tags, Custom Tags, and Preset Tags
+* **Preset Tags Tab**: Browse 220k+ built-in tags with **default category filtering** (General, Artist, Copyright, Character, etc.) for faster searching
 * **Tag Search**: Bilingual search (case-insensitive); supports **favorite tag group search** and **custom tag group search**; custom groups prioritized; one-click add to prompt
 * **Data Sources**: Preset library (220k+ entries) + user-created tag groups + favorite tag groups
 * **Danbooru Data Search**: After switching to Danbooru mode, search connects to Danbooru remote in real-time, returning EN tag / CN description / category / popularity; local danbooru预设库 provides millisecond-level local search fallback with built-in Chinese/English mapping; supports category filtering and pagination
@@ -908,6 +945,8 @@ Google Drive 下载地址 / Download: https://drive.google.com/file/d/10XsVq6m_H
 
 #### ⚠️ 注意事项 / Notes
 
+* **✅ 懒加载机制 / Lazy Loading**: SDNQ 相关节点采用真正的懒加载模式，仅在需要时导入依赖。未安装 SDNQ 时插件可正常加载，其他所有功能不受影响。
+* **Lazy Loading**: SDNQ nodes use true lazy loading - dependencies are only imported when needed. When SDNQ is not installed, the plugin loads normally without errors.
 * **✅ 局部重绘 / Inpainting**：SDNQ K 采样器已适配局部重绘，支持所有 SDNQ 模型（含 Flux2Klein）。使用 ComfyUI 的 **InpaintModelConditioning** + **SetLatentNoiseMask** 准备数据即可；4D latent 模型采用 latent 空间混合，3D packed 模型（如 Flux/Flux2）采用像素空间 composite。下方附有局部重绘示例工作流。
 * **Inpainting supported**: Use **InpaintModelConditioning** + **SetLatentNoiseMask**; 4D models use latent blending, 3D packed models use pixel-space composite. Example workflow below.
 * **🎲 采样模式切换 / Sampler mode**: 可选「仅 SDNQ」或「SDNQ + KSampler」。在「SDNQ + KSampler」模式下，根据接入模型自动选择采样方式（SDNQ 模型走 SDNQ 逻辑，其他模型走官方 KSampler），可当作通用 K 采样器使用。

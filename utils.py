@@ -27,6 +27,9 @@ USER_DIR = os.path.join(BASE_DIR, "userdata")
 _PROMPT_AC_LOCK = threading.Lock()
 _PROMPT_AC_CACHE = None  # dict: entries, buckets, norm_exact_map, preset_sorted_by_norm, ...
 PROMPT_AUTOCOMPLETE_FILE = "tag预设库.txt"
+_MAGIC_PRESET_TAGS_FILE = "magic_preset_tags.txt"
+_PRESET_TAGS_LOCK = threading.Lock()
+_PRESET_TAGS_CACHE = None
 
 
 def ma_invalidate_prompt_autocomplete_cache():
@@ -699,6 +702,119 @@ def _ma_search_danbooru_preset(q: str, limit: int = 50) -> list[dict]:
     return matched[:limit]
 
 
+# --- 预设标签组（savedata/magic_preset_tags.txt）---
+# 格式：分类名（无缩进）→ 分组名（4空格缩进）→ 标签英文（8空格缩进）
+
+
+def _ma_preset_tags_path() -> str:
+    return os.path.join(PRESET_DIR, _MAGIC_PRESET_TAGS_FILE)
+
+
+def _ma_build_preset_cn_map():
+    """读取 savedata/tag预设库.txt，建立英文→中文翻译映射。
+
+    同一英文可能有多条（如"女孩,1girl"和"女孩儿,1girl"），只保留首个。
+    同时做「空格↔下划线」双写，防止预设标签与词库格式细微差异导致匹配失败。
+    """
+    en_cn = {}
+    ac_path = os.path.join(PRESET_DIR, PROMPT_AUTOCOMPLETE_FILE)
+    if os.path.isfile(ac_path):
+        try:
+            with open(ac_path, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or "," not in line:
+                        continue
+                    parts = line.split(",", 1)
+                    if len(parts) < 2:
+                        continue
+                    en_raw = parts[1].strip()
+                    cn = parts[0].strip()
+                    if not en_raw or not cn:
+                        continue
+                    # 首次出现则注册
+                    if en_raw not in en_cn:
+                        en_cn[en_raw] = cn
+                    # 同时注册空格/下划线互换版本（双向）
+                    en_underscore = en_raw.replace(" ", "_")
+                    en_space = en_raw.replace("_", " ")
+                    if en_underscore not in en_cn and en_underscore != en_raw:
+                        en_cn[en_underscore] = cn
+                    if en_space not in en_cn and en_space != en_raw:
+                        en_cn[en_space] = cn
+        except Exception:
+            pass
+    return en_cn
+
+
+def _ma_load_preset_tags_sync():
+    """同步加载 magic_preset_tags.txt，解析为 {categories: [{name, groups: [{name, tags: []}]}]}。
+    支持任意缩进深度：按行首空格数判断层级（0=分类，4=分组，>=8=标签）。
+    每个标签条目格式：{ text: en, cn: cn 或空字符串 }
+    """
+    global _PRESET_TAGS_CACHE
+    if _PRESET_TAGS_CACHE is not None:
+        return _PRESET_TAGS_CACHE
+    with _PRESET_TAGS_LOCK:
+        if _PRESET_TAGS_CACHE is not None:
+            return _PRESET_TAGS_CACHE
+        path = _ma_preset_tags_path()
+        categories = []
+        cur_cat = None
+        cur_grp = None
+        en_cn_map = _ma_build_preset_cn_map()
+        if not os.path.isfile(path):
+            _PRESET_TAGS_CACHE = categories
+            return categories
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                for raw in f:
+                    line = raw.rstrip("\n\r")
+                    if not line or line.startswith("#"):
+                        continue
+                    stripped = line.lstrip()
+                    indent = len(line) - len(stripped)
+                    content = stripped.strip()
+                    if not content:
+                        continue
+                    if indent == 0:
+                        # 分类
+                        cur_cat = {"name": content, "groups": []}
+                        categories.append(cur_cat)
+                        cur_grp = None
+                    elif indent >= 4 and indent < 8:
+                        # 分组
+                        cur_grp = {"name": content, "tags": []}
+                        if cur_cat is not None:
+                            cur_cat["groups"].append(cur_grp)
+                        else:
+                            # 顶层无分类兜底
+                            fake_cat = {"name": "", "groups": []}
+                            fake_cat["groups"].append(cur_grp)
+                            categories.insert(0, fake_cat)
+                            cur_cat = fake_cat
+                    else:  # indent >= 8 → 标签
+                        tag_en = content
+                        tag_cn = en_cn_map.get(tag_en, "")
+                        tag_entry = {"text": tag_en, "cn": tag_cn}
+                        if cur_grp is not None:
+                            cur_grp["tags"].append(tag_entry)
+                        elif cur_cat is not None:
+                            # 无分组兜底
+                            fake_grp = {"name": "", "tags": [tag_entry]}
+                            cur_cat["groups"].append(fake_grp)
+                            cur_grp = fake_grp
+        except Exception as e:
+            print(f"\033[31m[Magic Assistant] 加载 preset_tags 失败: {e}\033[0m")
+        _PRESET_TAGS_CACHE = categories
+        return categories
+
+
+def ma_invalidate_preset_tags_cache():
+    global _PRESET_TAGS_CACHE
+    _PRESET_TAGS_CACHE = None
+
+
 # --- API 路由 ---
 @PromptServer.instance.routes.get("/ma/get_config")
 async def get_config(request):
@@ -808,8 +924,11 @@ async def ma_prompt_autocomplete_batch(request):
     """批量查中文提示词（rebuildTagChips 批量获取 chip 翻译用）。
 
     请求体：{ "queries": ["word1", "word2", ...] }
-    对每个 query 仅当「整条 tag」规范化后与词典某条 en 规范化完全一致时才返回中文（空格与 _ 等价）；
-    无精确命中则不返回该项（前端可再走 LLM 或显示「—」）。
+    匹配策略（按优先级）：
+    1. 精确规范化匹配（空格与 _ 等价）→ 返回中文
+    2. 前缀/后缀模糊匹配 → 查询词是 tag 的前后缀 → 返回中文
+    3. 包含匹配 → 查询词包含 tag（或被 tag 包含） → 返回中文
+    无匹配则不返回该项（前端可再走 LLM 或显示「—」）。
 
     返回：{ "results": { "<规范化key>": {"en":"...", "cn":"..."}, ... } }
     已缓存的词直接跳过（前端自行维护 cnHintCache）。
@@ -822,8 +941,8 @@ async def ma_prompt_autocomplete_batch(request):
 
         cache = ma_get_prompt_autocomplete_cache()
         norm_map = cache.get("norm_exact_map")
+        entries = cache.get("entries") or []
         if not norm_map:
-            entries = cache.get("entries") or []
             custom_entries = [e for e in entries if e.get("kind") == "tagset" or e.get("source") == "custom"]
             preset_entries = [e for e in entries if not (e.get("kind") == "tagset" or e.get("source") == "custom")]
             norm_map = {}
@@ -832,8 +951,32 @@ async def ma_prompt_autocomplete_batch(request):
                 if k and k not in norm_map:
                     norm_map[k] = e
 
+        # 构建英文 tag 列表（用于模糊匹配）：(norm_key, entry)
+        all_entries_for_fuzzy = list(norm_map.values())
+
+        def _fuzzy_cn(q_norm):
+            """模糊匹配：在英文 tag 列表中找最佳匹配，返回 (en, cn) 或 None。
+            优先级：等长 tag > 更长的 dict tag > 更短的 dict tag。
+            """
+            if not q_norm or not all_entries_for_fuzzy:
+                return None
+            candidates = []
+            for e in all_entries_for_fuzzy:
+                k = e.get("_en_norm_cached") or ma_normalize_en_for_tag_match(e.get("en") or "")
+                if not k or k == q_norm:
+                    continue
+                if k.startswith(q_norm) or q_norm.startswith(k):
+                    candidates.append((k, e))
+            if not candidates:
+                return None
+            # 按 tag 长度降序（更具体的 tag 优先），相等时保持插入顺序
+            candidates.sort(key=lambda x: len(x[0]), reverse=True)
+            best = candidates[0]
+            return (best[1].get("en") or "", best[1].get("cn") or "")
+
         results = {}
         matched = 0
+        fuzzy_matched = 0
         total = 0
         for q in queries:
             if not q or not isinstance(q, str):
@@ -846,10 +989,16 @@ async def ma_prompt_autocomplete_batch(request):
             if entry:
                 matched += 1
                 results[key] = {"en": entry.get("en") or "", "cn": entry.get("cn") or ""}
+            else:
+                # 精确未命中，尝试模糊匹配
+                fuzzy = _fuzzy_cn(key)
+                if fuzzy:
+                    fuzzy_matched += 1
+                    results[key] = {"en": fuzzy[0], "cn": fuzzy[1]}
 
         print(
-            f"\033[32m[Magic Assistant] batch 词典匹配 | 总查询 {total} 条 | 命中 {matched} 条"
-            f"{' | 全部命中' if matched == total else f' | 未命中 {total - matched} 条（将走 LLM）' if matched > 0 else ''}\033[0m"
+            f"\033[32m[Magic Assistant] batch 词典匹配 | 总查询 {total} 条 | 精确命中 {matched} 条 | 模糊命中 {fuzzy_matched} 条"
+            f"{' | 全部命中' if matched + fuzzy_matched == total else f' | 未命中 {total - matched - fuzzy_matched} 条（将走 LLM）' if matched + fuzzy_matched > 0 else ''}\033[0m"
         )
         return web.json_response({"results": results})
     except Exception as e:
@@ -1615,6 +1764,19 @@ async def ma_post_tag_sets(request):
         print(f"\033[31m[Magic Assistant] POST /ma/tag_sets 失败: {e}\033[0m")
         traceback.print_exc()
         return web.json_response({"status": "error", "message": str(e)}, status=500)
+
+
+@PromptServer.instance.routes.get("/ma/preset_tags")
+async def ma_get_preset_tags(request):
+    """返回预设标签组 { categories: [{name, groups: [{name, tags: []}]}] }"""
+    try:
+        loop = asyncio.get_running_loop()
+        categories = await loop.run_in_executor(None, _ma_load_preset_tags_sync)
+        return web.json_response({"categories": categories})
+    except Exception as e:
+        print(f"\033[31m[Magic Assistant] GET /ma/preset_tags 失败: {e}\033[0m")
+        traceback.print_exc()
+        return web.json_response({"categories": [], "error": str(e)}, status=500)
 
 
 # --- Magic 提示词框 · 运行历史与历史收藏（userdata/magic_prompt_history.json）---
@@ -2462,9 +2624,9 @@ async def check_update(request):
         
         if test_mode:
             # 测试模式：返回模拟的更新数据
-            current_version = "1.3.3"
+            current_version = "1.3.4"
             # 模拟一个更新的版本
-            latest_version = "1.3.4"
+            latest_version = "1.3.5"
             has_update = True
             
             # 读取本地 README 文件作为测试数据
@@ -2497,7 +2659,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.3.3"  # Current version / 当前版本号
+        current_version = "1.3.4"  # Current version / 当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:
@@ -2572,7 +2734,7 @@ async def check_update(request):
         })
     except Exception as e:
         return web.json_response({
-            "current_version": "1.3.3",
+            "current_version": "1.3.4",
             "latest_version": None,
             "has_update": False,
             "update_info": "",

@@ -293,26 +293,76 @@ class MagicPowerLoraLoader:
     # 值: 加载的 lora dict
     _loaded_loras = {}
 
-    def _get_cached_lora(self, lora_path, weight):
+    # 类级别：本次执行使用的 LoRA 缓存键集合（用于执行后清理未使用的缓存）
+    # 使用类属性确保在多次运行间正确追踪
+    _current_run_used_keys = set()
+
+    @classmethod
+    def _mark_lora_used(cls, cache_key):
+        """标记本次运行使用了某个 LoRA 缓存"""
+        cls._current_run_used_keys.add(cache_key)
+
+    @classmethod
+    def _reset_used_tracking(cls):
+        """重置追踪状态，在每次 apply_loras 开始时调用"""
+        cls._current_run_used_keys = set()
+
+    @classmethod
+    def _get_cached_lora(cls, lora_path, weight):
         """从缓存获取 LoRA 数据，或加载并缓存"""
         cache_key = (lora_path, weight)
-        if cache_key in self._loaded_loras:
+        cls._mark_lora_used(cache_key)  # 记录本次使用了该 LoRA
+        if cache_key in cls._loaded_loras:
             print(f"   💾 [Cache Hit] {os.path.basename(lora_path)} (weight={weight})")
-            return self._loaded_loras[cache_key]
+            return cls._loaded_loras[cache_key]
         
         lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
-        self._loaded_loras[cache_key] = lora
+        cls._loaded_loras[cache_key] = lora
         return lora
 
-    def _clear_lora_cache(self, lora_path=None):
+    @classmethod
+    def _cleanup_unused_lora_cache(cls):
+        """清理本次执行中未使用的 LoRA 缓存，释放内存"""
+        if not cls._loaded_loras:
+            return
+        
+        # 找出本次执行未使用的缓存项
+        unused_keys = set(cls._loaded_loras.keys()) - cls._current_run_used_keys
+        if not unused_keys:
+            return
+        
+        # 清除未使用的缓存并释放内存
+        cleared_count = 0
+        for cache_key in unused_keys:
+            lora_data = cls._loaded_loras.get(cache_key)
+            if lora_data is not None:
+                cleared_count += 1
+                # 遍历所有张量并移动到 CPU 然后删除（帮助释放 GPU 内存）
+                for key in list(lora_data.keys()):
+                    tensor = lora_data[key]
+                    if hasattr(tensor, 'cpu'):
+                        try:
+                            tensor = tensor.cpu()
+                        except Exception:
+                            pass
+                    del tensor
+                # 清除字典中的引用
+                lora_data.clear()
+            del cls._loaded_loras[cache_key]
+        
+        print(f"   🧹 [Cache Cleanup] 已释放 {cleared_count} 个未使用 LoRA 的缓存")
+        cls._current_run_used_keys = set()  # 重置追踪状态
+
+    @classmethod
+    def _clear_lora_cache(cls, lora_path=None):
         """清除缓存，可指定清除特定路径或全部"""
         if lora_path is None:
-            self._loaded_loras.clear()
+            cls._loaded_loras.clear()
         else:
             # 清除与该路径相关的所有缓存项
-            keys_to_remove = [k for k in self._loaded_loras if k[0] == lora_path]
+            keys_to_remove = [k for k in cls._loaded_loras if k[0] == lora_path]
             for k in keys_to_remove:
-                del self._loaded_loras[k]
+                del cls._loaded_loras[k]
 
     # 检测模型是否为 INT8 量化模型
     @staticmethod
@@ -401,6 +451,9 @@ class MagicPowerLoraLoader:
         sdnq_mode: "none" (默认), "sdnq" (SDNQ 模式，用于 DiffusionPipeline)
         链末端由「lora串输出」是否被连接判定：未连接则为末端，末端才加载 LoRA 并需连接 model/clip。
         """
+        # 重置本次执行使用的 LoRA 追踪（每次运行独立追踪）
+        MagicPowerLoraLoader._reset_used_tracking()
+        
         # 确保 adaptive_mode 是正确的布尔值（处理 JavaScript 传递的字符串 "false"）
         if isinstance(adaptive_mode, str):
             adaptive_mode = adaptive_mode.lower() == "true"
@@ -521,7 +574,7 @@ class MagicPowerLoraLoader:
 
                 try:
                     # 使用缓存加载 LoRA 文件
-                    lora = self._get_cached_lora(lora_path, weight)
+                    lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
                     
                     # 克隆 model patcher
                     model_patcher = out_model.clone()
@@ -588,7 +641,7 @@ class MagicPowerLoraLoader:
                     print(f"   ❌ Failed (INT8 Stochastic): {lora_name} -> {e}")
                     # 回退到标准模式
                     try:
-                        lora = self._get_cached_lora(lora_path, weight)
+                        lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
                         out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
                         print(f"   ✅ Applied (Fallback): {lora_name}")
                     except Exception as e2:
@@ -622,7 +675,7 @@ class MagicPowerLoraLoader:
 
                 try:
                     # 使用缓存加载 LoRA 文件
-                    lora = self._get_cached_lora(lora_path, weight)
+                    lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
                     
                     # 克隆 model patcher
                     model_patcher = out_model.clone()
@@ -661,7 +714,7 @@ class MagicPowerLoraLoader:
                     print(f"   ❌ Failed (INT8 Dynamic): {lora_name} -> {e}")
                     # 回退到标准模式
                     try:
-                        lora = self._get_cached_lora(lora_path, weight)
+                        lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
                         out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
                         print(f"   ✅ Applied (Fallback): {lora_name}")
                     except Exception as e2:
@@ -799,7 +852,7 @@ class MagicPowerLoraLoader:
 
                 try:
                     # 使用缓存加载 LoRA
-                    lora = self._get_cached_lora(lora_path, weight)
+                    lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
                     out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
                     print(f"   ✅ Applied: {lora_name}")
                 except Exception as e:
@@ -824,6 +877,10 @@ class MagicPowerLoraLoader:
             preview_images = [torch.zeros((1, 64, 64, 3), dtype=torch.float32, device="cpu")]
 
         final_text = ", ".join(active_tags)
+        
+        # 执行完成后清理未使用的 LoRA 缓存，释放内存
+        MagicPowerLoraLoader._cleanup_unused_lora_cache()
+        
         return (out_model, out_clip, preview_images, final_text, lora_chain_out)
 
 # --- API 接口 ---

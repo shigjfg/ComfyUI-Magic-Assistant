@@ -312,7 +312,12 @@ function makeDialogResizable(dialog, options = {}) {
         document.removeEventListener("mouseup", onEnd);
         document.removeEventListener("touchmove", onMoveTouch);
         document.removeEventListener("touchend", onEnd);
-        if (onResizeEnd) onResizeEnd(parseInt(dialog.style.width), parseInt(dialog.style.height));
+        const finalW = parseInt(dialog.style.width, 10);
+        const finalH = parseInt(dialog.style.height, 10);
+        if (Number.isFinite(finalW) && Number.isFinite(finalH) &&
+            finalW >= minW && finalH >= minH) {
+            if (onResizeEnd) onResizeEnd(finalW, finalH);
+        }
     };
 
     const onMoveTouch = (e) => {
@@ -599,16 +604,51 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     inner.appendChild(hdr);
     makeDialogDraggable(inner, hdr);
 
-    const body = document.createElement("div");
-    // min-height:0 + overflow:hidden：让子项 flex 分区生效；表格只在下方区域内滚动，不挤扁上方卡片区
-    body.style.cssText = `
-        padding: 12px 14px 16px;
-        flex: 1; min-height: 0; overflow: hidden;
-        font-size: 13px; color: ${THEME.text2};
-        line-height: 1.5;
-        display: flex; flex-direction: column; gap: 0;
-    `;
-    preventConflict(body);
+    // ---------- 内部分页栏（自建标签 vs 预设标签） ----------
+    const subTabBar = document.createElement("div");
+    subTabBar.style.cssText = "display:flex;align-items:center;flex-shrink:0;padding:0 0 10px;gap:6px;flex-wrap:wrap;";
+    const SUB_TABS_ET = [
+        { id: "search", label: magicT("🔍 标签搜索"), accent: "#388E3C" },
+        { id: "preset", label: magicT("📦 预设标签"), accent: "#1976D2" },
+        { id: "custom", label: magicT("🏷️ 自建/收藏"), accent: "#9C27B0" },
+    ];
+    let activeSubTab = "search";
+    SUB_TABS_ET.forEach((t) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = t.label;
+        btn.dataset.stId = t.id;
+        const isActive = activeSubTab === t.id;
+        btn.style.cssText = "padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid " + (isActive ? t.accent : "#3c3c3c") + ";background:" + (isActive ? t.accent : "#2d2d2d") + ";color:" + (isActive ? "#fff" : "#cccccc") + ";flex-shrink:0;";
+        preventConflict(btn);
+        btn.addEventListener("click", () => {
+            activeSubTab = t.id;
+            searchPanel.style.display = activeSubTab === "search" ? "flex" : "none";
+            presetPanel.style.display = activeSubTab === "preset" ? "flex" : "none";
+            customPanel.style.display = activeSubTab === "custom" ? "flex" : "none";
+            subTabBar.querySelectorAll("button").forEach((b) => {
+                const def = SUB_TABS_ET.find((d) => d.id === b.dataset.stId);
+                const ia = b.dataset.stId === activeSubTab;
+                b.style.background = ia ? (def ? def.accent : "#9C27B0") : "#2d2d2d";
+                b.style.color = ia ? "#fff" : "#cccccc";
+                b.style.borderColor = ia ? (def ? def.accent : "#9C27B0") : "#3c3c3c";
+            });
+        });
+        subTabBar.appendChild(btn);
+    });
+
+    // ---------- 面板容器 ----------
+    const searchPanel = document.createElement("div");
+    searchPanel.style.cssText = "flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:0;";
+    preventConflict(searchPanel);
+
+    const presetPanel = document.createElement("div");
+    presetPanel.style.cssText = "flex:1;min-height:0;overflow:hidden;display:none;flex-direction:column;gap:0;";
+    preventConflict(presetPanel);
+
+    const customPanel = document.createElement("div");
+    customPanel.style.cssText = "flex:1;min-height:0;overflow:hidden;display:none;flex-direction:column;gap:0;";
+    preventConflict(customPanel);
 
     const topZone = document.createElement("div");
     topZone.style.cssText = `
@@ -1043,17 +1083,12 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         }
     });
 
-    topZone.appendChild(newTagBar);
-    topZone.appendChild(secNew.block);
-    topZone.appendChild(secFav.block);
-    body.appendChild(topZone);
-
     const divider = document.createElement("div");
     divider.style.cssText = `
         height: 1px; background: ${THEME.border};
         margin: 10px 0 12px; flex-shrink: 0;
     `;
-    body.appendChild(divider);
+    customPanel.appendChild(divider);
 
     const bottomZone = document.createElement("div");
     bottomZone.style.cssText = `
@@ -1064,6 +1099,11 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         overflow: hidden;
     `;
     preventConflict(bottomZone);
+
+    topZone.appendChild(newTagBar);
+    topZone.appendChild(secNew.block);
+    topZone.appendChild(secFav.block);
+    customPanel.appendChild(topZone);
 
     const searchTitle = document.createElement("div");
     searchTitle.textContent = magicT("标签搜索");
@@ -1088,6 +1128,24 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         font-size: 13px; box-sizing: border-box; outline: none;
     `;
     preventConflict(searchInp);
+
+    // 本地/远端切换按钮（始终显示）
+    const searchModeWrap = document.createElement("div");
+    searchModeWrap.style.cssText = "display:flex;gap:4px;flex-shrink:0;";
+    preventConflict(searchModeWrap);
+    const localBtn = document.createElement("button");
+    localBtn.type = "button";
+    localBtn.textContent = magicT("本地");
+    localBtn.style.cssText = "padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid #3c3c3c;background:#2d2d2d;color:#ccc;";
+    preventConflict(localBtn);
+    const remoteBtn = document.createElement("button");
+    remoteBtn.type = "button";
+    remoteBtn.textContent = magicT("远端");
+    remoteBtn.style.cssText = "padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid #3c3c3c;background:#2d2d2d;color:#ccc;";
+    preventConflict(remoteBtn);
+    searchModeWrap.appendChild(localBtn);
+    searchModeWrap.appendChild(remoteBtn);
+
     const searchBtn = document.createElement("button");
     searchBtn.type = "button";
     searchBtn.textContent = magicT("搜索");
@@ -1099,7 +1157,105 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     preventConflict(searchBtn);
     searchBtn.addEventListener("mouseenter", () => { searchBtn.style.opacity = "0.92"; });
     searchBtn.addEventListener("mouseleave", () => { searchBtn.style.opacity = "1"; });
+
+    // searchDanbooruMode: true = 远端 Danbooru, false = 本地预设库
+    let searchDanbooruMode = danbooruMode;
+
+    const applySearchModeBtnStyle = () => {
+        if (searchDanbooruMode) {
+            remoteBtn.style.background = "#1976d2";
+            remoteBtn.style.color = "#fff";
+            remoteBtn.style.borderColor = "#1976d2";
+            localBtn.style.background = "#2d2d2d";
+            localBtn.style.color = "#ccc";
+            localBtn.style.borderColor = "#3c3c3c";
+        } else {
+            localBtn.style.background = "#2e7d32";
+            localBtn.style.color = "#fff";
+            localBtn.style.borderColor = "#2e7d32";
+            remoteBtn.style.background = "#2d2d2d";
+            remoteBtn.style.color = "#ccc";
+            remoteBtn.style.borderColor = "#3c3c3c";
+        }
+    };
+    applySearchModeBtnStyle();
+
+    const _refreshSearchHint = () => {
+        searchHint.style.cssText = searchDanbooruMode
+            ? `
+            margin-top: 8px; font-size: 11px; line-height: 1.45; flex-shrink: 0;
+            color: ${THEME.success};
+            padding: 8px 10px; border-radius: 6px;
+            background: ${THEME.bg3};
+            border: 1px solid rgba(76, 175, 80, 0.35);
+        `
+            : `
+            margin-top: 8px; font-size: 11px; color: ${THEME.text2}; line-height: 1.45;
+            flex-shrink: 0;
+        `;
+        searchHint.innerHTML = searchDanbooruMode
+            ? magicT(
+                  "【Danbooru 远端】英文：多页取回后排序——有本地中文释义的优先于无中文，再按热度。中文搜索：词库译成英文根后向 Danbooru 按英文名匹配；「中文」列须命中你的词，且查询不少于 3 字时排除「更长前缀复合释义」（如搜「健身房」不显示释义为「健身房淋浴」的 tag）。「中文」列来自本地词库。若出现与前排相似的英文名，多为远端另一条独立 tag（含错拼），无预设译名时「中文」为—。",
+              ) +
+              magicT("（每页最多 100 条，向下滚动加载更多；关键词过短建议打更完整的词。）")
+            : magicT("匹配方式与提示词补全相同：英文 ") +
+              "<b>" +
+              magicT("包含") +
+              "</b>" +
+              magicT("（不区分大小写），中文 ") +
+              "<b>" +
+              magicT("包含") +
+              "</b>" +
+              magicT("。") +
+              "<b>" +
+              magicT("显示全部") +
+              "</b>" +
+              magicT("匹配结果（无条数上限）；自建标签组优先列出。关键词过短时结果可能很多，建议打全名缩小范围。");
+    };
+
+    localBtn.addEventListener("click", () => { searchDanbooruMode = false; _rebuildTableHead(); applySearchModeBtnStyle(); _refreshSearchHint(); if (lastFetchedItems.length) renderSearchRows(lastFetchedItems, ""); });
+    remoteBtn.addEventListener("click", async () => {
+        if (searchDanbooruMode) return;
+        remoteBtn.disabled = true;
+        remoteBtn.textContent = magicT("连接中...");
+        try {
+            const result = await magicDanbooruCheckConnection();
+            if (result && result.ok) {
+                searchDanbooruMode = true;
+                if (!searchStatRow) {
+                    searchStatRow = document.createElement("div");
+                    searchStatRow.style.cssText = `
+                        font-size: 10px; color: ${THEME.text2}; margin: 0 0 8px 2px;
+                        line-height: 1.45; min-height: 16px;
+                    `;
+                    searchStatRow.textContent = "";
+                    bottomZone.appendChild(searchStatRow);
+                }
+                _rebuildTableHead();
+                applySearchModeBtnStyle();
+                _refreshSearchHint();
+                if (lastFetchedItems.length) renderSearchRows(lastFetchedItems, "");
+                refreshTagSearchStat();
+            } else {
+                const msg = (result && result.message) ? String(result.message) : magicT("连接失败");
+                alert(magicT("Danbooru 远端连接失败：") + msg + "\n" + magicT("已自动切换回本地预设库。"));
+                searchDanbooruMode = false;
+                applySearchModeBtnStyle();
+                _refreshSearchHint();
+            }
+        } catch (e) {
+            alert(magicT("Danbooru 远端连接异常：") + String(e && e.message ? e.message : e) + "\n" + magicT("已自动切换回本地预设库。"));
+            searchDanbooruMode = false;
+            applySearchModeBtnStyle();
+            _refreshSearchHint();
+        } finally {
+            remoteBtn.disabled = false;
+            remoteBtn.textContent = magicT("远端");
+        }
+    });
+
     searchRow.appendChild(searchInp);
+    searchRow.appendChild(searchModeWrap);
     searchRow.appendChild(searchBtn);
     bottomZone.appendChild(searchRow);
 
@@ -1112,7 +1268,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     let danbooruTagSearchPage = 1;
     let lastDanbooruSearchQuery = "";
     let danbooruLoadingMore = false;
-    if (danbooruMode) {
+    if (searchDanbooruMode) {
         searchStatRow = document.createElement("div");
         searchStatRow.style.cssText = `
             font-size: 10px; color: ${THEME.text2}; margin: 0 0 8px 2px;
@@ -1123,7 +1279,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     }
 
     function refreshTagSearchStat() {
-        if (!danbooruMode || !searchStatRow) return;
+        if (!searchDanbooruMode || !searchStatRow) return;
         const n = lastFetchedItems.length;
         const filtered =
             editTagsCatFilter == null
@@ -1178,117 +1334,79 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     const table = document.createElement("table");
     table.style.cssText = "width:100%; border-collapse:collapse; font-size:12px;";
     const thead = document.createElement("thead");
+    thead.style.cssText = `position: sticky; top: 0; z-index: 2; box-shadow: 0 1px 0 ${THEME.border};`;
     const thr = document.createElement("tr");
     thr.style.cssText = `background:${THEME.bg3}; color:${THEME.text2};`;
-    thead.style.cssText = `position: sticky; top: 0; z-index: 2; box-shadow: 0 1px 0 ${THEME.border};`;
-
-    if (danbooruMode) {
-        // 固定列宽 + table-layout:fixed，表头与单元格 text-align 一致，避免「分类」「热度」错位
-        table.style.tableLayout = "fixed";
-        const cg = document.createElement("colgroup");
-        const colSpecs = [
-            { w: "32%" },
-            { w: "24%" },
-            { w: "112px" },
-            { w: "76px" },
-            { w: "76px" },
-        ];
-        colSpecs.forEach(({ w }) => {
-            const col = document.createElement("col");
-            col.style.width = w;
-            cg.appendChild(col);
-        });
-        table.appendChild(cg);
-
-        const thAlign = ["left", "left", "center", "right", "center"];
-        const colHdr = [
-            magicT("Tag"),
-            magicT("中文"),
-            null,
-            magicT("热度"),
-            magicT("操作"),
-        ];
-        for (let i = 0; i < 5; i++) {
-            const th = document.createElement("th");
-            if (i === 2) {
-                th.style.cssText = `
-                    padding: 5px 4px;
-                    text-align: center;
-                    font-weight: 600;
-                    border-bottom: 1px solid ${THEME.border};
-                    box-sizing: border-box;
-                    vertical-align: middle;
-                `;
-                const catHeadRow = document.createElement("div");
-                catHeadRow.style.cssText =
-                    "display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;";
-                const catTitle = document.createElement("span");
-                catTitle.textContent = magicT("分类");
-                catTitle.style.cssText = "font-size:10px;line-height:1;white-space:nowrap;";
-                editTagsCatSelect = document.createElement("select");
-                editTagsCatSelect.title = magicT("按分类筛选");
-                editTagsCatSelect.style.cssText = `
-                    flex:0 1 auto;width:auto;max-width:54px;min-width:0;height:17px;
-                    line-height:15px;padding:0 1px 0 2px;margin:0;
-                    font-size:9px;font-weight:600;font-family:inherit;
-                    background:${THEME.bg3};color:${THEME.text};
-                    border:1px solid ${THEME.border};border-radius:3px;
-                    outline:none;cursor:pointer;box-sizing:border-box;
-                `;
-                DANBOORU_CAT_FILTER_OPTIONS.forEach((opt) => {
-                    const op = document.createElement("option");
-                    op.value = opt.value === null ? "" : String(opt.value);
-                    op.textContent = opt.label;
-                    editTagsCatSelect.appendChild(op);
-                });
-                preventConflict(editTagsCatSelect);
-                editTagsCatSelect.addEventListener("change", () => {
-                    const v = editTagsCatSelect.value;
-                    editTagsCatFilter = v === "" ? null : Number(v);
-                    refreshTagSearchStat();
-                    if (lastFetchedItems.length) {
-                        const emptyMsg = lastFetchedItems.length
-                            ? magicT("该分类下无结果。")
-                            : magicT("无结果，请更换关键词。");
-                        const filtered =
-                            editTagsCatFilter == null
-                                ? lastFetchedItems
-                                : lastFetchedItems.filter((it) => it.category === editTagsCatFilter);
-                        renderSearchRows(filtered, emptyMsg);
-                    }
-                });
-                catHeadRow.appendChild(catTitle);
-                catHeadRow.appendChild(editTagsCatSelect);
-                th.appendChild(catHeadRow);
-            } else {
-                th.textContent = colHdr[i];
-                th.style.cssText = `
-                    padding: 8px 8px;
-                    text-align: ${thAlign[i]};
-                    font-weight: 600;
-                    border-bottom: 1px solid ${THEME.border};
-                    box-sizing: border-box;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                `;
-            }
-            thr.appendChild(th);
-        }
-    } else {
-        [magicT("Tag"), magicT("中文"), magicT("操作")].forEach((label, i) => {
-            const th = document.createElement("th");
-            th.textContent = label;
-            th.style.cssText = `
-                padding: 8px 10px; text-align: ${i === 2 ? "center" : "left"};
-                font-weight: 600; border-bottom: 1px solid ${THEME.border};
-                ${i === 0 ? "width:36%;" : ""}
-                ${i === 2 ? "width:76px;" : ""}
-            `;
-            thr.appendChild(th);
-        });
-    }
     thead.appendChild(thr);
+
+    /** 根据当前 searchDanbooruMode 重建表头（可重复调用） */
+    function _rebuildTableHead() {
+        while (thr.firstChild) thr.removeChild(thr.firstChild);
+        table.style.tableLayout = "";
+        const oldCg = table.querySelector("colgroup");
+        if (oldCg) oldCg.remove();
+        editTagsCatSelect = null;
+        if (searchDanbooruMode) {
+            table.style.tableLayout = "fixed";
+            const cg = document.createElement("colgroup");
+            ["32%", "24%", "112px", "76px", "76px"].forEach((w) => {
+                const col = document.createElement("col");
+                col.style.width = w;
+                cg.appendChild(col);
+            });
+            table.insertBefore(cg, table.firstChild);
+            const thAlign = ["left", "left", "center", "right", "center"];
+            const colHdr = [magicT("Tag"), magicT("中文"), null, magicT("热度"), magicT("操作")];
+            for (let i = 0; i < 5; i++) {
+                const th = document.createElement("th");
+                if (i === 2) {
+                    th.style.cssText = `padding:5px 4px;text-align:center;font-weight:600;border-bottom:1px solid ${THEME.border};box-sizing:border-box;vertical-align:middle;`;
+                    const catHeadRow = document.createElement("div");
+                    catHeadRow.style.cssText = "display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;";
+                    const catTitle = document.createElement("span");
+                    catTitle.textContent = magicT("分类");
+                    catTitle.style.cssText = "font-size:10px;line-height:1;white-space:nowrap;";
+                    editTagsCatSelect = document.createElement("select");
+                    editTagsCatSelect.title = magicT("按分类筛选");
+                    editTagsCatSelect.style.cssText = `flex:0 1 auto;width:auto;max-width:54px;min-width:0;height:17px;line-height:15px;padding:0 1px 0 2px;margin:0;font-size:9px;font-weight:600;font-family:inherit;background:${THEME.bg3};color:${THEME.text};border:1px solid ${THEME.border};border-radius:3px;outline:none;cursor:pointer;box-sizing:border-box;`;
+                    DANBOORU_CAT_FILTER_OPTIONS.forEach((opt) => {
+                        const op = document.createElement("option");
+                        op.value = opt.value === null ? "" : String(opt.value);
+                        op.textContent = opt.label;
+                        editTagsCatSelect.appendChild(op);
+                    });
+                    preventConflict(editTagsCatSelect);
+                    editTagsCatSelect.addEventListener("change", () => {
+                        const v = editTagsCatSelect.value;
+                        editTagsCatFilter = v === "" ? null : Number(v);
+                        refreshTagSearchStat();
+                        if (lastFetchedItems.length) {
+                            const emptyMsg = editTagsCatFilter != null && !lastFetchedItems.some((it) => it.category === editTagsCatFilter)
+                                ? magicT("该分类下无结果。") : magicT("无结果，请更换关键词。");
+                            const filtered = editTagsCatFilter == null ? lastFetchedItems : lastFetchedItems.filter((it) => it.category === editTagsCatFilter);
+                            renderSearchRows(filtered, emptyMsg);
+                        }
+                    });
+                    catHeadRow.appendChild(catTitle);
+                    catHeadRow.appendChild(editTagsCatSelect);
+                    th.appendChild(catHeadRow);
+                } else {
+                    th.textContent = colHdr[i];
+                    th.style.cssText = `padding:8px 8px;text-align:${thAlign[i]};font-weight:600;border-bottom:1px solid ${THEME.border};box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;`;
+                }
+                thr.appendChild(th);
+            }
+        } else {
+            thr.style.cssText = `background:${THEME.bg3}; color:${THEME.text2};`;
+            [magicT("Tag"), magicT("中文"), magicT("操作")].forEach((label, i) => {
+                const th = document.createElement("th");
+                th.textContent = label;
+                th.style.cssText = `padding:8px 10px;text-align:${i === 2 ? "center" : "left"};font-weight:600;border-bottom:1px solid ${THEME.border};${i === 0 ? "width:36%;" : ""}${i === 2 ? "width:76px;" : ""}`;
+                thr.appendChild(th);
+            });
+        }
+    }
+    _rebuildTableHead();
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
     table.appendChild(tbody);
@@ -1296,7 +1414,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     bottomZone.appendChild(tableWrap);
 
     const searchHint = document.createElement("div");
-    searchHint.style.cssText = danbooruMode
+    searchHint.style.cssText = searchDanbooruMode
         ? `
         margin-top: 8px; font-size: 11px; line-height: 1.45; flex-shrink: 0;
         color: ${THEME.success};
@@ -1308,7 +1426,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         margin-top: 8px; font-size: 11px; color: ${THEME.text2}; line-height: 1.45;
         flex-shrink: 0;
     `;
-    if (danbooruMode) {
+    if (searchDanbooruMode) {
         // 与后端一致：Danbooru 只按英文 tag 名检索；「中文」列是本地词库释义，易与「中文包含」误解
         searchHint.innerHTML =
             magicT(
@@ -1323,8 +1441,6 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     }
     bottomZone.appendChild(searchHint);
 
-    body.appendChild(bottomZone);
-
     const fmtCount = (n) => {
         if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
         if (n >= 1000) return (n / 1000).toFixed(1) + "K";
@@ -1333,7 +1449,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
 
     const renderSearchRows = (items, emptyMessage) => {
         tbody.innerHTML = "";
-        const colSpan = danbooruMode ? 5 : 3;
+        const colSpan = searchDanbooruMode ? 5 : 3;
         if (!items || !items.length) {
             const tr = document.createElement("tr");
             const td = document.createElement("td");
@@ -1350,7 +1466,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
             tr.addEventListener("mouseenter", () => { tr.style.background = THEME.hover; });
             tr.addEventListener("mouseleave", () => { tr.style.background = "transparent"; });
 
-            if (danbooruMode) {
+            if (searchDanbooruMode) {
                 // Danbooru 模式：英文 / 中文 / 分类 / 热度 / 操作（与 thead 同 padding、text-align）
                 const cellBase = `box-sizing:border-box;padding:8px 8px;vertical-align:middle;`;
                 const tdEn = document.createElement("td");
@@ -1464,7 +1580,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
 
     const setSearchLoading = (on) => {
         tbody.innerHTML = "";
-        const colSpan = danbooruMode ? 5 : 3;
+        const colSpan = searchDanbooruMode ? 5 : 3;
         const tr = document.createElement("tr");
         const td = document.createElement("td");
         td.colSpan = colSpan;
@@ -1475,7 +1591,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     };
 
     const loadMoreDanbooruTags = async () => {
-        if (!danbooruMode || !danbooruTagSearchHasMore || danbooruLoadingMore || !lastDanbooruSearchQuery) {
+        if (!searchDanbooruMode || !danbooruTagSearchHasMore || danbooruLoadingMore || !lastDanbooruSearchQuery) {
             return;
         }
         danbooruLoadingMore = true;
@@ -1526,7 +1642,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         try {
             let items = [];
             const isCnQuery = Boolean(q && /[\u4e00-\u9fff]/.test(q));
-            if (danbooruMode) {
+            if (searchDanbooruMode) {
                 lastDanbooruSearchQuery = q;
                 danbooruTagSearchPage = 1;
                 const res = await magicDanbooruSearch(q, DANBOORU_TAG_SEARCH_PAGE_SIZE, 1);
@@ -1566,7 +1682,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
                 items,
                 items.length ? undefined : magicT("无结果，请更换关键词。"),
             );
-            if (danbooruMode) {
+            if (searchDanbooruMode) {
                 refreshTagSearchStat();
                 void (async () => {
                     for (let i = 0; i < 30; i++) {
@@ -1581,7 +1697,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         } catch (err) {
             console.warn("[MagicText] tag search", err);
             tbody.innerHTML = "";
-            const colSpan = danbooruMode ? 5 : 3;
+            const colSpan = searchDanbooruMode ? 5 : 3;
             const tr = document.createElement("tr");
             const td = document.createElement("td");
             td.colSpan = colSpan;
@@ -1595,7 +1711,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         }
     };
 
-    if (danbooruMode) {
+    if (searchDanbooruMode) {
         let scrollTimer = null;
         tableWrap.addEventListener("scroll", () => {
             clearTimeout(scrollTimer);
@@ -1621,9 +1737,917 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     });
 
     renderSearchRows([], magicT("请输入关键词后点击搜索。"));
+    searchPanel.appendChild(bottomZone);
 
+    const body = document.createElement("div");
+    body.style.cssText = "padding:12px 14px 16px;flex:1;min-height:0;overflow:hidden;font-size:13px;color:#cccccc;line-height:1.5;display:flex;flex-direction:column;gap:0;";
+    preventConflict(body);
+    body.appendChild(subTabBar);
+    body.appendChild(searchPanel);
+    body.appendChild(presetPanel);
+    body.appendChild(customPanel);
     inner.appendChild(body);
 
+    // ----- 预设标签面板（美化的三级导航 + 搜索） -----
+    const _buildPresetPanel = (presetTagsAbort) => {
+        const container = document.createElement("div");
+        container.style.cssText = "flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;";
+        preventConflict(container);
+
+        let presetCategories = [];
+        let activeCategory = null;   // 当前选中的一级分类
+        let activeGroup = null;      // 当前选中的二级分组
+        let searchQuery = "";       // 搜索关键词
+
+        // ---- 搜索栏区域 ----
+        const searchBar = document.createElement("div");
+        searchBar.style.cssText = [
+            "display:flex",
+            "align-items:center",
+            "gap:8px",
+            "padding:8px 10px",
+            "border-bottom:1px solid #3c3c3c",
+            "flex-shrink:0",
+            "background:#1a1a1a",
+        ].join(";");
+        preventConflict(searchBar);
+
+        const searchIcon = document.createElement("span");
+        searchIcon.style.cssText = "font-size:14px;flex-shrink:0;opacity:0.6;";
+        searchIcon.textContent = "🔍";
+        preventConflict(searchIcon);
+
+        const searchInput = document.createElement("input");
+        searchInput.type = "text";
+        searchInput.placeholder = magicT("搜索预设标签...");
+        searchInput.setAttribute("aria-label", magicT("搜索预设标签"));
+        searchInput.style.cssText = [
+            "flex:1",
+            "padding:5px 8px",
+            "border-radius:16px",
+            "border:1px solid #3c3c3c",
+            "background:#2d2d2d",
+            "color:#cccccc",
+            "font-size:12px",
+            "outline:none",
+            "box-sizing:border-box",
+        ].join(";");
+        searchInput.addEventListener("input", () => {
+            searchQuery = searchInput.value.trim().toLowerCase();
+            _applySearchMode();
+        });
+        preventConflict(searchInput);
+
+        const clearSearchBtn = document.createElement("button");
+        clearSearchBtn.type = "button";
+        clearSearchBtn.textContent = "✕";
+        clearSearchBtn.title = magicT("清除搜索");
+        clearSearchBtn.style.cssText = [
+            "padding:2px 6px",
+            "border-radius:50%",
+            "border:none",
+            "background:transparent",
+            "color:#888",
+            "font-size:10px",
+            "cursor:pointer",
+            "flex-shrink:0",
+            "display:none",
+        ].join(";");
+        clearSearchBtn.addEventListener("click", () => {
+            searchInput.value = "";
+            searchQuery = "";
+            clearSearchBtn.style.display = "none";
+            _applySearchMode();
+        });
+        preventConflict(clearSearchBtn);
+        searchInput.addEventListener("input", () => {
+            clearSearchBtn.style.display = searchInput.value ? "block" : "none";
+        });
+
+        searchBar.appendChild(searchIcon);
+        searchBar.appendChild(searchInput);
+        searchBar.appendChild(clearSearchBtn);
+
+        // ---- 一级分类导航条 ----
+        const catNav = document.createElement("div");
+        catNav.style.cssText = [
+            "display:flex",
+            "flex-wrap:wrap",
+            "gap:5px",
+            "padding:6px 10px",
+            "border-bottom:2px solid #383838",
+            "flex-shrink:0",
+            "max-height:88px",
+            "overflow-y:auto",
+            "background:#1a1a1a",
+        ].join(";");
+        catNav.classList.add("magic-preset-cat-nav");
+        preventConflict(catNav);
+
+        // ---- 二级分组导航条（包裹容器，带拖拽缩放） ----
+        const grpNavWrapper = document.createElement("div");
+        grpNavWrapper.style.cssText = [
+            "flex-shrink:0",
+            "display:none",
+            "flex-direction:column",
+            "position:relative",
+        ].join(";");
+        preventConflict(grpNavWrapper);
+
+        const grpNav = document.createElement("div");
+        grpNav.style.cssText = [
+            "display:flex",
+            "flex-wrap:wrap",
+            "gap:4px",
+            "padding:5px 10px",
+            "flex:1",
+            "overflow-y:auto",
+            "background:#161616",
+        ].join(";");
+        grpNav.classList.add("magic-preset-grp-nav");
+        preventConflict(grpNav);
+
+        // 顶部分组栏的水平拖拽把手（位于分组栏下方）
+        const grpNavResizeHandle = document.createElement("div");
+        grpNavResizeHandle.style.cssText = [
+            "height:6px",
+            "cursor:row-resize",
+            "background:#1e1e1e",
+            "border-top:1px solid #2a2a2a",
+            "border-bottom:1px solid #2a2a2a",
+            "flex-shrink:0",
+            "transition:background 0.15s",
+            "display:flex",
+            "align-items:center",
+            "justify-content:center",
+        ].join(";");
+        // 拖拽指示图标（三条横线）
+        const grpNavDots = document.createElement("div");
+        grpNavDots.style.cssText = [
+            "display:flex",
+            "gap:2px",
+        ].join(";");
+        ["#555","#555","#555"].forEach((col) => {
+            const dot = document.createElement("div");
+            dot.style.cssText = "width:12px;height:2px;background:"+col+";border-radius:1px;";
+            grpNavDots.appendChild(dot);
+        });
+        grpNavResizeHandle.appendChild(grpNavDots);
+        grpNavResizeHandle.addEventListener("mouseenter", () => {
+            grpNavResizeHandle.style.background = "#2a2a2a";
+        });
+        grpNavResizeHandle.addEventListener("mouseleave", () => {
+            grpNavResizeHandle.style.background = "#1e1e1e";
+        });
+
+        grpNavWrapper.appendChild(grpNav);
+        grpNavWrapper.appendChild(grpNavResizeHandle);
+
+        // 二级分组栏拖拽缩放逻辑
+        let grpNavResizing = false;
+        grpNavResizeHandle.addEventListener("mousedown", (e) => {
+            grpNavResizing = true;
+            document.body.style.cursor = "row-resize";
+            document.body.style.userSelect = "none";
+            e.preventDefault();
+        });
+        document.addEventListener("mousemove", (e) => {
+            if (!grpNavResizing) return;
+            const wrapperRect = grpNavWrapper.getBoundingClientRect();
+            const newHeight = Math.max(30, Math.min(200, e.clientY - wrapperRect.top));
+            grpNav.style.maxHeight = newHeight + "px";
+        });
+        document.addEventListener("mouseup", () => {
+            if (grpNavResizing) {
+                grpNavResizing = false;
+                document.body.style.cursor = "";
+                document.body.style.userSelect = "";
+                localStorage.setItem("magic_grpNav_height", grpNav.style.maxHeight);
+            }
+        });
+
+        // 恢复保存的高度
+        const savedGrpHeight = localStorage.getItem("magic_grpNav_height");
+        if (savedGrpHeight) {
+            grpNav.style.maxHeight = savedGrpHeight;
+        }
+
+        // ---- 标签网格区域（左侧信息 + 右侧标签网格） ----
+        const tagGridArea = document.createElement("div");
+        tagGridArea.style.cssText = [
+            "flex:1",
+            "min-height:0",
+            "display:flex",
+            "gap:0",
+            "overflow:hidden",
+            "display:none",
+        ].join(";");
+        tagGridArea.classList.add("magic-preset-tag-grid-area");
+        preventConflict(tagGridArea);
+
+        // 左侧信息面板
+        const tagInfoPanel = document.createElement("div");
+        tagInfoPanel.style.cssText = [
+            "width:130px",
+            "flex-shrink:0",
+            "display:flex",
+            "flex-direction:column",
+            "padding:10px 10px 10px 12px",
+            "background:#111",
+            "border-right:1px solid #2a2a2a",
+            "overflow-y:auto",
+        ].join(";");
+        preventConflict(tagInfoPanel);
+
+        const tagTitle = document.createElement("div");
+        tagTitle.style.cssText = [
+            "font-size:12px",
+            "font-weight:700",
+            "color:#ccc",
+            "margin-bottom:6px",
+            "line-height:1.4",
+        ].join(";");
+        preventConflict(tagTitle);
+
+        const tagCount = document.createElement("div");
+        tagCount.style.cssText = [
+            "font-size:10px",
+            "color:#666",
+            "margin-bottom:4px",
+        ].join(";");
+        preventConflict(tagCount);
+
+        const tagLevelHint = document.createElement("div");
+        tagLevelHint.style.cssText = [
+            "font-size:10px",
+            "color:#555",
+            "padding:4px 7px",
+            "border-radius:6px",
+            "background:#1a1a1a",
+            "border:1px solid #2a2a2a",
+            "margin-top:4px",
+        ].join(";");
+        preventConflict(tagLevelHint);
+
+        tagInfoPanel.appendChild(tagTitle);
+        tagInfoPanel.appendChild(tagCount);
+        tagInfoPanel.appendChild(tagLevelHint);
+
+        // 左侧面板宽度拖拽把手（底部，横向拖动调整宽度）
+        tagInfoPanel.style.position = "relative";
+        const resizeHandle = document.createElement("div");
+        resizeHandle.style.cssText = [
+            "position:absolute",
+            "right:0",
+            "bottom:0",
+            "width:20px",
+            "height:16px",
+            "cursor:col-resize",
+            "background:#1e1e1e",
+            "border-top:1px solid #2a2a2a",
+            "border-left:1px solid #2a2a2a",
+            "border-radius:4px 0 0 0",
+            "display:flex",
+            "align-items:center",
+            "justify-content:center",
+            "gap:1px",
+            "flex-direction:column",
+            "transition:background 0.15s",
+            "padding-top:3px",
+        ].join(";");
+        // 把手图标（三条竖线）
+        const rhDots = document.createElement("div");
+        rhDots.style.cssText = "display:flex;gap:1px;";
+        ["#555","#555","#555"].forEach((col) => {
+            const dot = document.createElement("div");
+            dot.style.cssText = "width:2px;height:6px;background:"+col+";border-radius:1px;";
+            rhDots.appendChild(dot);
+        });
+        resizeHandle.appendChild(rhDots);
+        resizeHandle.addEventListener("mouseenter", () => { resizeHandle.style.background = "#2d2d2d"; });
+        resizeHandle.addEventListener("mouseleave", () => { resizeHandle.style.background = "#1e1e1e"; });
+        tagInfoPanel.appendChild(resizeHandle);
+
+        // 拖拽缩放逻辑
+        let panelResizing = false;
+        resizeHandle.addEventListener("mousedown", (e) => {
+            panelResizing = true;
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+            e.preventDefault();
+        });
+        document.addEventListener("mousemove", (e) => {
+            if (!panelResizing) return;
+            const panelRect = tagInfoPanel.getBoundingClientRect();
+            const newWidth = Math.max(80, Math.min(300, e.clientX - panelRect.left));
+            tagInfoPanel.style.width = newWidth + "px";
+        });
+        document.addEventListener("mouseup", () => {
+            if (panelResizing) {
+                panelResizing = false;
+                document.body.style.cursor = "";
+                document.body.style.userSelect = "";
+                localStorage.setItem("magic_tagPanel_width", tagInfoPanel.style.width);
+            }
+        });
+
+        // 恢复保存的宽度
+        const savedWidth = localStorage.getItem("magic_tagPanel_width");
+        if (savedWidth) {
+            tagInfoPanel.style.width = savedWidth;
+        }
+
+        // 右侧标签网格区域
+        const tagRightArea = document.createElement("div");
+        tagRightArea.style.cssText = [
+            "flex:1",
+            "min-height:0",
+            "display:flex",
+            "flex-direction:column",
+            "overflow:hidden",
+            "background:#111",
+        ].join(";");
+        preventConflict(tagRightArea);
+
+        const tagToolbar = document.createElement("div");
+        tagToolbar.style.cssText = [
+            "display:flex",
+            "align-items:center",
+            "gap:8px",
+            "padding:8px 12px 6px",
+            "flex-shrink:0",
+            "border-bottom:1px solid #222",
+        ].join(";");
+        preventConflict(tagToolbar);
+
+        const searchHint = document.createElement("span");
+        searchHint.style.cssText = "font-size:11px;color:#444;flex:1;";
+        searchHint.textContent = magicT("点击标签插入英文关键词");
+        preventConflict(searchHint);
+        tagToolbar.appendChild(searchHint);
+
+        tagRightArea.appendChild(tagToolbar);
+
+        const tagGrid = document.createElement("div");
+        tagGrid.style.cssText = [
+            "display:flex",
+            "flex-wrap:wrap",
+            "gap:8px",
+            "align-content:flex-start",
+            "padding:10px 12px",
+            "overflow-y:auto",
+            "flex:1",
+        ].join(";");
+        preventConflict(tagGrid);
+
+        tagRightArea.appendChild(tagGrid);
+        tagGridArea.appendChild(tagInfoPanel);
+        tagGridArea.appendChild(tagRightArea);
+
+        // 分类配色映射（固定色板，美化使用）
+        const CAT_COLORS = [
+            { bg: "#5C6BC0", hover: "#3F51B5", text: "#fff" },
+            { bg: "#26A69A", hover: "#00897B", text: "#fff" },
+            { bg: "#EF5350", hover: "#E53935", text: "#fff" },
+            { bg: "#AB47BC", hover: "#8E24AA", text: "#fff" },
+            { bg: "#42A5F5", hover: "#1E88E5", text: "#fff" },
+            { bg: "#FFA726", hover: "#FB8C00", text: "#fff" },
+            { bg: "#66BB6A", hover: "#43A047", text: "#fff" },
+            { bg: "#EC407A", hover: "#D81B60", text: "#fff" },
+            { bg: "#8D6E63", hover: "#6D4C41", text: "#fff" },
+            { bg: "#78909C", hover: "#546E7A", text: "#fff" },
+        ];
+
+        // 分组配色映射（柔和色调，用于分组 Tab 和分组级标签）
+        const GROUP_COLORS = [
+            { bg: "#7986CB", border: "#5C6BC0", text: "#fff" },  // 浅紫蓝
+            { bg: "#4DB6AC", border: "#26A69A", text: "#fff" },  // 浅青
+            { bg: "#EF9A9A", border: "#EF5350", text: "#fff" },  // 浅红
+            { bg: "#CE93D8", border: "#AB47BC", text: "#fff" },  // 浅紫
+            { bg: "#90CAF9", border: "#42A5F5", text: "#1a1a1a" }, // 浅蓝
+            { bg: "#FFCC80", border: "#FFA726", text: "#1a1a1a" }, // 浅橙
+            { bg: "#A5D6A7", border: "#66BB6A", text: "#1a1a1a" }, // 浅绿
+            { bg: "#F48FB1", border: "#EC407A", text: "#fff" },  // 浅粉
+            { bg: "#BCAAA4", border: "#8D6E63", text: "#1a1a1a" }, // 浅棕
+            { bg: "#B0BEC5", border: "#78909C", text: "#1a1a1a" }, // 浅灰
+        ];
+
+        /** 获取分类颜色（按索引固定） */
+        const getCatColor = (index) => CAT_COLORS[index % CAT_COLORS.length];
+        /** 获取分组颜色（按索引固定） */
+        const getGrpColor = (index) => GROUP_COLORS[index % GROUP_COLORS.length];
+
+        // 构建一级分类 Tab
+        const _buildCatTabs = () => {
+            catNav.innerHTML = "";
+            if (presetCategories.length === 0) {
+                const noCat = document.createElement("span");
+                noCat.style.cssText = "font-size:12px;color:#555;padding:4px 8px;";
+                noCat.textContent = magicT("暂无预设标签，可编辑 savedata/magic_preset_tags.txt 添加");
+                catNav.appendChild(noCat);
+                return;
+            }
+            presetCategories.forEach((cat, idx) => {
+                const isActive = activeCategory && activeCategory.name === cat.name;
+                const col = getCatColor(idx);
+                const tab = document.createElement("button");
+                tab.type = "button";
+                tab.style.cssText = [
+                    "padding:5px 13px",
+                    "border-radius:14px",
+                    "cursor:pointer",
+                    "font-size:11px",
+                    "font-weight:600",
+                    "border:none",
+                    "border-bottom:" + (isActive ? ("2px solid " + col.bg) : "2px solid transparent"),
+                    "background:" + (isActive ? col.bg + "22" : "#2d2d2d"),
+                    "color:" + (isActive ? col.text : "#888"),
+                    "flex-shrink:0",
+                    "white-space:nowrap",
+                    "transition:background 0.18s,color 0.18s,transform 0.1s,box-shadow 0.18s",
+                    "box-shadow:" + (isActive ? ("0 2px 8px " + col.bg + "55") : "none"),
+                    "letter-spacing:0.01em",
+                ].join(";");
+                tab.textContent = cat.name || magicT("未命名");
+                if (isActive) {
+                    tab.style.transform = "translateY(-1px)";
+                    tab.style.background = col.bg;
+                }
+                tab.addEventListener("mouseenter", () => {
+                    if (!isActive) {
+                        tab.style.background = "#383838";
+                        tab.style.color = "#ccc";
+                        tab.style.transform = "translateY(-1px)";
+                    }
+                });
+                tab.addEventListener("mouseleave", () => {
+                    if (!isActive) {
+                        tab.style.background = "#2d2d2d";
+                        tab.style.color = "#888";
+                        tab.style.transform = "";
+                    }
+                });
+                tab.addEventListener("click", () => {
+                    activeCategory = cat;
+                    activeGroup = null;
+                    searchInput.value = "";
+                    searchQuery = "";
+                    clearSearchBtn.style.display = "none";
+                    _buildCatTabs();
+                    _buildGroupTabs();
+                    _buildTagGrid();
+                });
+                preventConflict(tab);
+                catNav.appendChild(tab);
+            });
+        };
+
+        // 构建二级分组 Tab
+        const _buildGroupTabs = () => {
+            grpNav.innerHTML = "";
+            if (!activeCategory) {
+                grpNavWrapper.style.display = "none";
+                return;
+            }
+            const groups = activeCategory.groups || [];
+            const directTags = activeCategory.tags || [];
+            const hasDirectTags = directTags.length > 0;
+            const catIdx = presetCategories.indexOf(activeCategory);
+            const catCol = getCatColor(catIdx >= 0 ? catIdx : 0);
+
+            if (groups.length > 0 || hasDirectTags) {
+                grpNavWrapper.style.display = "flex";
+
+                if (hasDirectTags && groups.length === 0) {
+                    const tab = document.createElement("button");
+                    tab.type = "button";
+                    tab.style.cssText = [
+                        "padding:4px 11px",
+                        "border-radius:10px",
+                        "cursor:pointer",
+                        "font-size:10px",
+                        "font-weight:600",
+                        "border:none",
+                        "background:" + catCol.bg,
+                        "color:#fff",
+                        "flex-shrink:0",
+                        "white-space:nowrap",
+                        "box-shadow:0 2px 6px " + catCol.bg + "44",
+                        "transition:background 0.18s,transform 0.1s",
+                    ].join(";");
+                    tab.textContent = magicT("全部") + " " + directTags.length;
+                    tab.addEventListener("mouseenter", () => { tab.style.transform = "translateY(-1px)"; });
+                    tab.addEventListener("mouseleave", () => { tab.style.transform = ""; });
+                    tab.addEventListener("click", () => {
+                        activeGroup = null;
+                        _buildGroupTabs();
+                        _buildTagGrid();
+                    });
+                    preventConflict(tab);
+                    grpNav.appendChild(tab);
+                    return;
+                }
+
+                groups.forEach((grp, gIdx) => {
+                    const isActive = activeGroup && activeGroup.name === grp.name;
+                    const tagCount = (grp.tags || []).length;
+                    const grpCol = getGrpColor(gIdx);
+                    const tab = document.createElement("button");
+                    tab.type = "button";
+                    tab.style.cssText = [
+                        "padding:4px 11px",
+                        "border-radius:10px",
+                        "cursor:pointer",
+                        "font-size:10px",
+                        "font-weight:600",
+                        "border:none",
+                        "background:" + (isActive ? grpCol.bg : "#2d2d2d"),
+                        "color:" + (isActive ? grpCol.text : "#888"),
+                        "flex-shrink:0",
+                        "white-space:nowrap",
+                        "transition:background 0.18s,color 0.18s,transform 0.1s,box-shadow 0.18s",
+                        "box-shadow:" + (isActive ? ("0 2px 6px " + grpCol.border + "55") : "none"),
+                    ].join(";");
+                    tab.textContent = (grp.name || magicT("未命名")) + " " + tagCount;
+                    if (isActive) tab.style.transform = "translateY(-1px)";
+                    tab.addEventListener("mouseenter", () => {
+                        if (!isActive) { tab.style.background = grpCol.bg + "66"; tab.style.color = grpCol.text; tab.style.transform = "translateY(-1px)"; }
+                    });
+                    tab.addEventListener("mouseleave", () => {
+                        if (!isActive) { tab.style.background = "#2d2d2d"; tab.style.color = "#888"; tab.style.transform = ""; }
+                    });
+                    tab.addEventListener("click", () => {
+                        activeGroup = grp;
+                        _buildGroupTabs();
+                        _buildTagGrid();
+                    });
+                    preventConflict(tab);
+                    grpNav.appendChild(tab);
+                });
+            } else {
+                grpNavWrapper.style.display = "none";
+            }
+        };
+
+        // 收集当前应显示的标签（含搜索过滤）
+        const _getFilteredTags = () => {
+            if (!activeCategory) return [];
+            const groups = activeCategory.groups || [];
+            const directTags = activeCategory.tags || [];
+            let allTags = [];
+            if (activeGroup) {
+                allTags = activeGroup.tags || [];
+            } else {
+                groups.forEach((g) => { allTags = allTags.concat(g.tags || []); });
+                if (directTags.length > 0) allTags = directTags.concat(allTags);
+            }
+            if (!searchQuery) return allTags;
+            return allTags.filter((tag) => {
+                const tagText = typeof tag === "string" ? tag : (tag.text || "");
+                const cn = typeof tag === "object" ? (tag.cn || "") : "";
+                const ql = searchQuery;
+                return tagText.toLowerCase().includes(ql) || cn.toLowerCase().includes(ql);
+            });
+        };
+
+        // 构建标签网格
+        const _buildTagGrid = () => {
+            tagGrid.innerHTML = "";
+            tagGridArea.style.display = "flex";
+
+            if (!activeCategory) {
+                tagGridArea.style.display = "none";
+                return;
+            }
+
+            const tagsToShow = _getFilteredTags();
+
+            // 更新左侧信息面板
+            if (searchQuery) {
+                tagTitle.textContent = magicT("搜索结果");
+                tagLevelHint.textContent = "";
+            } else {
+                if (activeGroup) {
+                    tagTitle.textContent = activeGroup.name || magicT("未命名");
+                    tagLevelHint.textContent = (activeCategory.name || "") + " › " + (activeGroup.name || "");
+                } else {
+                    tagTitle.textContent = activeCategory.name || magicT("未命名");
+                    tagLevelHint.textContent = magicT("一级分类");
+                }
+            }
+
+            tagCount.textContent = tagsToShow.length + " " + magicT("个标签");
+
+            if (!tagsToShow.length) {
+                const noTags = document.createElement("div");
+                noTags.style.cssText = "text-align:center;padding:20px 12px;font-size:12px;color:#555;";
+                noTags.textContent = searchQuery
+                    ? magicT("没有找到匹配的预设标签")
+                    : magicT("该分类暂无标签");
+                tagGrid.appendChild(noTags);
+            } else {
+                const catIdx = presetCategories.indexOf(activeCategory);
+                const catCol = getCatColor(catIdx >= 0 ? catIdx : 0);
+                const grpIdx = activeGroup ? (activeCategory.groups || []).indexOf(activeGroup) : -1;
+                const grpCol = getGrpColor(grpIdx >= 0 ? grpIdx : catIdx);
+
+                tagsToShow.forEach((tag) => {
+                    const tagText = typeof tag === "string" ? tag : (tag.text || "");
+                    const tagCn = typeof tag === "object" ? (tag.cn || "") : "";
+                    if (!tagText) return;
+
+                    const showCn = !!tagCn;
+                    const isGroupLevel = !!activeGroup;
+                    const cardCol = isGroupLevel ? grpCol : catCol;
+
+                    const card = document.createElement("button");
+                    card.type = "button";
+                    card.title = (showCn ? (tagCn + "\n") : "") + tagText;
+
+                    if (showCn) {
+                        const cardInner = document.createElement("div");
+                        cardInner.style.cssText = [
+                            "display:flex",
+                            "flex-direction:column",
+                            "width:100%",
+                        ].join(";");
+
+                        const cnArea = document.createElement("div");
+                        cnArea.style.cssText = [
+                            "font-weight:700",
+                            "font-size:12px",
+                            "color:#1a1a1a",
+                            "background:" + cardCol.bg,
+                            "padding:5px 8px 3px",
+                            "text-align:center",
+                            "overflow:hidden",
+                            "text-overflow:ellipsis",
+                            "white-space:nowrap",
+                            "border-radius:7px 7px 0 0",
+                            "letter-spacing:0.03em",
+                            "line-height:1.3",
+                        ].join(";");
+                        cnArea.textContent = tagCn;
+
+                        const enArea = document.createElement("div");
+                        enArea.style.cssText = [
+                            "font-weight:400",
+                            "font-size:9px",
+                            "color:#1a1a1a",
+                            "background:#f0f0f0",
+                            "padding:3px 8px 5px",
+                            "text-align:center",
+                            "overflow:hidden",
+                            "text-overflow:ellipsis",
+                            "white-space:nowrap",
+                            "border-radius:0 0 7px 7px",
+                            "letter-spacing:0.02em",
+                            "line-height:1.3",
+                        ].join(";");
+                        enArea.textContent = tagText;
+
+                        cardInner.appendChild(cnArea);
+                        cardInner.appendChild(enArea);
+                        card.appendChild(cardInner);
+                    } else {
+                        const onlyArea = document.createElement("div");
+                        onlyArea.style.cssText = [
+                            "font-weight:600",
+                            "font-size:10px",
+                            "color:#1a1a1a",
+                            "background:" + cardCol.bg,
+                            "padding:7px 8px",
+                            "text-align:center",
+                            "overflow:hidden",
+                            "text-overflow:ellipsis",
+                            "white-space:nowrap",
+                            "border-radius:7px",
+                            "letter-spacing:0.03em",
+                            "line-height:1.3",
+                        ].join(";");
+                        onlyArea.textContent = tagText;
+                        card.appendChild(onlyArea);
+                    }
+
+                    card.style.cssText = [
+                        "display:inline-flex",
+                        "align-items:center",
+                        "justify-content:center",
+                        "min-width:58px",
+                        "max-width:88px",
+                        "cursor:pointer",
+                        "border-radius:9px",
+                        "border:1.5px solid " + (cardCol.border || cardCol.bg),
+                        "box-shadow:0 2px 6px rgba(0,0,0,0.15)",
+                        "flex-shrink:0",
+                        "overflow:hidden",
+                        "background:#fff",
+                        "transition:transform 0.12s,box-shadow 0.12s",
+                        "padding:0",
+                    ].join(";");
+
+                    card.addEventListener("mouseenter", () => {
+                        card.style.transform = "translateY(-2px) scale(1.05)";
+                        card.style.boxShadow = "0 5px 14px rgba(0,0,0,0.25)";
+                    });
+                    card.addEventListener("mouseleave", () => {
+                        card.style.transform = "";
+                        card.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
+                    });
+                    card.addEventListener("mousedown", (e) => {
+                        e.stopImmediatePropagation();
+                        if (tagText) insertEn(tagText);
+                    });
+                    preventConflict(card);
+                    tagGrid.appendChild(card);
+                });
+            }
+        };
+
+        // 搜索模式下更新搜索结果标签网格
+        const _applySearchMode = () => {
+            if (searchQuery) {
+                catNav.style.display = "none";
+                grpNavWrapper.style.display = "none";
+                tagGridArea.style.display = "flex";
+                tagTitle.textContent = magicT("搜索结果");
+                tagLevelHint.textContent = "";
+                tagCount.textContent = "";
+
+                tagGrid.innerHTML = "";
+                const allTags = [];
+                presetCategories.forEach((cat) => {
+                    const groups = cat.groups || [];
+                    const directTags = cat.tags || [];
+                    groups.forEach((g) => {
+                        (g.tags || []).forEach((t) => {
+                            allTags.push({ ...t, _catName: cat.name });
+                        });
+                    });
+                    directTags.forEach((t) => {
+                        allTags.push({ ...t, _catName: cat.name });
+                    });
+                });
+
+                const filtered = allTags.filter((tag) => {
+                    const tagText = typeof tag === "string" ? tag : (tag.text || "");
+                    const cn = typeof tag === "object" ? (tag.cn || "") : "";
+                    return tagText.toLowerCase().includes(searchQuery) || cn.toLowerCase().includes(searchQuery);
+                });
+
+                tagCount.textContent = filtered.length + " " + magicT("个");
+                if (!filtered.length) {
+                    const noTags = document.createElement("div");
+                    noTags.style.cssText = "text-align:center;padding:20px 12px;font-size:12px;color:#555;";
+                    noTags.textContent = magicT("没有找到匹配的预设标签");
+                    tagGrid.appendChild(noTags);
+                } else {
+                    filtered.forEach((tag) => {
+                        const tagText = typeof tag === "string" ? tag : (tag.text || "");
+                        const tagCn = typeof tag === "object" ? (tag.cn || "") : "";
+                        if (!tagText) return;
+
+                        const showCn = !!tagCn;
+                        const catIdx = presetCategories.findIndex((c) => c.name === tag._catName);
+                        const cardCol = getCatColor(catIdx >= 0 ? catIdx : 0);
+
+                        const card = document.createElement("button");
+                        card.type = "button";
+                        card.title = (tag._catName ? ("[" + tag._catName + "] ") : "") + (showCn ? (tagCn + "\n") : "") + tagText;
+
+                        if (showCn) {
+                            const cardInner = document.createElement("div");
+                            cardInner.style.cssText = "display:flex;flex-direction:column;width:100%;";
+
+                            const cnArea = document.createElement("div");
+                            cnArea.style.cssText = [
+                                "font-weight:700",
+                                "font-size:12px",
+                                "color:#1a1a1a",
+                                "background:" + cardCol.bg,
+                                "padding:5px 8px 3px",
+                                "text-align:center",
+                                "overflow:hidden",
+                                "text-overflow:ellipsis",
+                                "white-space:nowrap",
+                                "border-radius:7px 7px 0 0",
+                                "line-height:1.3",
+                            ].join(";");
+                            cnArea.textContent = tagCn;
+
+                            const enArea = document.createElement("div");
+                            enArea.style.cssText = [
+                                "font-weight:400",
+                                "font-size:9px",
+                                "color:#1a1a1a",
+                                "background:#f0f0f0",
+                                "padding:3px 8px 5px",
+                                "text-align:center",
+                                "overflow:hidden",
+                                "text-overflow:ellipsis",
+                                "white-space:nowrap",
+                                "border-radius:0 0 7px 7px",
+                                "line-height:1.3",
+                            ].join(";");
+                            enArea.textContent = tagText;
+
+                            cardInner.appendChild(cnArea);
+                            cardInner.appendChild(enArea);
+                            card.appendChild(cardInner);
+                        } else {
+                            const onlyArea = document.createElement("div");
+                            onlyArea.style.cssText = [
+                                "font-weight:600",
+                                "font-size:10px",
+                                "color:#1a1a1a",
+                                "background:" + cardCol.bg,
+                                "padding:7px 8px",
+                                "text-align:center",
+                                "overflow:hidden",
+                                "text-overflow:ellipsis",
+                                "white-space:nowrap",
+                                "border-radius:7px",
+                                "line-height:1.3",
+                            ].join(";");
+                            onlyArea.textContent = tagText;
+                            card.appendChild(onlyArea);
+                        }
+
+                        card.style.cssText = [
+                            "display:inline-flex",
+                            "align-items:center",
+                            "justify-content:center",
+                            "min-width:58px",
+                            "max-width:88px",
+                            "cursor:pointer",
+                            "border-radius:9px",
+                            "border:1.5px solid " + cardCol.bg,
+                            "box-shadow:0 2px 6px rgba(0,0,0,0.15)",
+                            "flex-shrink:0",
+                            "overflow:hidden",
+                            "background:#fff",
+                            "transition:transform 0.12s,box-shadow 0.12s",
+                            "padding:0",
+                        ].join(";");
+
+                        card.addEventListener("mouseenter", () => {
+                            card.style.transform = "translateY(-2px) scale(1.05)";
+                            card.style.boxShadow = "0 5px 14px rgba(0,0,0,0.25)";
+                        });
+                        card.addEventListener("mouseleave", () => {
+                            card.style.transform = "";
+                            card.style.boxShadow = "0 2px 6px rgba(0,0,0,0.15)";
+                        });
+                        card.addEventListener("mousedown", (e) => {
+                            e.stopImmediatePropagation();
+                            if (tagText) insertEn(tagText);
+                        });
+                        preventConflict(card);
+                        tagGrid.appendChild(card);
+                    });
+                }
+            } else {
+                // 正常导航模式
+                catNav.style.display = "flex";
+                grpNavWrapper.style.display = "none";
+                tagGridArea.style.display = "none";
+                _buildCatTabs();
+            }
+        };
+
+        // 渲染（加载数据后）
+        const _render = () => {
+            _buildCatTabs();
+            _buildGroupTabs();
+            _buildTagGrid();
+        };
+
+        // 异步加载数据
+        (async () => {
+            try {
+                const r = await fetch(api.apiURL("/ma/preset_tags"), { credentials: "same-origin", signal: presetTagsAbort.signal });
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                const d = await r.json();
+                presetCategories = Array.isArray(d.categories) ? d.categories : [];
+                if (container.isConnected) _render();
+            } catch (e) {
+                if (e.name === "AbortError") return;
+                console.warn("[MagicText] preset_tags load failed", e);
+                presetCategories = [];
+                if (container.isConnected) _render();
+            }
+        })();
+
+        // 组装面板
+        container.appendChild(searchBar);
+        container.appendChild(catNav);
+        container.appendChild(grpNavWrapper);
+        container.appendChild(tagGridArea);
+        presetPanel.appendChild(container);
+    };
+
+    const presetTagsAbort = new AbortController();
+    _buildPresetPanel(presetTagsAbort);
     const tagSetsAbort = new AbortController();
     const onTagSetsChangedEv = () => {
         if (!inner.isConnected) return;
@@ -3251,7 +4275,7 @@ function syncMagicPromptTextWidget(node, textWidget, value) {
 }
 
 // 主弹窗函数（需 async：打开时 await 读取 /ma/settings）
-async function showPromptEditorModal(node, nodeSeed) {
+window.showPromptEditorModal = async function(node, nodeSeed) {
     // 同时只保留一个浮动编辑器；再打开时先关闭上一个（会落盘尺寸）
     document.querySelectorAll("[data-magic-prompt-shell='1']").forEach((el) => {
         if (typeof el._magicCloseEditor === "function") {
@@ -3372,6 +4396,10 @@ async function showPromptEditorModal(node, nodeSeed) {
         shell._magicDragIndices = null;
         shell._magicTagChipsRubberArmed = false;
         shell._magicChipToolbarPinnedIndex = null;
+        if (shell._magicPresetTagsAbort) {
+            try { shell._magicPresetTagsAbort.abort(); } catch (_) { /* ignore */ }
+            shell._magicPresetTagsAbort = null;
+        }
         closeModal(shell);
     };
     shell._magicCloseEditor = closeEditorOverlay;
@@ -4668,7 +5696,7 @@ async function showPromptEditorModal(node, nodeSeed) {
                 chip.dataset.magicTagIndex = String(index);
                 chip.style.cssText = `
                     flex: 0 0 auto; max-width: 220px; cursor: grab;
-                    background: ${tagItem.disabled ? THEME.bg3 : "rgba(93, 64, 55, 0.72)"};
+                    background: ${tagItem.disabled ? THEME.bg3 : "rgba(93,64,55,0.72)"};
                     border: 1px solid ${THEME.border}; border-radius: 6px;
                     overflow: hidden; font-size: 12px; user-select: none;
                     /* Bug fix: z-index 高于 floatBar (100055)，确保浮动条不会遮挡芯片点击区域 */
