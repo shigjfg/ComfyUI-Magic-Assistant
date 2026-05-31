@@ -69,6 +69,7 @@ function statusBadgeColor(status) {
         case "ready": return "#4CAF50";
         case "needs_patch": return "#FF9800";
         case "missing_core_files": return "#FF9800";
+        case "missing_common": return "#FF9800";
         case "missing_nunchaku": return "#f44336";
         case "missing_transformer": return "#f44336";
         case "check_failed":
@@ -88,6 +89,8 @@ function normalizeEnvPayload(raw, httpStatus, errMsg) {
                 wrapper_installed: false,
                 transformer_available: false,
                 torch_transfer_utils_available: false,
+                common_available: false,
+                common_files: {},
                 needs_patch: false,
                 install_status: "api_error",
                 status_text: {
@@ -98,13 +101,21 @@ function normalizeEnvPayload(raw, httpStatus, errMsg) {
                 error: raw.error,
             };
         }
-        if (raw.install_status != null) return raw;
+        if (raw.install_status != null) {
+            return {
+                ...raw,
+                common_available: raw.common_available ?? false,
+                common_files: raw.common_files ?? {},
+            };
+        }
     }
     return {
         nunchaku_found: false,
         wrapper_installed: false,
         transformer_available: false,
         torch_transfer_utils_available: false,
+        common_available: false,
+        common_files: {},
         needs_patch: false,
         install_status: "fetch_error",
         status_text: {
@@ -252,15 +263,16 @@ app.registerExtension({
             const nunchakuOk = !!env?.nunchaku_found;
             const transformerOk = !!env?.transformer_available;
             const torchTransferOk = !!env?.torch_transfer_utils_available;
+            const commonOk = !!env?.common_available;
             /**
-             * 嵌入：只要能在 ComfyUI 的 Python 里找到 nunchaku 包路径即可点击。
-             * 后端 install_wrapper_to_nunchaku 会写入缺失的 torch_transfer_utils、
-             * transformer_flux2 与 wrappers/klein.py；不要求这些文件事先已存在。
+             * needs_patch: 缺少文件，需要首次下载（force_update=false，仅写入缺失文件）
+             * !needs_patch: 文件已存在，用户想重新下载（force_update=true，强制覆盖）
              */
-            const canEmbedWrapper = nunchakuOk;
+            const needsPatch = !!env?.needs_patch;
+            const canClick = nunchakuOk;
             const showNunchakuInstallHint = !nunchakuOk;
             const showOfficialPluginHint =
-                nunchakuOk && (!transformerOk || !torchTransferOk || !env?.wrapper_installed);
+                nunchakuOk && (!transformerOk || !torchTransferOk || !env?.wrapper_installed || !commonOk);
 
             const dialog = document.createElement("div");
             dialog.style.cssText = `
@@ -273,8 +285,11 @@ app.registerExtension({
             content.style.cssText = `
                 background: #1e1e1e; border: 1px solid #3a3a3a;
                 border-radius: 12px; width: 540px; max-width: 95vw;
+                max-height: 90vh;
                 padding: 0; font-family: system-ui, sans-serif;
-                box-shadow: 0 8px 40px rgba(0,0,0,0.6); overflow: hidden;
+                box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+                display: flex; flex-direction: column;
+                overflow: hidden;
             `;
 
             // Title bar
@@ -282,11 +297,12 @@ app.registerExtension({
             titleBar.className = "dialog-title-bar";
             titleBar.style.cssText = `
                 background: linear-gradient(135deg, #6366f1, #8b5cf6);
-                padding: 16px 20px; display: flex; align-items: center;
+                padding: 14px 20px; display: flex; align-items: center;
                 justify-content: space-between; user-select: none;
+                flex-shrink: 0;
             `;
             titleBar.innerHTML = `
-                <span style="color:#fff; font-size:17px; font-weight:600; letter-spacing:0.5px;">
+                <span style="color:#fff; font-size:16px; font-weight:600; letter-spacing:0.5px;">
                     ${t("⚙️ Magic Klein 设置")}
                 </span>
                 <button id="__mk_close_btn" style="
@@ -297,7 +313,7 @@ app.registerExtension({
             content.appendChild(titleBar);
 
             const body = document.createElement("div");
-            body.style.cssText = "padding: 20px; color: #e0e0e0; font-size: 14px;";
+            body.style.cssText = "flex:1; overflow-y:auto; padding:16px 20px; color:#e0e0e0; font-size:14px; min-height:0;";
 
             // ── Section 1: Environment status ──────────────────────────────────
             body.innerHTML += `
@@ -343,6 +359,12 @@ app.registerExtension({
                                     : `<span style="color:#f44336">✗</span>`
                                 }
                             </div>
+                            <div class="mk-check-row">${t("lora/common/:")}
+                                ${env?.common_available
+                                    ? `<span style="color:#4CAF50">✓</span> <span style="color:#888;font-size:11px;">(${Object.keys(env?.common_files || {}).length}/3)</span>`
+                                    : `<span style="color:#f44336">✗</span> <span style="color:#888;font-size:11px;">(${Object.keys(env?.common_files || {}).length}/3)</span>`
+                                }
+                            </div>
                             ${env?.comfyui_python ? `
                             <div>${t("ComfyUI Python:")}
                                 <span style="color:#888;">${env.comfyui_python}</span>
@@ -377,12 +399,12 @@ app.registerExtension({
                 </div>
                 <div style="background:#252525; border-radius:8px; padding:14px;">
                     <p style="margin:0 0 12px 0; color:#ccc; font-size:13px; line-height:1.6;">
-                        ${t("KLEIN_EMBED_DESC")}
+                        ${t("KLEIN_DOWNLOAD_DESC")}
                     </p>
                     <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:14px;">
-                        <button id="__mk_install_btn" ${canEmbedWrapper ? "" : "disabled"}
-                            style="${canEmbedWrapper ? btnStyleEnabled : btnStyleDisabled}"
-                        >${t("🔧 嵌入到 nunchaku 环境")}</button>
+                        <button id="__mk_install_btn" ${canClick ? "" : "disabled"}
+                            style="${canClick ? btnStyleEnabled : btnStyleDisabled}"
+                        >${needsPatch ? t("📥 下载并安装") : t("🔄 强制重新下载")}</button>
                         <div id="__mk_embed_side_hints" style="flex:1; min-width:220px; font-size:12px; line-height:1.6; color:#aaa;">
                             ${showNunchakuInstallHint
                                 ? `<div style="margin-bottom:8px;">${hintNunchakuHtml}</div>`
@@ -441,21 +463,29 @@ app.registerExtension({
             document.getElementById("__mk_install_btn").onclick = async () => {
                 const btn = document.getElementById("__mk_install_btn");
                 const resultDiv = document.getElementById("__mk_install_result");
-                if (!canEmbedWrapper || btn.disabled) return;
+                if (!canClick || btn.disabled) return;
 
+                const forceUpdate = !needsPatch;
                 btn.disabled = true;
-                btn.textContent = t("⏳ 安装中...");
+                const btnOrigText = btn.textContent;
+                btn.textContent = forceUpdate ? t("⏳ 强制更新中...") : t("⏳ 安装中...");
                 btn.style.opacity = "0.7";
                 resultDiv.style.color = "#888";
-                resultDiv.textContent = t("正在写入文件...");
+                resultDiv.textContent = forceUpdate
+                    ? t("正在从 HuggingFace 下载最新文件...")
+                    : t("正在下载并安装文件...");
 
                 try {
-                    const resp = await api.fetchApi("/ma/klein/patch_env", { method: "POST" });
+                    const resp = await api.fetchApi("/ma/klein/patch_env", {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({force_update: forceUpdate}),
+                    });
                     const data = await resp.json();
 
                     if (data.success) {
                         resultDiv.style.color = "#4CAF50";
-                        resultDiv.textContent = t("✅ 安装成功！wrappers/klein.py 已写入。");
+                        resultDiv.textContent = t("✅ 安装完成！") + " " + (data.message || "");
 
                         // Refresh status display
                         if (data.env) {
@@ -472,7 +502,6 @@ app.registerExtension({
                             if (badge) badge.style.background = newStatusColor;
                             if (text) { text.style.color = newStatusColor; text.textContent = newStatusText; }
 
-                            // Update check marks (rows: nunchaku, transformer, torch_transfer, wrapper)
                             const rows = content.querySelectorAll(".mk-check-row");
                             const markRow = (idx) => {
                                 if (rows[idx]) {
@@ -483,6 +512,7 @@ app.registerExtension({
                             if (data.env.transformer_available) markRow(1);
                             if (data.env.torch_transfer_utils_available) markRow(2);
                             if (data.env.wrapper_installed) markRow(3);
+                            if (data.env.common_available) markRow(4);
                         }
                     } else {
                         resultDiv.style.color = "#f44336";
@@ -494,7 +524,7 @@ app.registerExtension({
                 }
 
                 btn.disabled = false;
-                btn.textContent = t("🔧 重新嵌入到 nunchaku 环境");
+                btn.textContent = btnOrigText;
                 btn.style.opacity = "1";
             };
         };
@@ -514,19 +544,23 @@ app.registerExtension({
             content.style.cssText = `
                 background: #1e1e1e; border: 1px solid #3a3a3a;
                 border-radius: 12px; width: 580px; max-width: 95vw;
+                max-height: 90vh;
                 padding: 0; font-family: system-ui, sans-serif;
-                box-shadow: 0 8px 40px rgba(0,0,0,0.6); overflow: hidden;
+                box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+                display: flex; flex-direction: column;
+                overflow: hidden;
             `;
 
             const titleBar = document.createElement("div");
             titleBar.className = "dialog-title-bar";
             titleBar.style.cssText = `
                 background: linear-gradient(135deg, #7c3aed, #a78bfa);
-                padding: 16px 20px; display: flex; align-items: center;
+                padding: 14px 20px; display: flex; align-items: center;
                 justify-content: space-between; user-select: none;
+                flex-shrink: 0;
             `;
             titleBar.innerHTML = `
-                <span style="color:#fff; font-size:17px; font-weight:600;">
+                <span style="color:#fff; font-size:16px; font-weight:600;">
                     ${t("📖 Magic Klein 说明")}
                 </span>
                 <button id="__mk_info_close" style="
@@ -537,7 +571,7 @@ app.registerExtension({
             content.appendChild(titleBar);
 
             const body = document.createElement("div");
-            body.style.cssText = "padding:20px; color:#e0e0e0; font-size:14px; line-height:1.8; max-height:70vh; overflow-y:auto;";
+            body.style.cssText = "flex:1; overflow-y:auto; padding:16px 20px; color:#e0e0e0; font-size:14px; line-height:1.8; min-height:0;";
 
             body.innerHTML = `
                     <h3 style="color:#a78bfa; margin:0 0 12px 0;">${t("🔮 Magic Nunchaku FLUX.2 Klein Loader")}</h3>

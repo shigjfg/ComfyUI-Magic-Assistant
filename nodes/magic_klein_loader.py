@@ -49,7 +49,13 @@ async def ma_klein_patch_env(request):
     from core.klein_wrapper import install_wrapper_to_nunchaku, check_environment
 
     try:
-        ok, msg = install_wrapper_to_nunchaku()
+        body = await request.json() if request.can_read_body else {}
+        force_update = bool(body.get("force_update", False))
+    except Exception:
+        force_update = False
+
+    try:
+        ok, msg = install_wrapper_to_nunchaku(force_update=force_update)
         env = check_environment()
         return web.json_response({
             "success": ok,
@@ -208,6 +214,30 @@ class MagicKleinLoader:
         # Import from the (patched) user nunchaku environment
         from nunchaku.models.transformers.transformer_flux2 import NunchakuFlux2Transformer2DModel
         from nunchaku.wrappers.klein import ComfyFlux2KleinWrapper
+
+        # Monkey-patch: nunchaku 1.3.x is missing _patch_model on NunchakuFlux2Transformer2DModel.
+        # Without this, from_pretrained() crashes at transformer._patch_model().
+        if not hasattr(NunchakuFlux2Transformer2DModel, '_patch_model'):
+            # Ensure offload attr exists on the class so forward() (which checks self.offload)
+            # never raises AttributeError even if _patch_model isn't called.
+            NunchakuFlux2Transformer2DModel.offload = False
+
+            def _patch_model(self, precision=None, rank=32, torch_dtype=torch.bfloat16, **kwargs):
+                from nunchaku.models.transformers.transformer_flux2 import (
+                    NunchakuFlux2TransformerBlock,
+                    NunchakuFlux2SingleTransformerBlock,
+                )
+                self.offload = False  # forward() checks this
+                for i, block in enumerate(self.transformer_blocks):
+                    self.transformer_blocks[i] = NunchakuFlux2TransformerBlock(
+                        block, precision=precision, rank=rank, torch_dtype=torch_dtype, **kwargs
+                    )
+                for i, block in enumerate(self.single_transformer_blocks):
+                    self.single_transformer_blocks[i] = NunchakuFlux2SingleTransformerBlock(
+                        block, precision=precision, rank=rank, torch_dtype=torch_dtype, **kwargs
+                    )
+                return self
+            NunchakuFlux2Transformer2DModel._patch_model = _patch_model
 
         if model_name.startswith("（未找到"):
             raise ValueError(

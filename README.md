@@ -12,7 +12,38 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-05-20**
+> Latest Update / 最新更新：**2026-06-01**
+
+> **V1.3.5 版本介绍 / Version Introduction** 2026-06-01
+
+> 1. **✨ 新增功能**: Magic Nunchaku FLUX.2 Klein Loader - LoRA 支持 ⭐
+>    * Klein 模型现已支持使用 LoRA！需要配合强力 LoRA 加载器使用
+>    * 在强力 LoRA 加载器设置中开启 Klein 模式即可正确使用 LoRA
+>    * 使用前请重新进行环境嵌入（点击节点上的 ⚙️ 设置 → 嵌入到环境 → 下载并安装）
+>    * Klein LoRA 支持通过 Nunchaku 原生 API 直接修改量化权重，效果更好
+>    * Klein LoRA now supports using LoRA! Works with Magic Power LoRA Loader
+>    * Enable Klein mode in Magic Power LoRA Loader settings to use LoRA correctly
+>    * Please re-embed the environment before using (Settings → Embed to Environment → Download & Install)
+>    * Klein LoRA support via Nunchaku native API for direct quantized weight modification
+>    <img width="818" height="976" alt="Image" src="https://github.com/user-attachments/assets/70d3f098-b72a-4c1f-96d5-85bfbc924f95" />
+>    <img width="1895" height="926" alt="Image" src="https://github.com/user-attachments/assets/2dc0c1c6-ce1d-4130-bec4-185b77167545" />
+
+> 2. **🔧 更新**: Magic Nunchaku FLUX.2 Klein Loader - 环境嵌入功能重构 ⭐
+>    * 新版环境嵌入直接从 HuggingFace 下载源文件，确保文件完整且始终为最新版本
+>    * 自动将下载的文件放入 Nunchaku 的 python 文件中
+>    * 相比旧版本拥有更好的兼容性，文件自动更新无需手动管理
+>    * 如果出现嵌入失败的问题，请通过 Issues 反馈
+>    * New environment embedding downloads source files directly from HuggingFace
+>    * Automatically places downloaded files into Nunchaku's python files
+>    * Better compatibility than the old version; files auto-update without manual management
+>    * If embedding fails, please report via Issues
+>    <img width="753" height="1018" alt="Image" src="https://github.com/user-attachments/assets/6da72b72-db8e-4514-87a1-c8d1827166d1" />
+
+> 3. **🐛 修复**: Magic Power LoRA Loader - 弹窗拖拽问题修复
+>    * 修复了强力 LoRA 加载器设置弹窗和预设弹窗的拖拽问题
+>    * 现在可以正常拖拽弹窗，提升使用体验
+>    * Fixed drag issues in settings dialog and preset dialog
+>    * Dialogs can now be dragged normally for better user experience
 
 > **V1.3.4 版本介绍 / Version Introduction** 2026-05-20
 
@@ -53,6 +84,9 @@
 >    * Fixed environment embedding issues in the nunchaku-flux2-klein node
 >    * Enhanced environment detection and embedding stability for better user experience
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.2 版本介绍 / Version Introduction** 2026-04-07
 
 > 1. **🔍 新增**: Magic Power LoRA Loader - LoRA 检测功能
@@ -70,9 +104,6 @@
 >    * Updated nunchaku plugin to support klein9bkv quantization
 >    * The download link remains the same author's quantization
 >    * No need to re-embed the environment file (same as previous); first-time users still need to embed
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.1 版本介绍 / Version Introduction** 2026-04-04
 
@@ -705,8 +736,9 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **LoRA Detection**: New LoRA detection feature in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs.
 * **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
 * **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器).
+* **Klein Model Support**: Added LoRA loading support for Klein models (Nunchaku FLUX.2 Klein). Switch to Klein mode in node settings to enable LoRA support for Klein models. Enable adaptive mode for automatic model type detection.
 * **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
-* **可视化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
+* **可视化化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
 * **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
 * **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
 * **预览图显示**: 自动检测并显示每个 LoRA 的预览图片。
@@ -719,6 +751,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **LoRA 检测功能**: LoRA 添加窗口新增 LoRA 检测功能，可以根据路径选择全部 LoRA 进行 LoRA 的查重和检测更新。
 * **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
 * **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器) 配合使用。
+* **Klein 模型支持**: 新增对 Klein 模型（Nunchaku FLUX.2 Klein）的 LoRA 加载支持。在节点设置中切换为 Klein 模式即可启用 Klein 模型的 LoRA 支持。开启自适应模式可自动检测模型类型。
 * **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
 
 </details>
@@ -804,7 +837,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 </details>
 
 ### 10. 🔮 Magic Nunchaku FLUX.2 Klein Loader (Nunchaku Klein 模型加载器)
-> **Nunchaku flux2-klein9b model loader.** / **nunchaku-flux2-klein9b 模型加载器。**
+> **Nunchaku flux2-klein9b model loader with LoRA support.** / **nunchaku-flux2-klein9b 模型加载器，现已支持 LoRA！**
 
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
@@ -818,16 +851,37 @@ This node is based on the original author's implementation from [tonera/FLUX.2-k
 #### 特性 / Features
 
 * **简单易用**: 只需将原有的 unet 加载器替换为本节点即可，无需复杂的配置
-* **暂时不适配 LoRA**: 本节点目前暂不支持 LoRA，请等待后续更新
+* **LoRA 支持**: 本节点现已支持 LoRA！需要配合强力 LoRA 加载器使用
 * **极速性能**: 速度提升是至今所有 klein9b 量化模型的 3-4 倍
 * **显存友好**: 推荐 30 系显卡和 40 系显卡用户使用
-* **klein9bkv 量化支持**: 新增支持 klein9bkv 量化，使用时不需要重新插入环境文件（亲测环境文件一样），初次使用则需要插入
+* **klein9bkv 量化支持**: 支持 klein9bkv 量化
+* **环境嵌入重构**: 新版环境嵌入直接从 HuggingFace 下载源文件，拥有更好的兼容性
 
 * **Easy to use**: Simply replace your unet loader with this node, no complex configuration needed
-* **LoRA not supported**: LoRA is not yet supported for this node; please wait for future updates
+* **LoRA Support**: This node now supports LoRA! Works with Magic Power LoRA Loader
 * **Fast performance**: 3-4x faster than any previous klein9b quantized model
 * **VRAM friendly**: Recommended for RTX 30 series and RTX 40 series users
-* **klein9bkv quantization support**: Added support for klein9bkv quantization; no need to re-embed environment file (same as previous), first-time users still need to embed
+* **klein9bkv quantization support**: Supports klein9bkv quantization
+* **Environment embedding refactored**: New version downloads source files directly from HuggingFace with better compatibility
+
+#### LoRA 使用方法 / LoRA Usage
+
+本节点现在支持使用 LoRA！使用方法如下：
+
+1. 将 Klein 节点连接到强力 LoRA 加载器
+2. 在强力 LoRA 加载器设置中开启 **Klein 模式**
+3. 添加你想要使用的 LoRA
+4. 正常运行工作流即可！
+
+This node now supports LoRA! Usage:
+
+1. Connect Klein node to Magic Power LoRA Loader
+2. Enable **Klein mode** in Magic Power LoRA Loader settings
+3. Add the LoRA you want to use
+4. Run your workflow as usual!
+
+<img width="818" height="976" alt="Image" src="https://github.com/user-attachments/assets/99d73a31-a730-4e90-acd5-8ef8674b213e" />
+<img width="1895" height="926" alt="Image" src="https://github.com/user-attachments/assets/55b62c7b-9645-4219-832f-2c70450e1e5e" />
 
 #### 模型下载 / Model Download
 
@@ -843,11 +897,13 @@ This node is based on the original author's implementation from [tonera/FLUX.2-k
 
 1. 使用本节点前，请先下载并安装 nunchaku-flux2-klein9b 模型
 2. 首次使用时，点击设置会检测你是否已经安装了 wheel
-3. 如果检测到已安装，点击下方的"环境嵌入"即可正常使用
+3. 如果检测到已安装，点击下方的"下载并安装"即可正常使用
+4. **重要**：如果之前已嵌入过环境，也请重新进行环境嵌入以获取最新支持
 
 1. Download and install nunchaku-flux2-klein9b model before using this node
 2. On first use, click Settings to check if wheel is installed
-3. If wheel is detected as installed, click "Embed Environment" below to start using
+3. If wheel is detected as installed, click "Download & Install" below to start using
+4. **Important**: If you've embedded before, please re-embed to get the latest support
 
 <img width="427" height="473" alt="Image" src="https://github.com/user-attachments/assets/13e61a9a-cc27-4c22-a0f1-025c925bdfed" />
 
@@ -865,12 +921,14 @@ Test results: Two-Image Edit Mode, fast speed with excellent quality.
 
 #### 使用建议 / Usage Tips
 
-* **注意**: 本节点目前暂不支持 LoRA，请等待后续更新
 * 首次使用请先安装 wheel 环境
+* **LoRA 使用**：配合强力 LoRA 加载器，开启 Klein 模式即可使用 LoRA
+* 使用前请重新进行环境嵌入（⚙️ 设置 → 嵌入到环境 → 下载并安装）
 * 推荐显卡：RTX 30 系列、RTX 40 系列
 
-* **Note**: LoRA is not yet supported for this node; please wait for future updates
 * First time users should install wheel environment first
+* **LoRA Usage**: Works with Magic Power LoRA Loader; enable Klein mode to use LoRA
+* Please re-embed the environment before using (⚙️ Settings → Embed to Environment → Download & Install)
 * Recommended GPUs: RTX 30 series, RTX 40 series
 
 </details>

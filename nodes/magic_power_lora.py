@@ -262,6 +262,7 @@ class DynamicLoRAHook:
 # INT8 支持可用性标志
 INT8_AVAILABLE = _LORA_ADAPTER_AVAILABLE and INT8LoRAPatchAdapter is not None
 
+
 class MagicPowerLoraLoader:
     @classmethod
     def INPUT_TYPES(s):
@@ -277,6 +278,7 @@ class MagicPowerLoraLoader:
             "hidden": {
                 "int8_mode": ("STRING", {"default": "none"}),
                 "sdnq_mode": ("STRING", {"default": "none"}),
+                "klein_mode": ("STRING", {"default": "auto"}),
                 "adaptive_mode": ("BOOLEAN", {"default": False}),  # 自适应模式：自动检测模型类型选择合适模式
                 "lora串输出已连接": ("BOOLEAN", {"default": True}),  # 由前端根据图连接注入：未连接=链末端
             }
@@ -391,17 +393,14 @@ class MagicPowerLoraLoader:
         try:
             from diffusers import DiffusionPipeline
 
-            # 直接是 DiffusionPipeline
             if isinstance(model, DiffusionPipeline):
                 return True
 
-            # Magic SDNQ Loader 的 SDNQModelWrapper（有 get_pipeline 返回 pipeline）
             if hasattr(model, 'get_pipeline'):
                 pipeline = model.get_pipeline()
                 if isinstance(pipeline, DiffusionPipeline):
                     return True
 
-            # 有 DiffusionPipeline 特征属性
             if hasattr(model, 'unet') or hasattr(model, 'transformer'):
                 if hasattr(model, 'text_encoder') or hasattr(model, 'vae'):
                     return True
@@ -412,7 +411,20 @@ class MagicPowerLoraLoader:
         except Exception:
             return False
 
-    # 🌟 核心修复：更强大的图片查找逻辑（优先查找magicloradate子目录）
+    # 检测模型是否为 Klein 模型（ComfyFlux2KleinWrapper）
+    @staticmethod
+    def is_klein_model(model):
+        """检测模型是否为 Klein 模型（由 Magic Nunchaku FLUX.2 Klein Loader 加载）。"""
+        try:
+            if not hasattr(model, 'model') or not hasattr(model.model, 'diffusion_model'):
+                return False
+            wrapper_cls_name = type(model.model.diffusion_model).__name__
+            return wrapper_cls_name == "ComfyFlux2KleinWrapper"
+        except Exception:
+            return False
+
+
+    # 检测模型是否为 SDNQ 模型（DiffusionPipeline 或 Magic SDNQ Loader 的 wrapper）
     @staticmethod
     def get_preview_path(lora_name):
         try:
@@ -444,7 +456,7 @@ class MagicPowerLoraLoader:
         except Exception:
             return None
 
-    def apply_loras(self, lora_stack, model=None, clip=None, adaptive_mode=False, int8_mode="none", sdnq_mode="none", **kwargs):
+    def apply_loras(self, lora_stack, model=None, clip=None, adaptive_mode=False, int8_mode="none", sdnq_mode="none", klein_mode="auto", **kwargs):
         """
         应用 LoRA
         int8_mode: "none" (默认), "stochastic" (静态), "dynamic" (动态)
@@ -516,11 +528,17 @@ class MagicPowerLoraLoader:
         # 检测模型类型
         is_int8 = self.is_int8_model(out_model)
         is_sdnq = self.is_sdnq_model(out_model)
+        is_klein = self.is_klein_model(out_model)
 
         # ========== 自适应模式检测 ==========
         if adaptive_mode:
-            print(f"🔄 [MagicPowerLora] 自适应模式：检测到 SDNQ={is_sdnq}, INT8={is_int8}")
-            if is_sdnq:
+            print(f"🔄 [MagicPowerLora] 自适应模式：检测到 Klein={is_klein}, SDNQ={is_sdnq}, INT8={is_int8}")
+            if is_klein:
+                klein_mode = "klein"
+                int8_mode = "none"
+                sdnq_mode = "none"
+                print(f"   → 自动切换到 Klein 模式")
+            elif is_sdnq:
                 sdnq_mode = "sdnq"
                 int8_mode = "none"
                 print(f"   → 自动切换到 SDNQ 模式")
@@ -534,20 +552,36 @@ class MagicPowerLoraLoader:
                 print(f"   → 自动切换到标准模式")
         # ====================================
 
+        # 确保 klein_mode 有值（前端未注入时默认 "auto"）
+        if isinstance(klein_mode, str):
+            if klein_mode.lower() == "true":
+                klein_mode = "klein"
+            elif klein_mode.lower() == "false":
+                klein_mode = "none"
+        if klein_mode is None:
+            klein_mode = "auto"
+
         if sdnq_mode == "sdnq" and not is_sdnq:
             print(f"⚠️ [MagicPowerLora] SDNQ 模式已启用，但模型似乎不是 SDNQ 模型（DiffusionPipeline），将回退到标准模式")
             sdnq_mode = "none"
         if sdnq_mode == "none" and is_sdnq:
             print(f"💡 [MagicPowerLora] 检测到 SDNQ 模型（DiffusionPipeline），建议在设置中启用 SDNQ 模式")
-        # 仅在实际会走 INT8/标准路径时提示 INT8（走 SDNQ 时忽略节点上残留的 int8_mode 设置，避免误报）
-        using_sdnq = (sdnq_mode == "sdnq" and is_sdnq)
-        if not using_sdnq:
+        if klein_mode == "klein" and not is_klein:
+            print(f"⚠️ [MagicPowerLora] Klein 模式已启用，但模型似乎不是 Klein 模型，将回退到标准模式")
+            klein_mode = "none"
+        if klein_mode == "none" and is_klein:
+            print(f"💡 [MagicPowerLora] 检测到 Klein 模型（Nunchaku FLUX.2 Klein），建议在设置中启用 Klein 模式")
+        # 仅在实际会走标准路径时才提示 INT8
+        # Klein/SDNQ 启用时优先走对应模式，不应触发 INT8 提示（Klein 模型的 ComfyFlux2KleinWrapper
+        # 内部使用 int8 权重，会导致 is_int8_model 误判，但 Klein 模式有独立的加载逻辑）
+        special_mode_active = klein_mode == "klein" or sdnq_mode == "sdnq"
+        if not special_mode_active:
             if int8_mode != "none" and not is_int8:
                 print(f"⚠️ [MagicPowerLora] INT8 模式已启用，但模型似乎不是 INT8 量化模型，将尝试使用 INT8 加载器")
             if int8_mode == "none" and is_int8:
                 print(f"💡 [MagicPowerLora] 检测到 INT8 模型，建议在设置中启用 INT8 模式以获得更好的兼容性")
 
-        mode_str = f"{int8_mode}" if int8_mode != "none" else (f"{sdnq_mode}" if sdnq_mode != "none" else "standard")
+        mode_str = f"{int8_mode}" if int8_mode != "none" else (f"{sdnq_mode}" if sdnq_mode == "sdnq" else (f"{klein_mode}" if klein_mode == "klein" else "standard"))
         adaptive_str = f" (Adaptive)" if adaptive_mode else ""
         
         # 如果没有LoRA需要加载，直接返回（不做任何加载尝试）
@@ -733,6 +767,45 @@ class MagicPowerLoraLoader:
                         preview_images.append(preview_tensor)
                     except Exception as e:
                         print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
+
+        elif klein_mode == "klein" and is_klein:
+            # Klein 模式 - 使用 Nunchaku 原生 LoRA API 直接修改量化权重
+            # 链末端：先重置旧 LoRA，再按串接顺序加载（与 SDNQ 的卸载-重装策略一致）
+            try:
+                wrapper = out_model.model.diffusion_model
+                wrapper.reset_lora()
+                print(f"   [Klein] 已重置旧 LoRA")
+            except Exception as e:
+                print(f"   ⚠️ [Klein] 重置旧 LoRA 失败: {e}")
+            for item in items_to_process:
+                lora_name = item.get("name", "").strip()
+                weight = float(item.get("weight", 1.0))
+                if not lora_name:
+                    continue
+
+                lora_path = folder_paths.get_full_path("loras", lora_name)
+                if lora_path is None:
+                    print(f"⚠️ [MagicPowerLora] Klein LoRA not found: {lora_name}")
+                    continue
+
+                try:
+                    wrapper.update_lora_params(lora_path, strength=weight)
+                    print(f"   ✅ Applied (Klein): {lora_name} (strength={weight})")
+                except Exception as e:
+                    print(f"   ❌ Failed (Klein): {lora_name} -> {e}")
+
+                if "tags" in item and item.get("tags"):
+                    active_tags.append(str(item["tags"]))
+
+                img_path = self.get_preview_path(lora_name)
+                if img_path:
+                    try:
+                        i = Image.open(img_path).convert("RGB")
+                        i = np.array(i).astype(np.float32) / 255.0
+                        preview_tensor = torch.from_numpy(i)[None,]
+                        preview_images.append(preview_tensor)
+                    except Exception:
+                        pass
 
         elif sdnq_mode == "sdnq" and is_sdnq:
             # SDNQ 模式 - 链末端：先全局卸载，再按合并列表顺序加载（与 comfyui-sdnq 每次运行先卸再加载一致）

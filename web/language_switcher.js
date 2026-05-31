@@ -1039,21 +1039,28 @@ const magicKleinLoaderTranslations = {
     "transformer:": { zh: "transformer:", en: "transformer:" },
     "torch_transfer_utils:": { zh: "torch_transfer_utils:", en: "torch_transfer_utils:" },
     "wrappers/klein.py:": { zh: "wrappers/klein.py:", en: "wrappers/klein.py:" },
+    "lora/common/:": { zh: "lora/common/:", en: "lora/common/:" },
     "ComfyUI Python:": { zh: "ComfyUI Python:", en: "ComfyUI Python:" },
 
     "🔧 嵌入到环境": { zh: "🔧 嵌入到环境", en: "🔧 Install to Environment" },
-    "KLEIN_EMBED_DESC": {
-        zh: "独立安装包（pip）不包含 <code style='color:#a78bfa'>wrappers/klein.py</code>（ComfyUI 适配层），在已安装 nunchaku 且含 FLUX.2 运行库时，可点击下方按钮写入。",
-        en: "The standalone pip package does not include <code style='color:#a78bfa'>wrappers/klein.py</code> (ComfyUI bridge). After nunchaku + FLUX.2 runtime are present, use the button below.",
+    "KLEIN_DOWNLOAD_DESC": {
+        zh: "从 HuggingFace（tonera/FLUX.2-klein-9B-Nunchaku）下载核心运行文件（<code style='color:#a78bfa'>torch_transfer_utils.py</code>、<code style='color:#a78bfa'>transformer_flux2.py</code>、<code style='color:#a78bfa'>lora/common/</code>），同时写入 ComfyUI 专用桥接层 <code style='color:#a78bfa'>wrappers/klein.py</code>。",
+        en: "Downloads core runtime files from HuggingFace (torch_transfer_utils.py, transformer_flux2.py, lora/common/) and writes the ComfyUI-specific bridge (wrappers/klein.py).",
     },
+    "KLEIN_DOWNLOAD_SOURCE": {
+        zh: "📥 源：HuggingFace / tonera/FLUX.2-klein-9B-Nunchaku",
+        en: "📥 Source: HuggingFace / tonera/FLUX.2-klein-9B-Nunchaku",
+    },
+    "📥 下载并安装": { zh: "📥 下载并安装", en: "📥 Download & Install" },
+    "🔄 强制重新下载": { zh: "🔄 强制重新下载", en: "🔄 Force Re-download" },
     "🔧 嵌入到 nunchaku 环境": { zh: "🔧 嵌入到 nunchaku 环境", en: "🔧 Install to nunchaku Environment" },
     "🔧 重新嵌入到 nunchaku 环境": { zh: "🔧 重新嵌入到 nunchaku 环境", en: "🔧 Re-install to nunchaku Environment" },
     "⏳ 安装中...": { zh: "⏳ 安装中...", en: "⏳ Installing..." },
+    "⏳ 强制更新中...": { zh: "⏳ 强制更新中...", en: "⏳ Force updating..." },
+    "正在下载并安装文件...": { zh: "正在下载并安装文件...", en: "Downloading and installing files..." },
+    "正在从 HuggingFace 下载最新文件...": { zh: "正在从 HuggingFace 下载最新文件...", en: "Downloading latest files from HuggingFace..." },
     "正在写入文件...": { zh: "正在写入文件...", en: "Writing files..." },
-    "✅ 安装成功！wrappers/klein.py 已写入。": {
-        zh: "✅ 安装成功！wrappers/klein.py 已写入。",
-        en: "✅ Done! wrappers/klein.py has been written.",
-    },
+    "✅ 安装完成！": { zh: "✅ 安装完成！", en: "✅ Installation complete!" },
     "❌ 安装失败: ": { zh: "❌ 安装失败: ", en: "❌ Failed: " },
     "❌ 请求失败: ": { zh: "❌ 请求失败: ", en: "❌ Request failed: " },
 
@@ -1083,8 +1090,8 @@ const magicKleinLoaderTranslations = {
         en: "🔮 Magic Nunchaku FLUX.2 Klein Loader",
     },
     "KLEIN_INFO_INTRO": {
-        zh: "独立于官方 ComfyUI-nunchaku 的节点，用于加载 <strong>FLUX.2 Klein</strong> 量化模型。即使删除官方节点或卸载 pip 包，本节点仍可通过嵌入方式使用。",
-        en: "A standalone node for loading <strong>FLUX.2 Klein</strong> quantized models, independent of the official ComfyUI-nunchaku node. It still works via embedding even if the official node or pip package is removed.",
+        zh: "独立于官方 ComfyUI-nunchaku 的节点，用于加载 <strong>FLUX.2 Klein</strong> 量化模型。首次使用需从 HuggingFace 下载核心运行文件。即使删除官方节点或卸载 pip 包，本节点仍可通过下载安装方式使用。",
+        en: "A standalone node for loading <strong>FLUX.2 Klein</strong> quantized models, independent of the official ComfyUI-nunchaku node. First-time setup downloads core runtime files from HuggingFace. Works even if the official node or pip package is removed.",
     },
     "支持的模型": { zh: "支持的模型", en: "Supported Models" },
     "KLEIN_MODEL_LINE2": {
@@ -1105,8 +1112,8 @@ const magicKleinLoaderTranslations = {
         en: "Place it in ComfyUI's <code style=\"color:#a78bfa;\">models/diffusion_models/</code> folder",
     },
     "KLEIN_STEP3": {
-        zh: "点击节点上的 <strong>⚙️ 设置</strong> → <strong>嵌入到 nunchaku 环境</strong>",
-        en: "Click <strong>⚙️ Settings</strong> on this node → <strong>Install to nunchaku Environment</strong>",
+        zh: "点击节点上的 <strong>⚙️ 设置</strong> → 点击 <strong>📥 下载并安装</strong>",
+        en: "Click <strong>⚙️ Settings</strong> on this node → <strong>📥 Download & Install</strong>",
     },
     "KLEIN_STEP4": { zh: "重新加载 ComfyUI 即可正常使用", en: "Reload ComfyUI and use normally" },
     "量化说明（来自 HuggingFace）": { zh: "量化说明（来自 HuggingFace）", en: "Quantization Quality (from HuggingFace)" },

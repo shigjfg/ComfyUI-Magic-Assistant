@@ -21,6 +21,32 @@ async function loadLoraImageList() {
 // 初始化时加载图片列表
 loadLoraImageList();
 
+// ---------------------------------------------------------------------------
+// i18n helpers
+// ---------------------------------------------------------------------------
+function mplGetCurrentLanguage() {
+    try {
+        if (window.getCurrentLanguage) return window.getCurrentLanguage();
+        return localStorage.getItem("magic_language_switcher_lang") || "zh";
+    } catch (e) {
+        return "zh";
+    }
+}
+
+function mplTranslateText(text, lang) {
+    try {
+        if (window.translateText) return window.translateText(text, lang, "MagicPowerLoraLoader");
+        if (window.allTranslations?.MagicPowerLoraLoader?.[text]?.[lang]) {
+            return window.allTranslations.MagicPowerLoraLoader[text][lang];
+        }
+    } catch (e) { /* ignore */ }
+    return text;
+}
+
+function mplT(text) {
+    return mplTranslateText(text, mplGetCurrentLanguage());
+}
+
 /** 与「添加 Lora」弹窗相同的目录树（用于检测范围导航） */
 function buildMplFolderTree(allFiles) {
     const folderTree = {};
@@ -126,6 +152,15 @@ app.registerExtension({
                 adaptiveModeWidget.computeSize = () => [0, 0];
                 this._adaptiveModeWidget = adaptiveModeWidget;
 
+                // Klein 模式设置（隐藏的 widget）
+                let kleinModeWidget = this.widgets.find(w => w.name === "klein_mode");
+                if (!kleinModeWidget) {
+                    kleinModeWidget = this.addWidget("text", "klein_mode", "auto", () => {}, {});
+                }
+                kleinModeWidget.hidden = true;
+                kleinModeWidget.computeSize = () => [0, 0];
+                this._kleinModeWidget = kleinModeWidget;
+
                 // 初始化 INT8 模式（从属性中读取）
                 if (!this.int8Mode) {
                     this.int8Mode = this.properties["int8_mode"] || "none";
@@ -139,6 +174,11 @@ app.registerExtension({
                 // 初始化自适应模式（从属性中读取）
                 if (!this.adaptiveMode) {
                     this.adaptiveMode = this.properties["adaptive_mode"] === true || this.properties["adaptive_mode"] === "true";
+                }
+
+                // 初始化 Klein 模式（从属性中读取）
+                if (!this.kleinMode) {
+                    this.kleinMode = this.properties["klein_mode"] || "auto";
                 }
 
                 this._stackWidget = stackWidget;
@@ -214,6 +254,10 @@ app.registerExtension({
                 };
 
                 this.embeddedDiv.appendChild(this.listContainer);
+
+                // --- Klein 模式提示 Banner（检测到 Klein 模型但未启用对应模式时显示）---
+                this._kleinBannerEl = null;
+                this._updateKleinBanner();
 
                 // --- 底部按钮区 ---
                 const footer = document.createElement("div");
@@ -425,9 +469,19 @@ app.registerExtension({
                     this._adaptiveModeWidget.value = String(adaptiveBool);
                 }
 
+                // 更新 Klein 模式 widget
+                if (!this._kleinModeWidget) {
+                    this._kleinModeWidget = this.widgets?.find(w => w.name === "klein_mode");
+                }
+                if (this._kleinModeWidget) {
+                    const kleinMode = this.kleinMode || this.properties["klein_mode"] || "auto";
+                    this._kleinModeWidget.value = kleinMode;
+                }
+
                 this.properties["lora_data_state"] = JSON.stringify(this.loraData);
                 this.properties["int8_mode"] = this.int8Mode || "none";
                 this.properties["sdnq_mode"] = this.sdnqMode || "none";
+                this.properties["klein_mode"] = this.kleinMode || "auto";
                 // 与隐藏 widget、设置弹窗一致：始终用严格布尔，避免 "false" 字符串导致 !adaptiveMode 误判
                 this.adaptiveMode = adaptiveBool;
                 this.properties["adaptive_mode"] = adaptiveBool;
@@ -464,6 +518,11 @@ app.registerExtension({
                         adaptiveModeWidget.hidden = true;
                         adaptiveModeWidget.computeSize = () => [0, 0];
                     }
+                    const kleinModeWidget = this.widgets.find(w => w.name === "klein_mode");
+                    if (kleinModeWidget) {
+                        kleinModeWidget.hidden = true;
+                        kleinModeWidget.computeSize = () => [0, 0];
+                    }
                 }
                 
                 // 恢复 INT8 模式设置
@@ -488,6 +547,14 @@ app.registerExtension({
                 } else {
                     this.adaptiveMode = false;
                     this.properties["adaptive_mode"] = false;
+                }
+
+                // 恢复 Klein 模式设置
+                if (this.properties["klein_mode"]) {
+                    this.kleinMode = this.properties["klein_mode"];
+                } else {
+                    this.kleinMode = "auto";
+                    this.properties["klein_mode"] = "auto";
                 }
                 
                 if (this.properties["lora_data_state"]) {
@@ -549,8 +616,14 @@ app.registerExtension({
                     this.adaptiveMode = this.widgets_values[5] === "true" || this.widgets_values[5] === true;
                     this.properties["adaptive_mode"] = this.adaptiveMode;
                 }
+
+                // 从 widgets_values 恢复 Klein 模式（如果存在）
+                if (this.widgets_values && this.widgets_values.length > 6 && this.widgets_values[6]) {
+                    this.kleinMode = this.widgets_values[6];
+                    this.properties["klein_mode"] = this.kleinMode;
+                }
                 
-                setTimeout(() => { this.createDOMInterface(); this.renderEmbeddedList(); }, 100);
+                setTimeout(() => { this.createDOMInterface(); this.renderEmbeddedList(); this._updateKleinBanner?.(); }, 100);
                 return r;
             };
 
@@ -957,26 +1030,23 @@ app.registerExtension({
                 }
             };
 
-            // 🌟 Tag编辑弹窗
-            // 通用的弹窗拖拽功能
+            // 通用的弹窗拖拽功能（一比一参考 magic_resolution.js）
             nodeType.prototype.makeDialogDraggable = function(dialog, titleBar) {
                 let isDragging = false;
                 let offsetX = 0;
                 let offsetY = 0;
-                
+
                 titleBar.style.cursor = "move";
                 titleBar.style.userSelect = "none";
-                
+
                 const dragStart = (e) => {
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || 
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' ||
                         e.target.tagName === 'BUTTON' || e.target.closest('button')) {
                         return;
                     }
-                    
-                    // 获取弹窗的当前位置（相对于视口）
+
                     const rect = dialog.getBoundingClientRect();
-                    
-                    // 获取鼠标点击位置
+
                     let mouseX, mouseY;
                     if (e.type === "mousedown") {
                         mouseX = e.clientX;
@@ -989,20 +1059,18 @@ app.registerExtension({
                     } else {
                         return;
                     }
-                    
-                    // 计算偏移量（鼠标位置相对于弹窗左上角的偏移）
+
                     offsetX = mouseX - rect.left;
                     offsetY = mouseY - rect.top;
-                    
+
                     e.preventDefault();
                 };
-                
+
                 const drag = (e) => {
                     if (!isDragging) return;
-                    
+
                     e.preventDefault();
-                    
-                    // 获取当前鼠标位置
+
                     let mouseX, mouseY;
                     if (e.type === "mousemove") {
                         mouseX = e.clientX;
@@ -1013,43 +1081,127 @@ app.registerExtension({
                     } else {
                         return;
                     }
-                    
-                    // 计算新位置（鼠标位置减去偏移量）
+
                     let newX = mouseX - offsetX;
                     let newY = mouseY - offsetY;
-                    
-                    // 限制拖拽范围，确保弹窗不会完全移出屏幕
+
                     const minX = 0;
                     const minY = 0;
                     const maxX = window.innerWidth - dialog.offsetWidth;
                     const maxY = window.innerHeight - dialog.offsetHeight;
-                    
-                    // 确保在屏幕范围内
                     newX = Math.max(minX, Math.min(newX, maxX));
                     newY = Math.max(minY, Math.min(newY, maxY));
-                    
-                    // 移除原有的定位方式（top/left/right/bottom），改用transform
+
+                    // 一比一参考 magic_resolution.js：清除 top/left/right/bottom，用 transform 定位
                     dialog.style.top = '';
                     dialog.style.left = '';
                     dialog.style.right = '';
                     dialog.style.bottom = '';
-                    // 确保dialog使用fixed定位（父 overlay 已是 fixed，直接用 transform 移动即可，无需改父样式）
+
+                    // 如果父元素是 flex 居中，需要改父样式
+                    const parent = dialog.parentElement;
+                    if (parent && parent.style.display === 'flex') {
+                        parent.style.display = 'block';
+                        parent.style.position = 'fixed';
+                        parent.style.top = '0';
+                        parent.style.left = '0';
+                        parent.style.width = '100%';
+                        parent.style.height = '100%';
+                    }
+
+                    // 确保 dialog 使用 fixed 定位
                     dialog.style.position = 'fixed';
-                    
-                    // 应用transform
+
+                    // 用 transform 移动
                     dialog.style.transform = `translate(${newX}px, ${newY}px)`;
                 };
-                
+
                 const dragEnd = () => {
                     isDragging = false;
                 };
-                
+
                 titleBar.addEventListener("mousedown", dragStart);
                 titleBar.addEventListener("touchstart", dragStart);
                 document.addEventListener("mousemove", drag);
                 document.addEventListener("touchmove", drag);
                 document.addEventListener("mouseup", dragEnd);
                 document.addEventListener("touchend", dragEnd);
+            };
+
+            // --- Klein 模式提示 Banner ---
+            nodeType.prototype._updateKleinBanner = function() {
+                const container = this.embeddedDiv;
+                if (!container) return;
+
+                // 移除旧 banner
+                if (this._kleinBannerEl) {
+                    this._kleinBannerEl.remove();
+                    this._kleinBannerEl = null;
+                }
+
+                // 读取当前 klein_mode 设置
+                const kleinMode = this.kleinMode
+                    ?? this.properties?.klein_mode
+                    ?? this._kleinModeWidget?.value
+                    ?? "auto";
+                const isKleinActive = String(kleinMode).toLowerCase() === "klein";
+
+                // Klein 模式下不需要提示
+                if (isKleinActive) return;
+
+                // 检测是否使用了 Klein Loader（通过检查本节点的 model 输入是否连接了 MagicKleinLoader）
+                const isKleinModelConnected = this.inputs?.some(input => {
+                    if (!input.link) return false;
+                    const link = app.graph.links?.[input.link];
+                    if (!link) return false;
+                    const originNode = app.graph.getNodeById(link.origin_id);
+                    return originNode?.type === "MagicKleinLoader";
+                });
+
+                if (!isKleinModelConnected) return;
+
+                // 构建 Banner
+                const banner = document.createElement("div");
+                banner.style.cssText = `
+                    background: #1a3a2a;
+                    border-left: 3px solid #4CAF50;
+                    border-right: 3px solid #4CAF50;
+                    padding: 8px 12px;
+                    margin: 4px 6px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    color: #a5d6a7;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-shrink: 0;
+                `;
+                banner.innerHTML = `
+                    <span style="font-size: 14px;">&#x1F31F;</span>
+                    <span style="flex: 1;">
+                        已检测到 Klein 模型，请前往 <b>&#x2699;&#xFE0F;设置 &rarr; LoRA 加载模式</b>
+                        启用 <b>tonera-Klein-Nunchaku</b> 模式以正确加载 LoRA
+                    </span>
+                    <button
+                        style="background:#2e7d32;border:1px solid #4CAF50;color:#a5d6a7;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;flex-shrink:0;"
+                    >前往设置</button>
+                `;
+
+                // 前往设置按钮
+                banner.querySelector("button").onclick = () => {
+                    this.showSettingsModal();
+                };
+
+                // 插入到 listContainer 之前
+                const listContainer = this.listContainer;
+                if (listContainer && listContainer.parentNode === container) {
+                    container.insertBefore(banner, listContainer);
+                } else {
+                    const footer = container.querySelector(".mpl-footer");
+                    if (footer) container.insertBefore(banner, footer);
+                }
+
+                this._kleinBannerEl = banner;
             };
 
             nodeType.prototype.showTagEditModal = function(lora) {
@@ -1068,9 +1220,13 @@ app.registerExtension({
                     justify-content: center;
                 `;
                 
-                // 创建弹窗
+                // 创建弹窗（一比一参考 magic_resolution.js：fixed + translate 居中）
                 const dialog = document.createElement("div");
                 dialog.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
                     background: #2a2a2a;
                     border: 1px solid #555;
                     border-radius: 8px;
@@ -1079,7 +1235,6 @@ app.registerExtension({
                     max-width: 700px;
                     box-shadow: 0 8px 25px rgba(0,0,0,0.8);
                     z-index: 10002;
-                    position: relative;
                 `;
                 
                 // 标题栏（可拖拽）
@@ -1333,9 +1488,13 @@ app.registerExtension({
                     justify-content: center;
                 `;
                 
-                // 创建弹窗
+                // 创建弹窗（一比一参考 magic_resolution.js：fixed + translate 居中）
                 const dialog = document.createElement("div");
                 dialog.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
                     background: #1e1e1e;
                     border: 1px solid #3a3a3a;
                     border-radius: 12px;
@@ -1348,6 +1507,7 @@ app.registerExtension({
                     z-index: 10002;
                     display: flex;
                     flex-direction: column;
+                    overflow: hidden;
                 `;
                 
                 // 标题栏
@@ -2657,7 +2817,7 @@ app.registerExtension({
                         const safeName = encodeURIComponent(lora.name);
                         img.src = api.apiURL(`/ma/lora/image?name=${safeName}`);
                         img.onerror = () => {
-                            this._previewDiv.innerHTML = '<div style="padding:20px;color:#888;text-align:center;">无预览图</div>';
+                            this._previewDiv.innerHTML = `<div style="padding:20px;color:#888;text-align:center;">${mplT("无预览图")}</div>`;
                         };
                         
                         this._previewDiv.appendChild(img);
@@ -4290,15 +4450,19 @@ app.registerExtension({
                 const parseAdaptive = (v) => v === true || v === "true" || v === 1;
                 const int8Raw = this.int8Mode ?? this.properties["int8_mode"] ?? this._int8ModeWidget?.value ?? "none";
                 const sdnqRaw = this.sdnqMode ?? this.properties["sdnq_mode"] ?? this._sdnqModeWidget?.value ?? "none";
+                const kleinRaw = this.kleinMode ?? this.properties["klein_mode"] ?? this._kleinModeWidget?.value ?? "auto";
                 const adaptiveRaw = this.adaptiveMode ?? this.properties["adaptive_mode"] ?? this._adaptiveModeWidget?.value;
                 const currentInt8Mode = String(int8Raw || "none").toLowerCase();
                 const currentSdnqMode = String(sdnqRaw || "none").toLowerCase();
+                const currentKleinMode = String(kleinRaw || "auto").toLowerCase();
                 const isAdaptive = parseAdaptive(adaptiveRaw);
                 const int8On = currentInt8Mode === "stochastic" || currentInt8Mode === "dynamic";
                 const sdnqOn = currentSdnqMode === "sdnq";
-                // 与确定按钮逻辑一致：自适应 > SDNQ > INT8 > 默认（标准）
+                const kleinOn = currentKleinMode === "klein";
+                // 与确定按钮逻辑一致：自适应 > Klein > SDNQ > INT8 > 默认（标准）
                 let primaryMode = "default";
                 if (isAdaptive) primaryMode = "adaptive";
+                else if (kleinOn) primaryMode = "klein";
                 else if (sdnqOn) primaryMode = "sdnq";
                 else if (int8On) primaryMode = currentInt8Mode;
                 
@@ -4316,21 +4480,28 @@ app.registerExtension({
                     align-items: center;
                     justify-content: center;
                 `;
-                
-                // 创建弹窗
+
+                // 创建弹窗（一比一参考 magic_resolution.js：fixed + translate(-50%,-50%) 居中）
                 const dialog = document.createElement("div");
                 dialog.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
                     background: #2a2a2a;
                     border: 1px solid #555;
                     border-radius: 8px;
-                    padding: 20px;
-                    min-width: 500px;
-                    max-width: 700px;
+                    padding: 0;
+                    width: 580px;
+                    max-width: 96vw;
+                    max-height: 85vh;
                     box-shadow: 0 8px 25px rgba(0,0,0,0.8);
                     z-index: 10002;
-                    position: relative;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
                 `;
-                
+
                 // 标题栏（可拖拽）
                 const title = document.createElement("div");
                 title.textContent = "设置";
@@ -4338,17 +4509,22 @@ app.registerExtension({
                     font-size: 16px;
                     font-weight: bold;
                     color: #eee;
-                    margin-bottom: 15px;
+                    padding: 12px 20px;
                     border-bottom: 1px solid #444;
-                    padding-bottom: 10px;
                     cursor: move;
                     user-select: none;
+                    background: #252525;
+                    flex-shrink: 0;
                 `;
-                
-                // 内容区域
+
+                // 内容区域（可滚动）
                 const content = document.createElement("div");
-                content.style.cssText = "margin-bottom: 15px;";
-                
+                content.style.cssText = "flex: 1; overflow-y: auto; padding: 16px 20px; min-height: 0;";
+
+                // 按钮容器
+                const buttonContainer = document.createElement("div");
+                buttonContainer.style.cssText = "display: flex; gap: 10px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid #444; flex-shrink: 0; background: #252525;";
+
                 // 设置项容器
                 const settingsContainer = document.createElement("div");
                 settingsContainer.style.cssText = "display: flex; flex-direction: column; gap: 20px;";
@@ -4442,8 +4618,10 @@ app.registerExtension({
                         radioStochastic.checked = false;
                         radioDynamic.checked = false;
                         radioSdnqSdnq.checked = false;
+                        radioKleinKlein.checked = false;
                         updateInt8Selection();
                         updateSdnqSelection();
+                        updateKleinSelection();
                     }
                 });
 
@@ -4454,8 +4632,10 @@ app.registerExtension({
                         radioStochastic.checked = false;
                         radioDynamic.checked = false;
                         radioSdnqSdnq.checked = false;
+                        radioKleinKlein.checked = false;
                         updateInt8Selection();
                         updateSdnqSelection();
+                        updateKleinSelection();
                     }
                 });
                 updateModeSelection();
@@ -4551,13 +4731,15 @@ app.registerExtension({
                 [radioStochastic, radioDynamic].forEach(radio => {
                     radio.addEventListener("change", () => {
                         updateInt8Selection();
-                        // 选择 INT8 模式时，取消默认模式和 SDNQ 模式
+                        // 选择 INT8 模式时，取消默认模式和 SDNQ 模式和 Klein 模式
                         if (radio.checked) {
                             radioAdaptive.checked = false;
                             radioDefault.checked = false;
                             radioSdnqSdnq.checked = false;
+                            radioKleinKlein.checked = false;
                             updateModeSelection();
                             updateSdnqSelection();
+                            updateKleinSelection();
                         }
                     });
                 });
@@ -4571,6 +4753,91 @@ app.registerExtension({
                 int8Section.appendChild(int8ModeContainer);
 
                 settingsContainer.appendChild(int8Section);
+
+                // ========== tonera-Klein-Nunchaku 模式设置区域 ==========
+                const kleinSection = document.createElement("div");
+                kleinSection.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+
+                const kleinTitle = document.createElement("div");
+                kleinTitle.textContent = "tonera-Klein-Nunchaku LoRA 模式";
+                kleinTitle.style.cssText = `
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #fff;
+                    margin-bottom: 8px;
+                `;
+
+                const kleinDesc = document.createElement("div");
+                kleinDesc.textContent = "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认/INT8 模式）";
+                kleinDesc.style.cssText = `
+                    font-size: 12px;
+                    color: #aaa;
+                    margin-bottom: 12px;
+                    line-height: 1.5;
+                `;
+
+                const kleinModeContainer = document.createElement("div");
+                kleinModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+
+                // tonera-Klein-Nunchaku 模式（选中时激活）
+                const kleinModeKlein = document.createElement("label");
+                kleinModeKlein.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                const radioKleinKlein = document.createElement("input");
+                radioKleinKlein.type = "radio";
+                radioKleinKlein.name = "klein_mode";
+                radioKleinKlein.value = "klein";
+                radioKleinKlein.checked = primaryMode === "klein";
+                radioKleinKlein.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                const labelKleinKlein = document.createElement("div");
+                labelKleinKlein.style.cssText = "flex: 1;";
+                const labelKleinKleinTitle = document.createElement("div");
+                labelKleinKleinTitle.textContent = "tonera-Klein-Nunchaku 模式";
+                labelKleinKleinTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                const labelKleinKleinDesc = document.createElement("div");
+                labelKleinKleinDesc.textContent = "使用 Nunchaku 原生 LoRA API（update_lora_params）加载 tonera FLUX.2-klein-9B-Nunchaku 专用 LoRA";
+                labelKleinKleinDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelKleinKlein.appendChild(labelKleinKleinTitle);
+                labelKleinKlein.appendChild(labelKleinKleinDesc);
+                kleinModeKlein.appendChild(radioKleinKlein);
+                kleinModeKlein.appendChild(labelKleinKlein);
+
+                // Klein 模式选中状态更新
+                const updateKleinSelection = () => {
+                    [kleinModeKlein].forEach(mode => {
+                        const radio = mode.querySelector('input[type="radio"]');
+                        if (radio.checked) {
+                            mode.style.borderColor = "#2196F3";
+                            mode.style.background = "#2a3a4a";
+                        } else {
+                            mode.style.borderColor = "transparent";
+                            mode.style.background = "#333";
+                        }
+                    });
+                };
+
+                radioKleinKlein.addEventListener("change", () => {
+                    updateKleinSelection();
+                    // 选择 Klein 模式时取消其他特殊模式
+                    if (radioKleinKlein.checked) {
+                        radioAdaptive.checked = false;
+                        radioDefault.checked = false;
+                        radioStochastic.checked = false;
+                        radioDynamic.checked = false;
+                        radioSdnqSdnq.checked = false;
+                        updateModeSelection();
+                        updateInt8Selection();
+                        updateSdnqSelection();
+                    }
+                });
+                updateKleinSelection();
+
+                kleinModeContainer.appendChild(kleinModeKlein);
+
+                kleinSection.appendChild(kleinTitle);
+                kleinSection.appendChild(kleinDesc);
+                kleinSection.appendChild(kleinModeContainer);
+
+                settingsContainer.appendChild(kleinSection);
 
                 // ========== SDNQ 模式设置区域 ==========
                 const sdnqSection = document.createElement("div");
@@ -4636,14 +4903,16 @@ app.registerExtension({
 
                 radioSdnqSdnq.addEventListener("change", () => {
                     updateSdnqSelection();
-                    // 选择 SDNQ 模式时，取消默认模式和 INT8 模式
+                    // 选择 SDNQ 模式时，取消默认模式和 INT8 模式和 Klein 模式
                     if (radioSdnqSdnq.checked) {
                         radioAdaptive.checked = false;
                         radioDefault.checked = false;
                         radioStochastic.checked = false;
                         radioDynamic.checked = false;
+                        radioKleinKlein.checked = false;
                         updateModeSelection();
                         updateInt8Selection();
+                        updateKleinSelection();
                     }
                 });
                 updateSdnqSelection();
@@ -4657,110 +4926,14 @@ app.registerExtension({
                 settingsContainer.appendChild(sdnqSection);
 
                 content.appendChild(settingsContainer);
-                
-                // 按钮容器
-                const buttonContainer = document.createElement("div");
-                buttonContainer.style.cssText = `
-                    display: flex;
-                    gap: 10px;
-                    justify-content: flex-end;
-                    margin-top: 15px;
-                `;
-                
-                // 确定按钮
-                const confirmBtn = document.createElement("button");
-                confirmBtn.textContent = "确定";
-                confirmBtn.style.cssText = `
-                    padding: 8px 16px;
-                    background: #2196F3;
-                    border: none;
-                    color: white;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                `;
-                confirmBtn.onclick = () => {
-                    // 检查是否选择了自适应模式
-                    const isAdaptiveSelected = radioAdaptive.checked;
 
-                    // 检查是否选择了全局默认模式
-                    const isDefaultSelected = radioDefault.checked;
-
-                    // 仅在当前弹窗内查找，避免命中页面上其他同名 radio
-                    const scope = overlay;
-
-                    // 保存 INT8 模式设置
-                    let selectedInt8Mode = "none";
-                    if (!isDefaultSelected && !isAdaptiveSelected) {
-                        selectedInt8Mode = scope.querySelector('input[name="int8_mode"]:checked')?.value || "none";
-                    }
-                    this.int8Mode = selectedInt8Mode;
-                    this.properties["int8_mode"] = selectedInt8Mode;
-
-                    // 保存 SDNQ 模式设置
-                    let selectedSdnqMode = "none";
-                    if (!isDefaultSelected && !isAdaptiveSelected) {
-                        selectedSdnqMode = scope.querySelector('input[name="sdnq_mode"]:checked')?.value || "none";
-                    }
-                    this.sdnqMode = selectedSdnqMode;
-                    this.properties["sdnq_mode"] = selectedSdnqMode;
-
-                    // 保存自适应模式设置
-                    this.adaptiveMode = isAdaptiveSelected;
-                    this.properties["adaptive_mode"] = isAdaptiveSelected;
-
-                    // 更新隐藏的 widgets
-                    if (this._int8ModeWidget) {
-                        this._int8ModeWidget.value = selectedInt8Mode;
-                    }
-                    if (this._sdnqModeWidget) {
-                        this._sdnqModeWidget.value = selectedSdnqMode;
-                    }
-                    if (this._adaptiveModeWidget) {
-                        this._adaptiveModeWidget.value = String(isAdaptiveSelected);
-                    }
-
-                    // 触发更新
-                    this.updateWidget();
-
-                    document.body.removeChild(overlay);
-                };
-                confirmBtn.onmouseenter = () => confirmBtn.style.background = "#42A5F5";
-                confirmBtn.onmouseleave = () => confirmBtn.style.background = "#2196F3";
-                
-                // 取消按钮
-                const cancelBtn = document.createElement("button");
-                cancelBtn.textContent = "取消";
-                cancelBtn.style.cssText = `
-                    padding: 8px 16px;
-                    background: #666;
-                    border: none;
-                    color: white;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                `;
-                cancelBtn.onclick = () => {
-                    document.body.removeChild(overlay);
-                };
-                cancelBtn.onmouseenter = () => cancelBtn.style.background = "#777";
-                cancelBtn.onmouseleave = () => cancelBtn.style.background = "#666";
-                
-                // 阻止事件冒泡
-                const stopProp = (e) => { e.stopPropagation(); };
-                dialog.addEventListener("pointerdown", stopProp);
-                dialog.addEventListener("pointermove", stopProp);
-                dialog.addEventListener("pointerup", stopProp);
-                dialog.addEventListener("mousedown", stopProp);
-                dialog.addEventListener("wheel", stopProp, { passive: false });
-                
                 // 点击遮罩层关闭
                 overlay.onclick = (e) => {
                     if (e.target === overlay) {
                         document.body.removeChild(overlay);
                     }
                 };
-                
+
                 // ESC键关闭
                 const handleEsc = (e) => {
                     if (e.key === "Escape") {
@@ -4769,7 +4942,44 @@ app.registerExtension({
                     }
                 };
                 document.addEventListener("keydown", handleEsc);
-                
+
+                // 确定按钮
+                const confirmBtn = document.createElement("button");
+                confirmBtn.textContent = "确定";
+                confirmBtn.style.cssText = "padding:8px 16px;background:#2196F3;border:none;color:white;border-radius:4px;cursor:pointer;font-size:13px;";
+                confirmBtn.onclick = () => {
+                    const isAdaptiveSelected = radioAdaptive.checked;
+                    const isDefaultSelected = radioDefault.checked;
+                    const scope = overlay;
+                    let selectedInt8Mode = "none";
+                    if (!isDefaultSelected && !isAdaptiveSelected) selectedInt8Mode = scope.querySelector('input[name="int8_mode"]:checked')?.value || "none";
+                    this.int8Mode = selectedInt8Mode;
+                    this.properties["int8_mode"] = selectedInt8Mode;
+                    let selectedSdnqMode = "none";
+                    if (!isDefaultSelected && !isAdaptiveSelected) selectedSdnqMode = scope.querySelector('input[name="sdnq_mode"]:checked')?.value || "none";
+                    this.sdnqMode = selectedSdnqMode;
+                    this.properties["sdnq_mode"] = selectedSdnqMode;
+                    this.adaptiveMode = isAdaptiveSelected;
+                    this.properties["adaptive_mode"] = isAdaptiveSelected;
+                    let selectedKleinMode = "none";
+                    if (!isDefaultSelected && !isAdaptiveSelected) selectedKleinMode = scope.querySelector('input[name="klein_mode"]:checked')?.value || "none";
+                    this.kleinMode = selectedKleinMode;
+                    this.properties["klein_mode"] = selectedKleinMode;
+                    if (this._int8ModeWidget) this._int8ModeWidget.value = selectedInt8Mode;
+                    if (this._sdnqModeWidget) this._sdnqModeWidget.value = selectedSdnqMode;
+                    if (this._kleinModeWidget) this._kleinModeWidget.value = selectedKleinMode;
+                    if (this._adaptiveModeWidget) this._adaptiveModeWidget.value = String(isAdaptiveSelected);
+                    this.updateWidget();
+                    this._updateKleinBanner?.();
+                    document.body.removeChild(overlay);
+                };
+
+                // 取消按钮
+                const cancelBtn = document.createElement("button");
+                cancelBtn.textContent = "取消";
+                cancelBtn.style.cssText = "padding:8px 16px;background:#666;border:none;color:white;border-radius:4px;cursor:pointer;font-size:13px;";
+                cancelBtn.onclick = () => document.body.removeChild(overlay);
+
                 // 组装弹窗
                 buttonContainer.appendChild(cancelBtn);
                 buttonContainer.appendChild(confirmBtn);
@@ -4778,7 +4988,7 @@ app.registerExtension({
                 dialog.appendChild(buttonContainer);
                 overlay.appendChild(dialog);
                 document.body.appendChild(overlay);
-                
+
                 // 使弹窗可拖拽
                 this.makeDialogDraggable(dialog, title);
             };

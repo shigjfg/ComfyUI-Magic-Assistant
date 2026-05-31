@@ -1,12 +1,20 @@
 """
 Klein wrapper setup - add the missing FLUX.2 Klein wrapper to the user's nunchaku environment.
 
-The standalone nunchaku pip package is missing nunchaku/wrappers/ which is needed for
-ComfyUI integration. This module detects the situation and auto-patches by writing
-the wrapper directly into the user's nunchaku site-packages.
+Downloads the latest FLUX.2 Klein support files directly from HuggingFace
+(https://huggingface.co/tonera/FLUX.2-klein-9B-Nunchaku) instead of embedding them,
+ensuring files are always complete and up-to-date.
 
-The ComfyFlux2KleinWrapper source code is embedded here as a string constant, so this
-works even if any other custom node directory is removed.
+Files downloaded from HuggingFace:
+    {nunchaku_base}/torch_transfer_utils.py
+    {nunchaku_base}/models/transformers/transformer_flux2.py
+    {nunchaku_base}/models/transformers/utils.py
+    {nunchaku_base}/lora/common/__init__.py
+    {nunchaku_base}/lora/common/compose.py
+    {nunchaku_base}/lora/common/mixin.py
+
+Embedded (ComfyUI-specific, not on HuggingFace):
+    {nunchaku_base}/wrappers/klein.py
 
 Path resolution:
   - Node location: ComfyUI/custom_nodes/ComfyUI-Magic-Assistant/core/
@@ -14,13 +22,63 @@ Path resolution:
   - Python env:     ComfyUI_windows_portable/python_embeded/  (sibling of ComfyUI/)
 """
 import ast
+import hashlib
 import os
 import re
 import sys
+import urllib.request
 
 _NUNCHAKU_BASE = None
 _COMFYUI_ROOT = None
 
+# HuggingFace source for FLUX.2 Klein support files
+HF_REPO = "tonera/FLUX.2-klein-9B-Nunchaku"
+HF_RAW_BASE = f"https://huggingface.co/{HF_REPO}/raw/main"
+
+# Files to download from HuggingFace (relative to nunchaku_base)
+# Maps: (hf_path, nunchaku_subpath) — hf_path is the path on HuggingFace repo root
+_HF_FILES = [
+    # Root-level FLUX.2 runtime files
+    ("torch_transfer_utils.py",                           "torch_transfer_utils.py"),
+    ("transformer_flux2.py",                             "models/transformers/transformer_flux2.py"),
+    ("common/__init__.py",                               "lora/common/__init__.py"),
+    ("common/compose.py",                                 "lora/common/compose.py"),
+    ("common/mixin.py",                                  "lora/common/mixin.py"),
+]
+
+def _download_hf_file(hf_path: str) -> tuple[bytes, str]:
+    """
+    Download a file from HuggingFace and return (content_bytes, etag).
+    Returns (b"", etag_or_empty) on failure.
+    """
+    url = f"{HF_RAW_BASE}/{hf_path}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status != 200:
+                return b"", ""
+            content = resp.read()
+            etag = resp.headers.get("ETag", "").strip('"')
+            return content, etag
+    except Exception as e:
+        print(f"[Magic Klein] Download failed {url}: {e}")
+        return b"", ""
+
+def _write_file(path: str, content: bytes, newline: bool = True) -> None:
+    """Write bytes to file, optionally normalising line endings to LF."""
+    mode = "wb"
+    with open(path, mode) as f:
+        if newline and b"\r\n" in content:
+            content = content.replace(b"\r\n", b"\n")
+        f.write(content)
+
+def _file_hash(path: str) -> str:
+    """Return MD5 hex digest of a local file, or '' if unreadable."""
+    try:
+        with open(path, "rb") as f:
+            return hashlib.md5(f.read()).hexdigest()
+    except Exception:
+        return ""
 
 def _detect_comfyui_root() -> str | None:
     """Infer ComfyUI root from this file's location.
@@ -44,7 +102,6 @@ def _detect_comfyui_root() -> str | None:
         return comfyui_root
     return None
 
-
 def get_comfyui_python() -> str | None:
     """Return the path to ComfyUI's embedded Python executable."""
     comfyui_root = _detect_comfyui_root()
@@ -57,7 +114,6 @@ def get_comfyui_python() -> str | None:
         return python_exe
     return None
 
-
 def get_comfyui_python_lib() -> str | None:
     """Return the path to ComfyUI's embedded Python site-packages."""
     comfyui_python = get_comfyui_python()
@@ -69,7 +125,6 @@ def get_comfyui_python_lib() -> str | None:
         return lib_dir
     return None
 
-
 def _site_packages_from_python_exe(exe: str | None) -> str | None:
     """site-packages next to python.exe (portable embed / typical Windows layout)."""
     if not exe or not os.path.isfile(exe):
@@ -80,7 +135,6 @@ def _site_packages_from_python_exe(exe: str | None) -> str | None:
         if os.path.isdir(sp):
             return sp
     return None
-
 
 def get_site_packages_candidates() -> list[str]:
     """All site-packages roots to probe for nunchaku (deduped, normalized).
@@ -147,7 +201,6 @@ def get_site_packages_candidates() -> list[str]:
 
     return out
 
-
 def get_nunchaku_base() -> str | None:
     """Get the nunchaku package path in ComfyUI's embedded Python, or None.
 
@@ -183,7 +236,6 @@ def get_nunchaku_base() -> str | None:
 
     return None
 
-
 def is_wrapper_installed() -> bool:
     """Check if nunchaku.wrappers.klein is importable."""
     try:
@@ -192,9 +244,7 @@ def is_wrapper_installed() -> bool:
     except ImportError:
         return False
 
-
 _FLUX2_MODEL = "NunchakuFlux2Transformer2DModel"
-
 
 def _scan_matching_bracket(content: str, open_idx: int, open_ch: str, close_ch: str) -> int:
     """Return index of matching close bracket, or -1. Skips # comments and string literals."""
@@ -237,20 +287,17 @@ def _scan_matching_bracket(content: str, open_idx: int, open_ch: str, close_ch: 
         i += 1
     return -1
 
-
 def _find_import_open_paren(content: str, pattern: str) -> int | None:
     m = re.search(pattern, content)
     if not m:
         return None
     return m.end() - 1
 
-
 def _insert_before_closing_paren(content: str, open_paren_idx: int, insertion: str) -> str:
     close_idx = _scan_matching_bracket(content, open_paren_idx, "(", ")")
     if close_idx < 0:
         raise ValueError("unbalanced parentheses in multiline import")
     return content[:close_idx] + insertion + content[close_idx:]
-
 
 def _export_name_in_all_block(content: str, name: str) -> bool:
     m = re.search(r"__all__\s*=\s*\[", content)
@@ -262,7 +309,6 @@ def _export_name_in_all_block(content: str, name: str) -> bool:
         return False
     inner = content[lb : rb + 1]
     return f'"{name}"' in inner or f"'{name}'" in inner
-
 
 def _add_export_to_all_list(content: str, name: str) -> tuple[str, bool]:
     if _export_name_in_all_block(content, name):
@@ -277,7 +323,6 @@ def _add_export_to_all_list(content: str, name: str) -> tuple[str, bool]:
     insert = f'\n    "{name}",'
     return content[:rb] + insert + content[rb:], True
 
-
 def _patch_flux2_nunchaku_package_init(content: str) -> tuple[str, bool]:
     """Align with upstream PR #924: extend from .models import (...) and __all__."""
     c = content
@@ -291,7 +336,6 @@ def _patch_flux2_nunchaku_package_init(content: str) -> tuple[str, bool]:
     c2, ch2 = _add_export_to_all_list(c, _FLUX2_MODEL)
     return c2, changed or ch2
 
-
 def _patch_flux2_models_package_init(content: str) -> tuple[str, bool]:
     c = content
     changed = False
@@ -304,10 +348,27 @@ def _patch_flux2_models_package_init(content: str) -> tuple[str, bool]:
     c2, ch2 = _add_export_to_all_list(c, _FLUX2_MODEL)
     return c2, changed or ch2
 
-
 def _patch_flux2_transformers_package_init(content: str) -> tuple[str, bool]:
+    """
+    Patch models/transformers/__init__.py to:
+      1. Fix broken 'from .torch_transfer_utils import pin_state_dict'
+         (torch_transfer_utils lives at nunchaku/ root, so needs 'from ..torch_transfer_utils')
+      2. Add 'from .transformer_flux2 import NunchakuFlux2Transformer2DModel' if missing
+      3. Add 'NunchakuFlux2Transformer2DModel' to __all__ if missing
+    """
     c = content
     changed = False
+
+    # 1. Fix broken same-level import of torch_transfer_utils (which lives at nunchaku/ root)
+    if re.search(r"from\s+\.torch_transfer_utils\s+import", c):
+        c = re.sub(
+            r"from\s+\.torch_transfer_utils\s+import\s+pin_state_dict",
+            "from ..torch_transfer_utils import pin_state_dict",
+            c,
+        )
+        changed = True
+
+    # 2. Add transformer_flux2 import if missing
     if not re.search(r"from\s+\.transformer_flux2\s+import", c):
         line = "from .transformer_flux2 import NunchakuFlux2Transformer2DModel\n"
         m = re.search(r"^__all__\s*=", c, re.MULTILINE)
@@ -317,9 +378,10 @@ def _patch_flux2_transformers_package_init(content: str) -> tuple[str, bool]:
             sep = "\n" if c.strip() else ""
             c = c.rstrip() + sep + line
         changed = True
+
+    # 3. Add model to __all__
     c2, ch2 = _add_export_to_all_list(c, _FLUX2_MODEL)
     return c2, changed or ch2
-
 
 def _flush_init_py_writes(pairs: list[tuple[str, str]]) -> None:
     for path, content in pairs:
@@ -328,19 +390,21 @@ def _flush_init_py_writes(pairs: list[tuple[str, str]]) -> None:
         with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(content)
 
+def install_wrapper_to_nunchaku(force_update: bool = False) -> tuple[bool, str]:
+    """Download and install FLUX.2 Klein support files into the user's nunchaku environment.
 
-def install_wrapper_to_nunchaku() -> tuple[bool, str]:
-    """Patch the user's nunchaku environment by writing all required files.
+    Downloads from HuggingFace (tonera/FLUX.2-klein-9B-Nunchaku):
+        {nunchaku_base}/torch_transfer_utils.py
+        {nunchaku_base}/models/transformers/transformer_flux2.py
+        {nunchaku_base}/lora/common/__init__.py
+        {nunchaku_base}/lora/common/compose.py
+        {nunchaku_base}/lora/common/mixin.py
 
-    Writes 5 files in total:
-        {nunchaku_base}/torch_transfer_utils.py       (entire new file)
-        {nunchaku_base}/models/transformers/transformer_flux2.py  (entire new file)
-        {nunchaku_base}/__init__.py                    (add FLUX.2 export)
-        {nunchaku_base}/models/__init__.py            (add FLUX.2 export)
-        {nunchaku_base}/models/transformers/__init__.py (add FLUX.2 export)
-    Plus wrappers/ (ComfyUI bridge):
-        {nunchaku_base}/wrappers/__init__.py
+    Embeds (ComfyUI-specific bridge):
         {nunchaku_base}/wrappers/klein.py
+
+    Args:
+        force_update: if True, re-download all files even if they already exist.
 
     Returns (success, message).
     """
@@ -349,91 +413,102 @@ def install_wrapper_to_nunchaku() -> tuple[bool, str]:
         return False, "nunchaku package not found in ComfyUI's Python environment."
 
     created = []
-    modified = []
+    updated = []
+    failed = []
 
-    # 1. torch_transfer_utils.py (entire file - always write to ensure correct version)
-    torch_transfer_utils_path = os.path.join(nunchaku_base, "torch_transfer_utils.py")
-    with open(torch_transfer_utils_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(_TORCH_TRANSFER_UTILS_SOURCE)
-    created.append(torch_transfer_utils_path)
+    print(f"[Magic Klein] Installing FLUX.2 Klein files from {HF_REPO} ...")
 
-    # 2. models/transformers/transformer_flux2.py (entire file - always write to ensure correct version)
-    transformers_dir = os.path.join(nunchaku_base, "models", "transformers")
-    os.makedirs(transformers_dir, exist_ok=True)
-    transformer_flux2_path = os.path.join(transformers_dir, "transformer_flux2.py")
-    with open(transformer_flux2_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(_TRANSFORMER_FLUX2_SOURCE)
-    created.append(transformer_flux2_path)
+    # 1. Download core files from HuggingFace
+    for hf_rel_path, nunchaku_subpath in _HF_FILES:
+        local_path = os.path.join(nunchaku_base, nunchaku_subpath)
+        dir_name = os.path.dirname(local_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
 
-    # 2b. models/transformers/utils.py (CRITICAL: this contains patch_scale_key used by transformer_flux2.py)
-    # The transformer_flux2.py imports patch_scale_key from .utils, so we MUST provide the matching version
-    # ALWAYS write to ensure compatibility - user's old version may cause AssertionError on .wcscales
-    transformers_utils_path = os.path.join(transformers_dir, "utils.py")
-    with open(transformers_utils_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(_TRANSFORMERS_UTILS_SOURCE)
-    created.append(transformers_utils_path)
+        existing_hash = _file_hash(local_path) if os.path.exists(local_path) else ""
+        content_bytes, etag = _download_hf_file(hf_rel_path)
 
-    # 3–5. __init__.py patches — same intent as nunchaku PR #924, without duplicating
-    # whole import blocks or breaking __all__ (regex on [^]] caused syntax errors).
-    init_writes: list[tuple[str, str]] = []
-    init_path = os.path.join(nunchaku_base, "__init__.py")
-    if os.path.exists(init_path):
-        with open(init_path, "r", encoding="utf-8") as f:
-            root_src = f.read()
-        new_root, root_changed = _patch_flux2_nunchaku_package_init(root_src)
-        if root_changed:
-            init_writes.append((init_path, new_root))
+        if not content_bytes:
+            failed.append(f"{nunchaku_subpath} (download failed)")
+            continue
 
-    models_init_path = os.path.join(nunchaku_base, "models", "__init__.py")
-    if os.path.exists(models_init_path):
-        with open(models_init_path, "r", encoding="utf-8") as f:
-            models_src = f.read()
-        new_models, models_changed = _patch_flux2_models_package_init(models_src)
-        if models_changed:
-            init_writes.append((models_init_path, new_models))
+        new_hash = hashlib.md5(content_bytes).hexdigest()
 
-    tf_init_path = os.path.join(transformers_dir, "__init__.py")
-    if os.path.exists(tf_init_path):
-        with open(tf_init_path, "r", encoding="utf-8") as f:
-            tf_src = f.read()
-        new_tf, tf_changed = _patch_flux2_transformers_package_init(tf_src)
-        if tf_changed:
-            init_writes.append((tf_init_path, new_tf))
+        if not force_update and existing_hash and existing_hash == new_hash:
+            print(f"  [skip, unchanged] {nunchaku_subpath}")
+            continue
 
-    if init_writes:
         try:
-            _flush_init_py_writes(init_writes)
-        except SyntaxError as e:
-            return False, (
-                "Patch aborted: __init__.py would be invalid Python. "
-                f"Restore nunchaku with pip or fix files manually. Detail: {e}"
-            )
-        modified.extend(p[0] for p in init_writes)
+            _write_file(local_path, content_bytes)
+            if existing_hash:
+                updated.append(nunchaku_subpath)
+                print(f"  [updated] {nunchaku_subpath}")
+            else:
+                created.append(nunchaku_subpath)
+                print(f"  [created] {nunchaku_subpath}")
+        except Exception as e:
+            failed.append(f"{nunchaku_subpath} ({e})")
 
-    # 6. wrappers/klein.py (ComfyUI bridge — entire file)
+    # 2. Patch __init__.py files — add FLUX.2 exports / fix broken imports
+    # Use dedicated patchers so each file gets the right transformations.
+    _PATCHERS = {
+        "":          _patch_flux2_nunchaku_package_init,        # nunchaku/__init__.py
+        "models/":   _patch_flux2_models_package_init,          # nunchaku/models/__init__.py
+        "models/transformers/": _patch_flux2_transformers_package_init,  # nunchaku/models/transformers/__init__.py
+    }
+    for sub_path, patcher_fn in _PATCHERS.items():
+        init_path = os.path.join(nunchaku_base, sub_path, "__init__.py")
+        if not os.path.exists(init_path):
+            continue
+        with open(init_path, "r", encoding="utf-8") as f:
+            src = f.read()
+        new_src, changed = patcher_fn(src)
+        if changed:
+            try:
+                ast.parse(new_src, filename=init_path)
+                with open(init_path, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(new_src)
+                updated.append(init_path)
+                key = sub_path.rstrip("/") or "root"
+                print(f"  [patched] {key}/__init__.py")
+            except SyntaxError as e:
+                return False, f"Patch aborted: {os.path.basename(init_path)} would be invalid Python: {e}"
+
+    # 3. Embed wrappers/klein.py (ComfyUI-specific bridge — not on HuggingFace)
     wrappers_dir = os.path.join(nunchaku_base, "wrappers")
     os.makedirs(wrappers_dir, exist_ok=True)
+
     wrappers_init_path = os.path.join(wrappers_dir, "__init__.py")
     if not os.path.exists(wrappers_init_path):
         with open(wrappers_init_path, "w", encoding="utf-8") as f:
             f.write('"""Nunchaku model wrappers for ComfyUI integration."""\n')
             f.write("from .klein import ComfyFlux2KleinWrapper, copy_with_ctx\n")
             f.write('__all__ = ["ComfyFlux2KleinWrapper", "copy_with_ctx"]\n')
-        created.append(wrappers_init_path)
+        created.append("wrappers/__init__.py")
 
     klein_py = os.path.join(wrappers_dir, "klein.py")
-    if not os.path.exists(klein_py):
-        with open(klein_py, "w", encoding="utf-8", newline="\n") as f:
-            f.write(_KLEIN_WRAPPER_SOURCE)
-        created.append(klein_py)
+    try:
+        _write_file(klein_py, _KLEIN_WRAPPER_SOURCE.encode("utf-8"))
+        if os.path.exists(klein_py):
+            updated.append("wrappers/klein.py")
+        else:
+            created.append("wrappers/klein.py")
+    except Exception as e:
+        failed.append(f"wrappers/klein.py ({e})")
 
-    parts = [f"Successfully patched nunchaku at {nunchaku_base}"]
+    # Summary
+    if failed:
+        return False, ("Some files could not be installed:\n" +
+                        "\n".join(f"  FAIL {f}" for f in failed))
+
+    parts = [f"Successfully installed FLUX.2 Klein files to {nunchaku_base}"]
     if created:
         parts.append("  Created: " + "\n  Created: ".join(created))
-    if modified:
-        parts.append("  Updated: " + "\n  Updated: ".join(modified))
-    return True, "\n".join(parts)
+    if updated:
+        parts.append("  Updated: " + "\n  Updated: ".join(updated))
 
+    print(f"[Magic Klein] Installation complete: {len(created)} created, {len(updated)} updated.")
+    return True, "\n".join(parts)
 
 def check_environment() -> dict:
     """Check the current state of the nunchaku FLUX.2 environment.
@@ -445,11 +520,13 @@ def check_environment() -> dict:
         - wrapper_installed: bool
         - transformer_available: bool      # transformer_flux2.py present
         - torch_transfer_utils_available: bool
+        - common_available: bool          # lora/common/ present with all required files
+        - common_files: dict              # per-file availability
         - needs_patch: bool
         - comfyui_root: str | None
         - comfyui_python: str | None
         - comfyui_python_lib: str | None
-        - install_status: str  # "ready" | "needs_patch" | "missing_nunchaku" | "missing_transformer" | "missing_core_files"
+        - install_status: str  # "ready" | "needs_patch" | "missing_nunchaku" | "missing_transformer" | "missing_core_files" | "missing_common"
         - status_text: dict    # {"zh": str, "en": str}
         - suggestion: str
     """
@@ -462,6 +539,8 @@ def check_environment() -> dict:
             "wrapper_installed": False,
             "transformer_available": False,
             "torch_transfer_utils_available": False,
+            "common_available": False,
+            "common_files": {},
             "needs_patch": False,
             "comfyui_root": None,
             "comfyui_python": None,
@@ -475,7 +554,6 @@ def check_environment() -> dict:
             "error": str(exc),
         }
 
-
 def _check_environment_impl() -> dict:
     comfyui_root = _detect_comfyui_root()
     comfyui_python = get_comfyui_python()
@@ -488,6 +566,9 @@ def _check_environment_impl() -> dict:
 
     transformer_available = False
     torch_transfer_utils_available = False
+    common_available = False
+    common_files = {}
+    REQUIRED_COMMON_FILES = ["__init__.py", "compose.py", "mixin.py"]
     if nunchaku_found:
         try:
             from nunchaku.models.transformers.transformer_flux2 import NunchakuFlux2Transformer2DModel
@@ -499,12 +580,28 @@ def _check_environment_impl() -> dict:
             torch_transfer_utils_available = True
         except ImportError:
             pass
+        # 检查 lora/common/ 文件夹及文件完整性
+        try:
+            from nunchaku import lora as nunchaku_lora
+            common_pkg_path = os.path.dirname(nunchaku_lora.__file__)
+            common_dir = os.path.join(common_pkg_path, "common")
+            if os.path.isdir(common_dir):
+                common_files = {
+                    fname: os.path.isfile(os.path.join(common_dir, fname))
+                    for fname in REQUIRED_COMMON_FILES
+                }
+                common_available = all(common_files.values())
+            else:
+                common_files = {fname: False for fname in REQUIRED_COMMON_FILES}
+        except Exception:
+            common_files = {fname: False for fname in REQUIRED_COMMON_FILES}
 
     core_files_ok = transformer_available and torch_transfer_utils_available
+    # common 文件夹不完整也视为需要更新
     needs_patch = (
         nunchaku_found
         and core_files_ok
-        and not wrapper_installed
+        and (not wrapper_installed or not common_available)
     )
 
     install_status = "ready"
@@ -530,13 +627,26 @@ def _check_environment_impl() -> dict:
     elif nunchaku_found and not core_files_ok:
         install_status = "missing_core_files"
         status_text = {
-            "zh": "nunchaku 已安装但缺少核心文件（transformer_flux2.py / torch_transfer_utils.py / transformers/utils.py），"
-                  "点击「嵌入到环境」按钮添加",
-            "en": "nunchaku found but core files are missing (transformer_flux2.py / torch_transfer_utils.py / transformers/utils.py), "
-                  "click 'Install to Environment' to add them",
+            "zh": "nunchaku 已安装但缺少核心文件（transformer_flux2.py / torch_transfer_utils.py），"
+                  "点击「下载并安装」按钮添加",
+            "en": "nunchaku found but core files are missing (transformer_flux2.py / torch_transfer_utils.py), "
+                  "click 'Download & Install' to add them",
         }
         suggestion = (
-            "nunchaku found but transformer_flux2.py, torch_transfer_utils.py, or transformers/utils.py is missing. "
+            "nunchaku found but transformer_flux2.py or torch_transfer_utils.py is missing. "
+            "Magic Klein Loader will automatically add them - no manual action needed."
+        )
+    elif nunchaku_found and not common_available:
+        install_status = "missing_common"
+        missing = [f for f, ok in common_files.items() if not ok]
+        status_text = {
+            "zh": f"lora/common/ 文件夹缺失或不完整（缺少：{', '.join(missing)}），"
+                  "点击「下载并安装」按钮添加",
+            "en": f"lora/common/ folder missing or incomplete (missing: {', '.join(missing)}), "
+                  "click 'Download & Install' to add them",
+        }
+        suggestion = (
+            "lora/common/ files are missing. "
             "Magic Klein Loader will automatically add them - no manual action needed."
         )
     elif needs_patch:
@@ -563,6 +673,8 @@ def _check_environment_impl() -> dict:
         "wrapper_installed": wrapper_installed,
         "transformer_available": transformer_available,
         "torch_transfer_utils_available": torch_transfer_utils_available,
+        "common_available": common_available,
+        "common_files": common_files,
         "needs_patch": needs_patch,
         "comfyui_root": comfyui_root,
         "comfyui_python": comfyui_python,
@@ -573,1328 +685,15 @@ def _check_environment_impl() -> dict:
         "suggestion": suggestion,
     }
 
-
 # ---------------------------------------------------------------------------
 # Embedded torch_transfer_utils.py
 # From: https://github.com/nunchaku-ai/nunchaku/commit/a515fc2740a17410fa2fcef6dc59229744d82fa0/nunchaku/torch_transfer_utils.py
 # ---------------------------------------------------------------------------
-_TORCH_TRANSFER_UTILS_SOURCE = '''from __future__ import annotations
 
-import os
-import platform
-from collections.abc import Callable, Sequence
-from typing import Any, Literal
-
-import torch
-from torch import nn
-
-
-DEFAULT_PIPELINE_COMPONENT_ATTRS: tuple[str, ...] = ("text_encoder", "text_encoder_2", "vae", "unet", "transformer")
-_PRETOUCHED_SIGNATURE_ATTR = "_nunchaku_pretouched_cpu_signature"
-_PIPELINE_PRETOUCH_DECISIONS_ATTR = "_nunchaku_pretouch_auto_decisions"
-_TRUE_VALUES = {"1", "true", "yes", "on"}
-_FALSE_VALUES = {"0", "false", "no", "off"}
-_CpuTensorSignature = tuple[tuple[str, str, tuple[int, ...], str, int], ...]
-
-
-def _env_flag(name: str) -> str | None:
-    value = os.environ.get(name)
-    if value is None:
-        return None
-    normalized = value.strip().lower()
-    return normalized or None
-
-
-def normalize_device(device: str | torch.device) -> torch.device:
-    return device if isinstance(device, torch.device) else torch.device(device)
-
-
-def _resolve_default_cuda_device() -> torch.device | None:
-    if not torch.cuda.is_available():
-        return None
-    try:
-        return torch.device(f"cuda:{torch.cuda.current_device()}")
-    except Exception:
-        return torch.device("cuda")
-
-
-def _parse_bool_or_auto(value: bool | str, *, name: str) -> bool | Literal["auto"]:
-    if isinstance(value, bool):
-        return value
-
-    normalized = value.strip().lower()
-    if normalized == "auto":
-        return "auto"
-    if normalized in _TRUE_VALUES:
-        return True
-    if normalized in _FALSE_VALUES:
-        return False
-    raise ValueError(f"Unsupported {name}={value!r}. Expected a boolean value or 'auto'.")
-
-
-def _matches_default_h2d_staging_platform(device: torch.device) -> bool:
-    if device.type != "cuda" or not torch.cuda.is_available():
-        return False
-
-    if platform.machine().lower() != "aarch64":
-        return False
-
-    index = 0 if device.index is None else device.index
-    try:
-        if index < 0 or index >= torch.cuda.device_count():
-            return False
-        capability = torch.cuda.get_device_capability(index)
-    except Exception:
-        return False
-
-    return capability[0] == 12
-
-
-def _resolve_page_size() -> int:
-    try:
-        return int(os.sysconf("SC_PAGE_SIZE"))
-    except (AttributeError, ValueError, OSError):
-        return 4096
-
-
-def _scan_module_cpu_tensors(module: nn.Module) -> tuple[list[torch.Tensor], _CpuTensorSignature]:
-    tensors: list[torch.Tensor] = []
-    signature: list[tuple[str, str, tuple[int, ...], str, int]] = []
-    for submodule in module.modules():
-        for name, tensor in list(submodule.named_parameters(recurse=False)) + list(submodule.named_buffers(recurse=False)):
-            if tensor.device.type != "cpu" or tensor.numel() == 0:
-                continue
-            tensors.append(tensor)
-            signature.append((type(tensor).__name__, name, tuple(tensor.shape), str(tensor.dtype), tensor.data_ptr()))
-    return tensors, tuple(signature)
-
-
-def _pretouch_tensor(tensor: torch.Tensor, *, page_size: int) -> None:
-    storage = tensor.untyped_storage()
-    storage_size = len(storage)
-    if storage_size == 0:
-        return
-
-    checksum = 0
-    for offset in range(0, storage_size, page_size):
-        checksum += int(storage[offset])
-        checksum += int(storage[storage_size - 1])
-    _ = checksum
-
-
-def _pretouch_module_cpu_tensors(module: nn.Module) -> tuple[int, bool]:
-    tensors, signature = _scan_module_cpu_tensors(module)
-    if not signature:
-        return 0, False
-
-    marker = signature
-    if getattr(module, _PRETOUCHED_SIGNATURE_ATTR, None) == marker:
-        return 0, False
-
-    page_size = _resolve_page_size()
-    with torch.no_grad():
-        for tensor in tensors:
-            _pretouch_tensor(tensor, page_size=page_size)
-
-    setattr(module, _PRETOUCHED_SIGNATURE_ATTR, marker)
-    return len(tensors), True
-
-
-def _need_pretouch_static(device: torch.device) -> bool:
-    override = _env_flag("NUNCHAKU_PRETOUCH_CPU_TENSORS")
-    if override is None:
-        override = _env_flag("NUNCHAKU_PRETOUCH_PIPELINE_CPU_TENSORS")
-    if override in _TRUE_VALUES:
-        return True
-    if override in _FALSE_VALUES:
-        return False
-
-    return _matches_default_h2d_staging_platform(device)
-
-
-def _need_pin_memory_static(device: torch.device) -> bool:
-    override = _env_flag("NUNCHAKU_PIN_MEMORY")
-    if override in _TRUE_VALUES:
-        return True
-    if override in _FALSE_VALUES:
-        return False
-    return _matches_default_h2d_staging_platform(device)
-
-
-def resolve_pin_memory(pin_memory: bool | str, device: str | torch.device) -> bool:
-    device = normalize_device(device)
-    if device.type != "cuda":
-        return False
-
-    pin_memory = _parse_bool_or_auto(pin_memory, name="pin_memory")
-    if pin_memory == "auto":
-        return _need_pin_memory_static(device)
-    return pin_memory
-
-
-def pin_state_dict(sd: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for key, value in sd.items():
-        if isinstance(value, torch.Tensor) and value.device.type == "cpu" and value.numel() > 0:
-            try:
-                out[key] = value if value.is_pinned() else value.pin_memory()
-            except Exception:
-                out[key] = value
-        else:
-            out[key] = value
-    return out
-
-
-def resolve_pretouch_cpu_tensors(
-    pretouch: bool | str,
-    pipe: Any,
-    device: str | torch.device,
-    *,
-    context: str = "pipeline_to_cuda",
-    component_attrs: Sequence[str] = DEFAULT_PIPELINE_COMPONENT_ATTRS,
-) -> bool:
-    device = normalize_device(device)
-    if device.type != "cuda":
-        return False
-
-    pretouch = _parse_bool_or_auto(pretouch, name="pretouch")
-    if pretouch != "auto":
-        return pretouch
-
-    decisions = getattr(pipe, _PIPELINE_PRETOUCH_DECISIONS_ATTR, None)
-    if not isinstance(decisions, dict):
-        decisions = {}
-    setattr(pipe, _PIPELINE_PRETOUCH_DECISIONS_ATTR, decisions)
-
-    key = (
-        device.type,
-        device.index,
-        context,
-        tuple(component_attrs),
-        _env_flag("NUNCHAKU_PRETOUCH_CPU_TENSORS"),
-        _env_flag("NUNCHAKU_PRETOUCH_PIPELINE_CPU_TENSORS"),
-    )
-    if key in decisions:
-        return decisions[key]
-
-    decision = _need_pretouch_static(device)
-    decisions[key] = decision
-    return decision
-
-
-def should_pretouch(device: str | torch.device | None = None) -> bool:
-    """
-    Return whether Nunchaku's default policy recommends pretouching CPU tensors.
-
-    This is a public recommendation API. It does not trigger pretouch by
-    itself; callers should use it to decide whether to invoke
-    :func:`pretouch_pipeline_cpu_tensors` explicitly before ``pipe.to("cuda")``
-    or before a CPU offload flow that will move model weights back to CUDA.
-
-    When ``device`` is omitted, the current CUDA device is used if CUDA is
-    available. This keeps the common single-GPU case concise while still
-    allowing explicit multi-GPU selection.
-
-    The default policy enables pretouch on ``aarch64`` systems with
-    Blackwell-class CUDA GPUs (compute capability major version 12).
-    Environment overrides via ``NUNCHAKU_PRETOUCH_CPU_TENSORS`` or
-    ``NUNCHAKU_PRETOUCH_PIPELINE_CPU_TENSORS`` take precedence.
-    """
-    if device is None:
-        resolved_device = _resolve_default_cuda_device()
-        if resolved_device is None:
-            return False
-    else:
-        resolved_device = normalize_device(device)
-    return _need_pretouch_static(resolved_device)
-
-
-def pretouch_pipeline_cpu_tensors(
-    pipe: Any,
-    component_attrs: Sequence[str] = DEFAULT_PIPELINE_COMPONENT_ATTRS,
-    on_component: Callable[[str], None] | None = None,
-) -> bool:
-    """
-    Pretouch common pipeline components on CPU before CUDA transfer.
-
-    This is the main explicit execution API. It walks the known CPU-side
-    pipeline components, touches one byte per memory page for each tensor,
-    and skips components whose CPU tensor signature has not changed since the
-    previous pretouch call.
-
-    Returns ``True`` when at least one component was newly pretouched and
-    ``False`` when nothing needed touching.
-    """
-    touched_any = False
-    for attr in component_attrs:
-        if not hasattr(pipe, attr):
-            continue
-        module = getattr(pipe, attr)
-        if module is None or not isinstance(module, nn.Module):
-            continue
-        touched, did_pretouch = _pretouch_module_cpu_tensors(module)
-        if on_component is not None and did_pretouch:
-            on_component(attr)
-        touched_any = touched > 0 or touched_any
-    return touched_any
-
-
-def maybe_pretouch_pipeline_cpu_tensors(
-    pipe: Any,
-    device: str | torch.device,
-    *,
-    pretouch: bool | str = "auto",
-    context: str = "pipeline_to_cuda",
-    component_attrs: Sequence[str] = DEFAULT_PIPELINE_COMPONENT_ATTRS,
-    on_component: Callable[[str], None] | None = None,
-) -> bool:
-    """
-    Conditionally pretouch pipeline CPU tensors using an explicit policy.
-
-    This helper is still explicit: callers opt in by invoking it. When
-    ``pretouch="auto"``, the decision follows :func:`should_pretouch` and the
-    environment-variable overrides. When ``pretouch`` is a boolean, that value
-    is used directly.
-    """
-    if not resolve_pretouch_cpu_tensors(
-        pretouch,
-        pipe,
-        device,
-        context=context,
-        component_attrs=component_attrs,
-    ):
-        return False
-    return pretouch_pipeline_cpu_tensors(
-        pipe,
-        component_attrs=component_attrs,
-        on_component=on_component,
-    )
-'''
 # ---------------------------------------------------------------------------
 # Embedded models/transformers/utils.py
 # From: https://github.com/nunchaku-ai/nunchaku/commit/a515fc2740a17410fa2fcef6dc59229744d82fa0/nunchaku/models/transformers/utils.py
 # ---------------------------------------------------------------------------
-_TRANSFORMERS_UTILS_SOURCE = '''"""
-Utilities for Nunchaku transformer model loading.
-"""
-
-import json
-import logging
-import os
-from pathlib import Path
-
-import torch
-from diffusers import __version__
-from huggingface_hub import constants, hf_hub_download
-from torch import nn
-
-from ...utils import load_state_dict_in_safetensors
-from ..linear import SVDQW4A4Linear
-
-# Get log level from environment variable (default to INFO)
-log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-
-# Configure logging
-logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
-
-class NunchakuModelLoaderMixin:
-    """
-    Mixin for standardized model loading in Nunchaku transformer models.
-    """
-
-    @classmethod
-    def _build_model(
-        cls, pretrained_model_name_or_path: str | os.PathLike[str], **kwargs
-    ) -> tuple[nn.Module, dict[str, torch.Tensor], dict[str, str]]:
-        """
-        Build a transformer model from a safetensors file.
-
-        Parameters
-        ----------
-        pretrained_model_name_or_path : str or os.PathLike
-            Path to the safetensors file.
-        **kwargs
-            Additional keyword arguments (e.g., ``torch_dtype``).
-
-        Returns
-        -------
-        tuple
-            (transformer, state_dict, metadata)
-        """
-        if isinstance(pretrained_model_name_or_path, str):
-            pretrained_model_name_or_path = Path(pretrained_model_name_or_path)
-        state_dict, metadata = load_state_dict_in_safetensors(pretrained_model_name_or_path, return_metadata=True)
-
-        config = json.loads(metadata["config"])
-
-        with torch.device("meta"):
-            transformer = cls.from_config(config).to(kwargs.get("torch_dtype", torch.bfloat16))
-
-        return transformer, state_dict, metadata
-
-    @classmethod
-    def _build_model_legacy(
-        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
-    ) -> tuple[nn.Module, str, str]:
-        """
-        Build a transformer model from a legacy folder structure.
-
-        .. warning::
-            This method is deprecated and will be removed in December 2025.
-            Please use :meth:`_build_model` instead.
-
-        Parameters
-        ----------
-        pretrained_model_name_or_path : str or os.PathLike
-            Path to the folder containing model weights.
-        **kwargs
-            Additional keyword arguments for HuggingFace Hub download and config loading.
-
-        Returns
-        -------
-        tuple
-            (transformer, unquantized_part_path, transformer_block_path)
-        """
-        logger.warning(
-            "Loading models from a folder will be deprecated in December 2025. "
-            "Please download the latest safetensors model, or use one of the following tools to "
-            "merge your model into a single file: the CLI utility `python -m nunchaku.merge_safetensors` "
-            "or the ComfyUI workflow `merge_safetensors.json`."
-        )
-        subfolder = kwargs.get("subfolder", None)
-        if os.path.exists(pretrained_model_name_or_path):
-            dirname = (
-                pretrained_model_name_or_path
-                if subfolder is None
-                else os.path.join(pretrained_model_name_or_path, subfolder)
-            )
-            unquantized_part_path = os.path.join(dirname, "unquantized_layers.safetensors")
-            transformer_block_path = os.path.join(dirname, "transformer_blocks.safetensors")
-        else:
-            download_kwargs = {
-                "subfolder": subfolder,
-                "repo_type": "model",
-                "revision": kwargs.get("revision", None),
-                "cache_dir": kwargs.get("cache_dir", None),
-                "local_dir": kwargs.get("local_dir", None),
-                "user_agent": kwargs.get("user_agent", None),
-                "force_download": kwargs.get("force_download", False),
-                "proxies": kwargs.get("proxies", None),
-                "etag_timeout": kwargs.get("etag_timeout", constants.DEFAULT_ETAG_TIMEOUT),
-                "token": kwargs.get("token", None),
-                "local_files_only": kwargs.get("local_files_only", None),
-                "headers": kwargs.get("headers", None),
-                "endpoint": kwargs.get("endpoint", None),
-                "resume_download": kwargs.get("resume_download", None),
-                "force_filename": kwargs.get("force_filename", None),
-                "local_dir_use_symlinks": kwargs.get("local_dir_use_symlinks", "auto"),
-            }
-            unquantized_part_path = hf_hub_download(
-                repo_id=str(pretrained_model_name_or_path), filename="unquantized_layers.safetensors", **download_kwargs
-            )
-            transformer_block_path = hf_hub_download(
-                repo_id=str(pretrained_model_name_or_path), filename="transformer_blocks.safetensors", **download_kwargs
-            )
-
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
-        proxies = kwargs.pop("proxies", None)
-        local_files_only = kwargs.pop("local_files_only", None)
-        token = kwargs.pop("token", None)
-        revision = kwargs.pop("revision", None)
-        config, _, _ = cls.load_config(
-            pretrained_model_name_or_path,
-            subfolder=subfolder,
-            cache_dir=cache_dir,
-            return_unused_kwargs=True,
-            return_commit_hash=True,
-            force_download=force_download,
-            proxies=proxies,
-            local_files_only=local_files_only,
-            token=token,
-            revision=revision,
-            user_agent={"diffusers": __version__, "file_type": "model", "framework": "pytorch"},
-            **kwargs,
-        )
-
-        with torch.device("meta"):
-            transformer = cls.from_config(config).to(kwargs.get("torch_dtype", torch.bfloat16))
-        return transformer, unquantized_part_path, transformer_block_path
-
-
-def patch_scale_key(transformer_from_config: nn.Module, state_dict_from_checkpoint: dict):
-    """
-    Modify scale parameters so that the state dict from the checkpoint file can be loaded to the transformer model created from the config.
-
-    Parameters
-    ----------
-    transformer_from_config : nn.Module
-        The transformer model created from the `config.json`
-    state_dict_from_checkpoint : dict
-        The state dict loaded from the checkpoint file (typically .safetensors)
-    """
-    state_dict = transformer_from_config.state_dict()
-    for k in state_dict.keys():
-        if k not in state_dict_from_checkpoint:
-            assert ".wcscales" in k
-            state_dict_from_checkpoint[k] = torch.ones_like(state_dict[k])
-
-    for n, m in transformer_from_config.named_modules():
-        if isinstance(m, SVDQW4A4Linear):
-            if m.wtscale is not None:
-                m.wtscale = state_dict_from_checkpoint.pop(f"{n}.wtscale", 1.0)
-
-
-def convert_fp16(transformer_from_config: nn.Module, state_dict_from_checkpoint: dict):
-    state_dict = transformer_from_config.state_dict()
-    for k in state_dict.keys():
-        if state_dict[k].dtype != state_dict_from_checkpoint[k].dtype:
-            assert (
-                state_dict[k].dtype == torch.float16 and state_dict_from_checkpoint[k].dtype == torch.bfloat16
-            ), f"Unexpected dtype difference for key: {k}, model dtype: {state_dict[k].dtype}, checkpoint dtype: {state_dict_from_checkpoint[k].dtype}"
-            state_dict_from_checkpoint[k] = torch.nan_to_num(
-                state_dict_from_checkpoint[k].to(torch.float16), nan=0.0, posinf=65504, neginf=-65504
-            )
-'''
-
-
-# ---------------------------------------------------------------------------
-# Embedded transformer_flux2.py
-# From: https://github.com/nunchaku-ai/nunchaku/commit/a515fc2740a17410fa2fcef6dc59229744d82fa0/nunchaku/models/transformers/transformer_flux2.py
-# ---------------------------------------------------------------------------
-_TRANSFORMER_FLUX2_SOURCE = '''"""
-Python-only Nunchaku runtime for FLUX.2 transformers.
-"""
-
-import gc
-import json
-import math
-from pathlib import Path
-import os
-import torch
-from warnings import warn
-from diffusers.models.attention_dispatch import dispatch_attention_fn
-from diffusers.models.embeddings import apply_rotary_emb
-from diffusers.models.modeling_outputs import Transformer2DModelOutput
-from diffusers.models.transformers.transformer_flux2 import (
-    Flux2Attention,
-    Flux2FeedForward,
-    Flux2Modulation,
-    Flux2ParallelSelfAttention,
-    Flux2SingleTransformerBlock,
-    Flux2Transformer2DModel,
-    Flux2TransformerBlock,
-)
-from huggingface_hub import utils
-
-try:
-    from diffusers.utils import apply_lora_scale
-except ImportError:
-
-    def apply_lora_scale(_kwargs_name: str = "joint_attention_kwargs"):
-        def decorator(func):
-            return func
-
-        return decorator
-
-from ..._C.ops import attention_fp16
-from ...ops.fused import fused_qkv_norm_rottary
-from ...torch_transfer_utils import pin_state_dict, resolve_pin_memory
-from ...utils import (
-    check_hardware_compatibility,
-    get_precision,
-    get_precision_from_quantization_config,
-    pad_tensor,
-)
-from ..embeddings import pack_rotemb
-from ..linear import SVDQW4A4Linear
-from ..utils import CPUOffloadManager, fuse_linears
-from .utils import NunchakuModelLoaderMixin, patch_scale_key
-
-
-def _flux2_kv_causal_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    num_txt_tokens: int,
-    num_ref_tokens: int,
-    kv_cache=None,
-    backend=None,
-) -> torch.Tensor:
-    if num_ref_tokens == 0 and kv_cache is None:
-        return dispatch_attention_fn(query, key, value, backend=backend)
-
-    if kv_cache is not None:
-        k_ref, v_ref = kv_cache.get()
-        k_all = torch.cat([key[:, :num_txt_tokens], k_ref, key[:, num_txt_tokens:]], dim=1)
-        v_all = torch.cat([value[:, :num_txt_tokens], v_ref, value[:, num_txt_tokens:]], dim=1)
-        return dispatch_attention_fn(query, k_all, v_all, backend=backend)
-
-    ref_start = num_txt_tokens
-    ref_end = num_txt_tokens + num_ref_tokens
-
-    q_txt = query[:, :ref_start]
-    q_ref = query[:, ref_start:ref_end]
-    q_img = query[:, ref_end:]
-
-    k_txt = key[:, :ref_start]
-    k_ref = key[:, ref_start:ref_end]
-    k_img = key[:, ref_end:]
-
-    v_txt = value[:, :ref_start]
-    v_ref = value[:, ref_start:ref_end]
-    v_img = value[:, ref_end:]
-
-    q_txt_img = torch.cat([q_txt, q_img], dim=1)
-    k_all = torch.cat([k_txt, k_ref, k_img], dim=1)
-    v_all = torch.cat([v_txt, v_ref, v_img], dim=1)
-    attn_txt_img = dispatch_attention_fn(query=q_txt_img, key=k_all, value=v_all, backend=backend)
-    attn_txt = attn_txt_img[:, :ref_start]
-    attn_img = attn_txt_img[:, ref_start:]
-    attn_ref = dispatch_attention_fn(query=q_ref, key=k_ref, value=v_ref, backend=backend)
-    return torch.cat([attn_txt, attn_ref, attn_img], dim=1)
-
-
-def _pack_flux2_rotary_emb(freqs_cis: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
-    cos, sin = freqs_cis
-    if cos.ndim != 2 or sin.ndim != 2 or cos.shape != sin.shape:
-        raise ValueError("Expected Flux.2 rotary embeddings as a (cos, sin) tuple with shape (seq_len, dim).")
-
-    # Flux.2 uses repeat_interleave_real=True, so every rotary pair shares the same cos/sin values.
-    rotemb = torch.stack([sin[:, 0::2], cos[:, 0::2]], dim=-1).unsqueeze(0).unsqueeze(-2).contiguous()
-    return pack_rotemb(pad_tensor(rotemb, 256, 1))
-
-
-def _alloc_packed_qkv(batch_size: int, heads: int, num_tokens: int, head_dim: int, device: torch.device, pad_size: int = 256):
-    num_tokens_pad = math.ceil(num_tokens / pad_size) * pad_size
-    query = torch.empty(batch_size, heads, num_tokens_pad, head_dim, dtype=torch.float16, device=device)
-    key = torch.empty_like(query)
-    value = torch.empty_like(query)
-    return query, key, value, num_tokens_pad
-
-
-def _apply_gated_residual(residual: torch.Tensor, gate: torch.Tensor, update: torch.Tensor) -> torch.Tensor:
-    if torch.is_grad_enabled():
-        return residual + gate * update
-    residual.addcmul_(gate, update)
-    return residual
-
-
-class NunchakuFlux2Attention(Flux2Attention):
-    def __init__(self, other: Flux2Attention, **kwargs):
-        super(Flux2Attention, self).__init__()
-        self.head_dim = other.head_dim
-        self.inner_dim = other.inner_dim
-        self.query_dim = other.query_dim
-        self.out_dim = other.out_dim
-        self.heads = other.heads
-        self.use_bias = other.use_bias
-        self.dropout = other.dropout
-        self.added_kv_proj_dim = other.added_kv_proj_dim
-        self.added_proj_bias = other.added_proj_bias
-        self.fused_projections = True
-        processor = getattr(other, "processor", None)
-        self._attention_backend = getattr(processor, "_attention_backend", None)
-        self._parallel_config = getattr(processor, "_parallel_config", None)
-
-        self.norm_q = other.norm_q
-        self.norm_k = other.norm_k
-        self.to_out = other.to_out
-        self.to_out[0] = SVDQW4A4Linear.from_linear(self.to_out[0], **kwargs)
-
-        with torch.device("meta"):
-            to_qkv = fuse_linears([other.to_q, other.to_k, other.to_v])
-            self.to_qkv = SVDQW4A4Linear.from_linear(to_qkv, **kwargs)
-
-        if self.added_kv_proj_dim is not None:
-            self.norm_added_q = other.norm_added_q
-            self.norm_added_k = other.norm_added_k
-            self.to_add_out = SVDQW4A4Linear.from_linear(other.to_add_out, **kwargs)
-            with torch.device("meta"):
-                to_added_qkv = fuse_linears([other.add_q_proj, other.add_k_proj, other.add_v_proj])
-                self.to_added_qkv = SVDQW4A4Linear.from_linear(to_added_qkv, **kwargs)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | torch.Tensor | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        kv_cache = kwargs.get("kv_cache", None)
-        kv_cache_mode = kwargs.get("kv_cache_mode", None)
-        num_ref_tokens = int(kwargs.get("num_ref_tokens", 0))
-        use_packed_fp16 = (
-            kv_cache_mode is None
-            and encoder_hidden_states is not None
-            and isinstance(image_rotary_emb, tuple)
-            and len(image_rotary_emb) == 2
-            and image_rotary_emb[0].ndim == 3
-            and hidden_states.is_cuda
-        )
-        if use_packed_fp16:
-            batch_size = hidden_states.shape[0]
-            num_txt_tokens = encoder_hidden_states.shape[1]
-            num_img_tokens = hidden_states.shape[1]
-            num_txt_tokens_pad = math.ceil(num_txt_tokens / 256) * 256
-            num_img_tokens_pad = math.ceil(num_img_tokens / 256) * 256
-            num_tokens_pad = num_txt_tokens_pad + num_img_tokens_pad
-            query = torch.empty(
-                batch_size, self.heads, num_tokens_pad, self.head_dim, dtype=torch.float16, device=hidden_states.device
-            )
-            key = torch.empty_like(query)
-            value = torch.empty_like(query)
-            fused_qkv_norm_rottary(
-                hidden_states,
-                self.to_qkv,
-                self.norm_q,
-                self.norm_k,
-                image_rotary_emb[0],
-                output=(
-                    query[:, :, num_txt_tokens_pad:],
-                    key[:, :, num_txt_tokens_pad:],
-                    value[:, :, num_txt_tokens_pad:],
-                ),
-                attn_tokens=num_img_tokens,
-            )
-            fused_qkv_norm_rottary(
-                encoder_hidden_states,
-                self.to_added_qkv,
-                self.norm_added_q,
-                self.norm_added_k,
-                image_rotary_emb[1],
-                output=(query[:, :, :num_txt_tokens_pad], key[:, :, :num_txt_tokens_pad], value[:, :, :num_txt_tokens_pad]),
-                attn_tokens=num_txt_tokens,
-            )
-            attention_output = torch.empty(
-                batch_size,
-                num_tokens_pad,
-                self.heads * self.head_dim,
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
-            )
-            attention_fp16(query, key, value, attention_output, self.head_dim ** (-0.5))
-            encoder_hidden_states = attention_output[:, :num_txt_tokens]
-            hidden_states = attention_output[:, num_txt_tokens_pad : num_txt_tokens_pad + num_img_tokens]
-            encoder_hidden_states = self.to_add_out(encoder_hidden_states)
-            hidden_states = self.to_out[0](hidden_states)
-            hidden_states = self.to_out[1](hidden_states)
-            return hidden_states, encoder_hidden_states
-
-        if (
-            encoder_hidden_states is not None
-            and isinstance(image_rotary_emb, tuple)
-            and len(image_rotary_emb) == 2
-            and image_rotary_emb[0].ndim == 3
-        ):
-            batch_size = hidden_states.shape[0]
-            qkv = fused_qkv_norm_rottary(
-                hidden_states,
-                self.to_qkv,
-                self.norm_q,
-                self.norm_k,
-                image_rotary_emb[0],
-            )
-            query, key, value = qkv.chunk(3, dim=-1)
-            query = query.view(batch_size, -1, self.heads, self.head_dim)
-            key = key.view(batch_size, -1, self.heads, self.head_dim)
-            value = value.view(batch_size, -1, self.heads, self.head_dim)
-
-            encoder_qkv = fused_qkv_norm_rottary(
-                encoder_hidden_states,
-                self.to_added_qkv,
-                self.norm_added_q,
-                self.norm_added_k,
-                image_rotary_emb[1],
-            )
-            encoder_query, encoder_key, encoder_value = encoder_qkv.chunk(3, dim=-1)
-            encoder_query = encoder_query.view(batch_size, -1, self.heads, self.head_dim)
-            encoder_key = encoder_key.view(batch_size, -1, self.heads, self.head_dim)
-            encoder_value = encoder_value.view(batch_size, -1, self.heads, self.head_dim)
-            encoder_seq_len = encoder_hidden_states.shape[1]
-            query = torch.cat([encoder_query, query], dim=1)
-            key = torch.cat([encoder_key, key], dim=1)
-            value = torch.cat([encoder_value, value], dim=1)
-        else:
-            query, key, value = self.to_qkv(hidden_states).chunk(3, dim=-1)
-            query = query.unflatten(-1, (self.heads, -1))
-            key = key.unflatten(-1, (self.heads, -1))
-            value = value.unflatten(-1, (self.heads, -1))
-            query = self.norm_q(query)
-            key = self.norm_k(key)
-
-        encoder_seq_len = 0
-        if encoder_hidden_states is not None and self.added_kv_proj_dim is not None:
-            encoder_query, encoder_key, encoder_value = self.to_added_qkv(encoder_hidden_states).chunk(3, dim=-1)
-            encoder_query = encoder_query.unflatten(-1, (self.heads, -1))
-            encoder_key = encoder_key.unflatten(-1, (self.heads, -1))
-            encoder_value = encoder_value.unflatten(-1, (self.heads, -1))
-            encoder_query = self.norm_added_q(encoder_query)
-            encoder_key = self.norm_added_k(encoder_key)
-            encoder_seq_len = encoder_hidden_states.shape[1]
-            query = torch.cat([encoder_query, query], dim=1)
-            key = torch.cat([encoder_key, key], dim=1)
-            value = torch.cat([encoder_value, value], dim=1)
-
-        if image_rotary_emb is not None:
-            query = apply_rotary_emb(query, image_rotary_emb, sequence_dim=1)
-            key = apply_rotary_emb(key, image_rotary_emb, sequence_dim=1)
-
-        if kv_cache_mode == "extract" and kv_cache is not None and num_ref_tokens > 0:
-            ref_start = encoder_seq_len
-            ref_end = encoder_seq_len + num_ref_tokens
-            kv_cache.store(key[:, ref_start:ref_end].clone(), value[:, ref_start:ref_end].clone())
-
-        if kv_cache_mode == "extract" and num_ref_tokens > 0:
-            hidden_states = _flux2_kv_causal_attention(
-                query, key, value, encoder_seq_len, num_ref_tokens, backend=self._attention_backend
-            )
-        elif kv_cache_mode == "cached" and kv_cache is not None:
-            hidden_states = _flux2_kv_causal_attention(
-                query, key, value, encoder_seq_len, 0, kv_cache=kv_cache, backend=self._attention_backend
-            )
-        else:
-            hidden_states = dispatch_attention_fn(
-                query,
-                key,
-                value,
-                attn_mask=attention_mask,
-                backend=self._attention_backend,
-                parallel_config=self._parallel_config,
-            )
-        hidden_states = hidden_states.flatten(2, 3).to(query.dtype)
-
-        if encoder_seq_len:
-            encoder_hidden_states, hidden_states = hidden_states.split_with_sizes(
-                [encoder_seq_len, hidden_states.shape[1] - encoder_seq_len], dim=1
-            )
-            encoder_hidden_states = self.to_add_out(encoder_hidden_states)
-            hidden_states = self.to_out[0](hidden_states)
-            hidden_states = self.to_out[1](hidden_states)
-            if encoder_seq_len:
-                return hidden_states, encoder_hidden_states
-        return hidden_states
-
-
-class NunchakuFlux2FeedForward(Flux2FeedForward):
-    def __init__(self, other: Flux2FeedForward, **kwargs):
-        super(Flux2FeedForward, self).__init__()
-        self.linear_in = SVDQW4A4Linear.from_linear(other.linear_in, **kwargs)
-        self.act_fn = other.act_fn
-        self.linear_out = SVDQW4A4Linear.from_linear(other.linear_out, **kwargs)
-        # FLUX.2 PTQ does not currently apply ShiftedLinear on these SwiGLU down-projections,
-        # so int4 must keep the signed activation path.
-        self.linear_out.act_unsigned = False
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.linear_in(x)
-        x = self.act_fn(x)
-        x = self.linear_out(x)
-        return x
-
-
-class NunchakuFlux2ParallelSelfAttention(Flux2ParallelSelfAttention):
-    def __init__(self, other: Flux2ParallelSelfAttention, **kwargs):
-        super(Flux2ParallelSelfAttention, self).__init__()
-        self.head_dim = other.head_dim
-        self.inner_dim = other.inner_dim
-        self.query_dim = other.query_dim
-        self.out_dim = other.out_dim
-        self.heads = other.heads
-        self.use_bias = other.use_bias
-        self.dropout = other.dropout
-        self.mlp_ratio = other.mlp_ratio
-        self.mlp_hidden_dim = other.mlp_hidden_dim
-        self.mlp_mult_factor = other.mlp_mult_factor
-        processor = getattr(other, "processor", None)
-        self._attention_backend = getattr(processor, "_attention_backend", None)
-        self._parallel_config = getattr(processor, "_parallel_config", None)
-
-        # Keep clear parameter names for export/runtime alignment.
-        with torch.device("meta"):
-            qkv_proj = torch.nn.Linear(other.query_dim, other.inner_dim * 3, bias=other.use_bias)
-            mlp_fc1 = torch.nn.Linear(other.query_dim, other.mlp_hidden_dim * other.mlp_mult_factor, bias=other.use_bias)
-            out_proj = torch.nn.Linear(other.inner_dim, other.out_dim, bias=other.to_out.bias is not None)
-            mlp_fc2 = torch.nn.Linear(other.mlp_hidden_dim, other.out_dim, bias=other.to_out.bias is not None)
-        self.qkv_proj = SVDQW4A4Linear.from_linear(qkv_proj, **kwargs)
-        self.mlp_fc1 = SVDQW4A4Linear.from_linear(mlp_fc1, **kwargs)
-        self.mlp_act_fn = other.mlp_act_fn
-        self.norm_q = other.norm_q
-        self.norm_k = other.norm_k
-        self.out_proj = SVDQW4A4Linear.from_linear(out_proj, **kwargs)
-        self.mlp_fc2 = SVDQW4A4Linear.from_linear(mlp_fc2, **kwargs)
-        # FLUX.2 PTQ does not currently apply ShiftedLinear on these SwiGLU down-projections,
-        # so int4 must keep the signed activation path.
-        self.mlp_fc2.act_unsigned = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        image_rotary_emb: torch.Tensor | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        kv_cache = kwargs.get("kv_cache", None)
-        kv_cache_mode = kwargs.get("kv_cache_mode", None)
-        num_txt_tokens = int(kwargs.get("num_txt_tokens", 0))
-        num_ref_tokens = int(kwargs.get("num_ref_tokens", 0))
-        use_packed_fp16 = kv_cache_mode is None and torch.is_tensor(image_rotary_emb) and image_rotary_emb.ndim == 3 and hidden_states.is_cuda
-        if use_packed_fp16:
-            batch_size = hidden_states.shape[0]
-            num_tokens = hidden_states.shape[1]
-            query, key, value, num_tokens_pad = _alloc_packed_qkv(
-                batch_size, self.heads, num_tokens, self.head_dim, hidden_states.device
-            )
-            fused_qkv_norm_rottary(
-                hidden_states,
-                self.qkv_proj,
-                self.norm_q,
-                self.norm_k,
-                image_rotary_emb,
-                output=(query, key, value),
-                attn_tokens=num_tokens,
-            )
-            attn_output = torch.empty(
-                batch_size,
-                num_tokens_pad,
-                self.heads * self.head_dim,
-                dtype=hidden_states.dtype,
-                device=hidden_states.device,
-            )
-            attention_fp16(query, key, value, attn_output, self.head_dim ** (-0.5))
-            attn_output = attn_output[:, :num_tokens]
-            mlp_hidden_states = self.mlp_act_fn(self.mlp_fc1(hidden_states))
-            return self.out_proj(attn_output) + self.mlp_fc2(mlp_hidden_states)
-
-        if torch.is_tensor(image_rotary_emb) and image_rotary_emb.ndim == 3:
-            batch_size = hidden_states.shape[0]
-            qkv = fused_qkv_norm_rottary(hidden_states, self.qkv_proj, self.norm_q, self.norm_k, image_rotary_emb)
-            query, key, value = qkv.chunk(3, dim=-1)
-            query = query.view(batch_size, -1, self.heads, self.head_dim)
-            key = key.view(batch_size, -1, self.heads, self.head_dim)
-            value = value.view(batch_size, -1, self.heads, self.head_dim)
-        else:
-            qkv = self.qkv_proj(hidden_states)
-            query, key, value = qkv.chunk(3, dim=-1)
-            query = query.unflatten(-1, (self.heads, -1))
-            key = key.unflatten(-1, (self.heads, -1))
-            value = value.unflatten(-1, (self.heads, -1))
-            query = self.norm_q(query)
-            key = self.norm_k(key)
-        if image_rotary_emb is not None:
-            query = apply_rotary_emb(query, image_rotary_emb, sequence_dim=1)
-            key = apply_rotary_emb(key, image_rotary_emb, sequence_dim=1)
-
-        if kv_cache_mode == "extract" and kv_cache is not None and num_ref_tokens > 0:
-            ref_start = num_txt_tokens
-            ref_end = num_txt_tokens + num_ref_tokens
-            kv_cache.store(key[:, ref_start:ref_end].clone(), value[:, ref_start:ref_end].clone())
-
-        if kv_cache_mode == "extract" and num_ref_tokens > 0:
-            attn_output = _flux2_kv_causal_attention(
-                query, key, value, num_txt_tokens, num_ref_tokens, backend=self._attention_backend
-            )
-        elif kv_cache_mode == "cached" and kv_cache is not None:
-            attn_output = _flux2_kv_causal_attention(
-                query, key, value, num_txt_tokens, 0, kv_cache=kv_cache, backend=self._attention_backend
-            )
-        else:
-            attn_output = dispatch_attention_fn(
-                query,
-                key,
-                value,
-                attn_mask=attention_mask,
-                backend=self._attention_backend,
-                parallel_config=self._parallel_config,
-            )
-        attn_output = attn_output.flatten(2, 3).to(query.dtype)
-        mlp_hidden_states = self.mlp_act_fn(self.mlp_fc1(hidden_states))
-        return self.out_proj(attn_output) + self.mlp_fc2(mlp_hidden_states)
-
-
-class NunchakuFlux2TransformerBlock(Flux2TransformerBlock):
-    def __init__(self, block: Flux2TransformerBlock, **kwargs):
-        super(Flux2TransformerBlock, self).__init__()
-        self.mlp_hidden_dim = block.mlp_hidden_dim
-        self.norm1 = block.norm1
-        self.norm1_context = block.norm1_context
-        self.attn = NunchakuFlux2Attention(block.attn, **kwargs)
-        self.norm2 = block.norm2
-        self.ff = NunchakuFlux2FeedForward(block.ff, **kwargs)
-        self.norm2_context = block.norm2_context
-        self.ff_context = NunchakuFlux2FeedForward(block.ff_context, **kwargs)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-        temb_mod_img: torch.Tensor,
-        temb_mod_txt: torch.Tensor,
-        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
-        joint_attention_kwargs: dict | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        joint_attention_kwargs = joint_attention_kwargs or {}
-
-        (shift_msa, scale_msa, gate_msa), (shift_mlp, scale_mlp, gate_mlp) = Flux2Modulation.split(temb_mod_img, 2)
-        (c_shift_msa, c_scale_msa, c_gate_msa), (c_shift_mlp, c_scale_mlp, c_gate_mlp) = Flux2Modulation.split(
-            temb_mod_txt, 2
-        )
-
-        norm_hidden_states = self.norm1(hidden_states)
-        norm_hidden_states = (1 + scale_msa) * norm_hidden_states + shift_msa
-
-        norm_encoder_hidden_states = self.norm1_context(encoder_hidden_states)
-        norm_encoder_hidden_states = (1 + c_scale_msa) * norm_encoder_hidden_states + c_shift_msa
-
-        attn_output, context_attn_output = self.attn(
-            hidden_states=norm_hidden_states,
-            encoder_hidden_states=norm_encoder_hidden_states,
-            image_rotary_emb=image_rotary_emb,
-            **joint_attention_kwargs,
-        )
-
-        hidden_states = _apply_gated_residual(hidden_states, gate_msa, attn_output)
-
-        norm_hidden_states = self.norm2(hidden_states)
-        norm_hidden_states = norm_hidden_states * (1 + scale_mlp) + shift_mlp
-        hidden_states = _apply_gated_residual(hidden_states, gate_mlp, self.ff(norm_hidden_states))
-
-        encoder_hidden_states = _apply_gated_residual(encoder_hidden_states, c_gate_msa, context_attn_output)
-
-        norm_encoder_hidden_states = self.norm2_context(encoder_hidden_states)
-        norm_encoder_hidden_states = norm_encoder_hidden_states * (1 + c_scale_mlp) + c_shift_mlp
-        encoder_hidden_states = _apply_gated_residual(
-            encoder_hidden_states, c_gate_mlp, self.ff_context(norm_encoder_hidden_states)
-        )
-        if encoder_hidden_states.dtype == torch.float16:
-            encoder_hidden_states = encoder_hidden_states.clip(-65504, 65504)
-
-        return encoder_hidden_states, hidden_states
-
-
-class NunchakuFlux2SingleTransformerBlock(Flux2SingleTransformerBlock):
-    def __init__(self, block: Flux2SingleTransformerBlock, **kwargs):
-        super(Flux2SingleTransformerBlock, self).__init__()
-        self.norm = block.norm
-        self.attn = NunchakuFlux2ParallelSelfAttention(block.attn, **kwargs)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor | None,
-        temb_mod: torch.Tensor,
-        image_rotary_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
-        joint_attention_kwargs: dict | None = None,
-        split_hidden_states: bool = False,
-        text_seq_len: int | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | torch.Tensor:
-        if encoder_hidden_states is not None:
-            text_seq_len = encoder_hidden_states.shape[1]
-            hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
-
-        mod_shift, mod_scale, mod_gate = Flux2Modulation.split(temb_mod, 1)[0]
-        norm_hidden_states = self.norm(hidden_states)
-        norm_hidden_states = (1 + mod_scale) * norm_hidden_states + mod_shift
-
-        joint_attention_kwargs = joint_attention_kwargs or {}
-        attn_output = self.attn(
-            hidden_states=norm_hidden_states,
-            image_rotary_emb=image_rotary_emb,
-            **joint_attention_kwargs,
-        )
-
-        hidden_states = _apply_gated_residual(hidden_states, mod_gate, attn_output)
-        if hidden_states.dtype == torch.float16:
-            hidden_states = hidden_states.clip(-65504, 65504)
-
-        if split_hidden_states:
-            encoder_hidden_states, hidden_states = hidden_states[:, :text_seq_len], hidden_states[:, text_seq_len:]
-            return encoder_hidden_states, hidden_states
-        return hidden_states
-
-
-class NunchakuFlux2Transformer2DModel(Flux2Transformer2DModel, NunchakuModelLoaderMixin):
-    def _patch_model(self, **kwargs):
-        for i, block in enumerate(self.transformer_blocks):
-            self.transformer_blocks[i] = NunchakuFlux2TransformerBlock(block, **kwargs)
-        for i, block in enumerate(self.single_transformer_blocks):
-            self.single_transformer_blocks[i] = NunchakuFlux2SingleTransformerBlock(block, **kwargs)
-        self.offload = False
-        self.transformer_block_offload_manager = None
-        self.single_transformer_block_offload_manager = None
-        return self
-
-    def set_offload(self, offload: bool, **kwargs):
-        if offload == self.offload:
-            return
-
-        self.offload = offload
-        if offload:
-            use_pin_memory = kwargs.get("use_pin_memory", True)
-            num_blocks_on_gpu = kwargs.get("num_blocks_on_gpu", 1)
-            self.transformer_block_offload_manager = CPUOffloadManager(
-                self.transformer_blocks,
-                use_pin_memory=use_pin_memory,
-                on_gpu_modules=[
-                    self.time_guidance_embed,
-                    self.double_stream_modulation_img,
-                    self.double_stream_modulation_txt,
-                    self.single_stream_modulation,
-                    self.x_embedder,
-                    self.context_embedder,
-                    self.norm_out,
-                    self.proj_out,
-                ],
-                num_blocks_on_gpu=num_blocks_on_gpu,
-            )
-            self.single_transformer_block_offload_manager = CPUOffloadManager(
-                self.single_transformer_blocks,
-                use_pin_memory=use_pin_memory,
-                num_blocks_on_gpu=num_blocks_on_gpu,
-            )
-        else:
-            self.transformer_block_offload_manager = None
-            self.single_transformer_block_offload_manager = None
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
-    @apply_lora_scale("joint_attention_kwargs")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor = None,
-        timestep: torch.LongTensor = None,
-        img_ids: torch.Tensor = None,
-        txt_ids: torch.Tensor = None,
-        guidance: torch.Tensor = None,
-        joint_attention_kwargs: dict | None = None,
-        return_dict: bool = True,
-        kv_cache=None,
-        kv_cache_mode: str | None = None,
-        num_ref_tokens: int = 0,
-        ref_fixed_timestep: float = 0.0,
-    ) -> torch.Tensor | Transformer2DModelOutput:
-        if kv_cache_mode is not None:
-            return super().forward(
-                hidden_states=hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                timestep=timestep,
-                img_ids=img_ids,
-                txt_ids=txt_ids,
-                guidance=guidance,
-                joint_attention_kwargs=joint_attention_kwargs,
-                return_dict=return_dict,
-                kv_cache=kv_cache,
-                kv_cache_mode=kv_cache_mode,
-                num_ref_tokens=num_ref_tokens,
-                ref_fixed_timestep=ref_fixed_timestep,
-            )
-
-        if self.offload:
-            device = hidden_states.device
-            self.transformer_block_offload_manager.set_device(device)
-            self.single_transformer_block_offload_manager.set_device(device)
-
-        num_txt_tokens = encoder_hidden_states.shape[1]
-        timestep = timestep.to(hidden_states.dtype) * 1000
-        if guidance is not None:
-            guidance = guidance.to(hidden_states.dtype) * 1000
-        temb = self.time_guidance_embed(timestep, guidance)
-        double_stream_mod_img = self.double_stream_modulation_img(temb)
-        double_stream_mod_txt = self.double_stream_modulation_txt(temb)
-        single_stream_mod = self.single_stream_modulation(temb)
-        hidden_states = self.x_embedder(hidden_states)
-        encoder_hidden_states = self.context_embedder(encoder_hidden_states)
-
-        if img_ids.ndim == 3:
-            img_ids = img_ids[0]
-        if txt_ids.ndim == 3:
-            txt_ids = txt_ids[0]
-
-        image_rotary_emb = self.pos_embed(img_ids)
-        text_rotary_emb = self.pos_embed(txt_ids)
-        rotary_emb_img = _pack_flux2_rotary_emb(image_rotary_emb)
-        rotary_emb_txt = _pack_flux2_rotary_emb(text_rotary_emb)
-        rotary_emb_single = _pack_flux2_rotary_emb(
-            (
-                torch.cat([text_rotary_emb[0], image_rotary_emb[0]], dim=0),
-                torch.cat([text_rotary_emb[1], image_rotary_emb[1]], dim=0),
-            )
-        )
-        kv_attn_kwargs = joint_attention_kwargs
-
-        if self.offload:
-            compute_stream = torch.cuda.current_stream()
-            self.transformer_block_offload_manager.initialize(compute_stream)
-            for index_block in range(len(self.transformer_blocks)):
-                with torch.cuda.stream(compute_stream):
-                    block = self.transformer_block_offload_manager.get_block(index_block)
-                    if torch.is_grad_enabled() and self.gradient_checkpointing:
-                        encoder_hidden_states, hidden_states = self._gradient_checkpointing_func(
-                            block,
-                            hidden_states,
-                            encoder_hidden_states,
-                            double_stream_mod_img,
-                            double_stream_mod_txt,
-                            (rotary_emb_img, rotary_emb_txt),
-                            kv_attn_kwargs,
-                        )
-                    else:
-                        encoder_hidden_states, hidden_states = block(
-                            hidden_states=hidden_states,
-                            encoder_hidden_states=encoder_hidden_states,
-                            temb_mod_img=double_stream_mod_img,
-                            temb_mod_txt=double_stream_mod_txt,
-                            image_rotary_emb=(rotary_emb_img, rotary_emb_txt),
-                            joint_attention_kwargs=kv_attn_kwargs,
-                        )
-                    self.transformer_block_offload_manager.step(compute_stream)
-        else:
-            for index_block, block in enumerate(self.transformer_blocks):
-                if torch.is_grad_enabled() and self.gradient_checkpointing:
-                    encoder_hidden_states, hidden_states = self._gradient_checkpointing_func(
-                        block,
-                        hidden_states,
-                        encoder_hidden_states,
-                        double_stream_mod_img,
-                        double_stream_mod_txt,
-                        (rotary_emb_img, rotary_emb_txt),
-                        kv_attn_kwargs,
-                    )
-                else:
-                    encoder_hidden_states, hidden_states = block(
-                        hidden_states=hidden_states,
-                        encoder_hidden_states=encoder_hidden_states,
-                        temb_mod_img=double_stream_mod_img,
-                        temb_mod_txt=double_stream_mod_txt,
-                        image_rotary_emb=(rotary_emb_img, rotary_emb_txt),
-                        joint_attention_kwargs=kv_attn_kwargs,
-                    )
-
-        hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
-        kv_attn_kwargs_single = kv_attn_kwargs
-
-        if self.offload:
-            self.single_transformer_block_offload_manager.initialize(compute_stream)
-            for index_block in range(len(self.single_transformer_blocks)):
-                with torch.cuda.stream(compute_stream):
-                    block = self.single_transformer_block_offload_manager.get_block(index_block)
-                    if torch.is_grad_enabled() and self.gradient_checkpointing:
-                        hidden_states = self._gradient_checkpointing_func(
-                            block,
-                            hidden_states,
-                            None,
-                            single_stream_mod,
-                            rotary_emb_single,
-                            kv_attn_kwargs_single,
-                        )
-                    else:
-                        hidden_states = block(
-                            hidden_states=hidden_states,
-                            encoder_hidden_states=None,
-                            temb_mod=single_stream_mod,
-                            image_rotary_emb=rotary_emb_single,
-                            joint_attention_kwargs=kv_attn_kwargs_single,
-                        )
-                    self.single_transformer_block_offload_manager.step(compute_stream)
-        else:
-            for index_block, block in enumerate(self.single_transformer_blocks):
-                if torch.is_grad_enabled() and self.gradient_checkpointing:
-                    hidden_states = self._gradient_checkpointing_func(
-                        block,
-                        hidden_states,
-                        None,
-                        single_stream_mod,
-                        rotary_emb_single,
-                        kv_attn_kwargs_single,
-                    )
-                else:
-                    hidden_states = block(
-                        hidden_states=hidden_states,
-                        encoder_hidden_states=None,
-                        temb_mod=single_stream_mod,
-                        image_rotary_emb=rotary_emb_single,
-                        joint_attention_kwargs=kv_attn_kwargs_single,
-                    )
-
-        hidden_states = hidden_states[:, num_txt_tokens:, ...]
-
-        hidden_states = self.norm_out(hidden_states, temb)
-        output = self.proj_out(hidden_states)
-
-        if not return_dict:
-            return (output,)
-
-        return Transformer2DModelOutput(sample=output)
-
-    @classmethod
-    @utils.validate_hf_hub_args
-    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], **kwargs):
-        device = kwargs.get("device", "cpu")
-        offload = kwargs.get("offload", False)
-        pin_memory = kwargs.get("pin_memory", "auto")
-        torch_dtype = kwargs.get("torch_dtype", torch.bfloat16)
-
-        if offload:
-            raise NotImplementedError("Offload is not supported for NunchakuFlux2Transformer2DModel")
-
-        if isinstance(pretrained_model_name_or_path, str):
-            pretrained_model_name_or_path = Path(pretrained_model_name_or_path)
-
-        if not (
-            pretrained_model_name_or_path.is_file()
-            or pretrained_model_name_or_path.name.endswith((".safetensors", ".sft"))
-        ):
-            raise AssertionError("Only safetensors are supported")
-
-        transformer, model_state_dict, metadata = cls._build_model(pretrained_model_name_or_path, **kwargs)
-        quantization_config = json.loads(metadata.get("quantization_config", "{}"))
-        rank = int(quantization_config.get("rank", 32))
-        if quantization_config:
-            precision = get_precision_from_quantization_config(quantization_config)
-            if torch.device(device).type == "cuda":
-                check_hardware_compatibility(quantization_config, device)
-            else:
-                precision = get_precision(device=device)
-            if precision == "fp4":
-                precision = "nvfp4"
-
-        transformer = transformer.to(torch_dtype)
-        transformer._patch_model(precision=precision, rank=rank, torch_dtype=torch_dtype)
-        transformer = transformer.to_empty(device=device)
-
-        patch_scale_key(transformer, model_state_dict)
-        if resolve_pin_memory(pin_memory, device):
-            model_state_dict = pin_state_dict(model_state_dict)
-
-        transformer.load_state_dict(model_state_dict)
-
-        if kwargs.get("return_metadata", False):
-            return transformer, metadata
-        return transformer
-
-    def to(self, *args, **kwargs):
-        device_arg_or_kwarg_present = any(isinstance(arg, torch.device) for arg in args) or "device" in kwargs
-
-        for arg in args:
-            if not isinstance(arg, str):
-                continue
-            try:
-                torch.device(arg)
-                device_arg_or_kwarg_present = True
-            except RuntimeError:
-                pass
-
-        if getattr(self, "offload", False) and device_arg_or_kwarg_present:
-            warn("Skipping moving the model to GPU as offload is enabled", UserWarning)
-            return self
-        return super(type(self), self).to(*args, **kwargs)
-'''
-
 
 # ---------------------------------------------------------------------------
 # Embedded ComfyFlux2KleinWrapper source code
@@ -1917,9 +716,6 @@ from torch import nn
 
 from nunchaku.models.transformers.transformer_flux2 import NunchakuFlux2Transformer2DModel
 from nunchaku.caching.fbcache import cache_context, create_cache_context
-from nunchaku.lora.flux.compose import compose_lora
-from nunchaku.utils import load_state_dict_in_safetensors
-
 
 class ComfyFlux2KleinWrapper(nn.Module):
     """
@@ -1955,8 +751,6 @@ class ComfyFlux2KleinWrapper(nn.Module):
         self.model = model
         self.dtype = next(model.parameters()).dtype
         self.config = config
-        self.loras = []
-
         self.pulid_pipeline = pulid_pipeline
         self.customized_forward = customized_forward
         self.forward_kwargs = {} if forward_kwargs is None else forward_kwargs
@@ -1965,6 +759,23 @@ class ComfyFlux2KleinWrapper(nn.Module):
 
         self._prev_timestep = None
         self._cache_context = None
+
+    # ------------------------------------------------------------------ #
+    # LoRA management - delegates to the underlying nunchaku transformer
+    # via SVDQLoRAMixin (update_lora_params / set_lora_strength / reset_lora)
+    # ------------------------------------------------------------------ #
+
+    def update_lora_params(self, lora_path_or_state_dict, strength: float = 1.0) -> None:
+        """Load and apply LoRA weights via the nunchaku transformer's native API."""
+        self.model.update_lora_params(lora_path_or_state_dict, strength=strength)
+
+    def set_lora_strength(self, strength: float = 1.0) -> None:
+        """Adjust LoRA strength without reloading weights."""
+        self.model.set_lora_strength(strength)
+
+    def reset_lora(self) -> None:
+        """Remove all LoRA effects and restore original weights."""
+        self.model.reset_lora()
 
     def process_img(self, x, index=0, h_offset=0, w_offset=0):
         """
@@ -2090,36 +901,6 @@ class ComfyFlux2KleinWrapper(nn.Module):
                     0, seq - 1, steps=seq, device=x.device, dtype=id_dtype
                 )
 
-        if hasattr(model, "comfy_lora_meta_list") and self.loras != model.comfy_lora_meta_list:
-            lora_to_be_composed = []
-            for _ in range(max(0, len(model.comfy_lora_meta_list) - len(self.loras))):
-                model.comfy_lora_meta_list.pop()
-                model.comfy_lora_sd_list.pop()
-            for i in range(len(self.loras)):
-                meta = self.loras[i]
-                if i >= len(model.comfy_lora_meta_list):
-                    sd = load_state_dict_in_safetensors(meta[0])
-                    model.comfy_lora_meta_list.append(meta)
-                    model.comfy_lora_sd_list.append(sd)
-                elif model.comfy_lora_meta_list[i] != meta:
-                    if meta[0] != model.comfy_lora_meta_list[i][0]:
-                        sd = load_state_dict_in_safetensors(meta[0])
-                        model.comfy_lora_sd_list[i] = sd
-                    model.comfy_lora_meta_list[i] = meta
-                lora_to_be_composed.append(({k: v for k, v in model.comfy_lora_sd_list[i].items()}, meta[1]))
-
-            composed_lora = compose_lora(lora_to_be_composed)
-
-            if len(composed_lora) == 0:
-                model.reset_lora()
-            else:
-                if "x_embedder.lora_A.weight" in composed_lora:
-                    new_in_channels = composed_lora["x_embedder.lora_A.weight"].shape[1]
-                    current_in_channels = model.x_embedder.in_features
-                    if new_in_channels < current_in_channels:
-                        model.reset_x_embedder()
-                model.update_lora_params(composed_lora)
-
         if getattr(model, "residual_diff_threshold_multi", 0) != 0 or getattr(model, "_is_cached", False):
             cache_invalid = False
 
@@ -2189,7 +970,6 @@ class ComfyFlux2KleinWrapper(nn.Module):
         self._prev_timestep = timestep_float
         return out
 
-
 def copy_with_ctx(model_wrapper: ComfyFlux2KleinWrapper) -> Tuple[ComfyFlux2KleinWrapper, ModelPatcher]:
     """
     Duplicates a ComfyFlux2KleinWrapper object with its initialization context.
@@ -2214,3 +994,14 @@ def copy_with_ctx(model_wrapper: ComfyFlux2KleinWrapper) -> Tuple[ComfyFlux2Klei
     ret_model = ModelPatcher(model_base, ctx_for_copy["device"], ctx_for_copy["device_id"])
     return ret_model_wrapper, ret_model
 '''
+
+# ---------------------------------------------------------------------------
+# Embedded nunchaku/lora/common/compose.py
+# From: nunchaku/lora/common/compose.py (author-provided file)
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Embedded nunchaku/lora/common/mixin.py
+# From: nunchaku/lora/common/mixin.py (author-provided file)
+# ---------------------------------------------------------------------------
+
