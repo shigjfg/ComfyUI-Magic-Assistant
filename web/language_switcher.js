@@ -1122,6 +1122,10 @@ const magicKleinLoaderTranslations = {
         zh: "License: FLUX Non-Commercial License（详见 HuggingFace 页面）",
         en: "License: FLUX Non-Commercial License (see HuggingFace model page)",
     },
+
+    // 说明弹窗标题
+    "关于 Klein": { zh: "关于 Klein", en: "About Klein" },
+    "📖 关于 Klein": { zh: "📖 关于 Klein", en: "📖 About Klein" }
 };
 
 // 所有翻译映射（按节点分类）

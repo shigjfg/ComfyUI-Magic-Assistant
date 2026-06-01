@@ -769,14 +769,17 @@ class MagicPowerLoraLoader:
                         print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
 
         elif klein_mode == "klein" and is_klein:
-            # Klein 模式 - 使用 Nunchaku 原生 LoRA API 直接修改量化权重
-            # 链末端：先重置旧 LoRA，再按串接顺序加载（与 SDNQ 的卸载-重装策略一致）
+            # Klein/nunchaku 的 update_lora_params 每次调用都会先重置旧 LoRA。
+            # 因此多 LoRA 必须先 compose 成一个 state dict，再一次性应用。
             try:
                 wrapper = out_model.model.diffusion_model
                 wrapper.reset_lora()
                 print(f"   [Klein] 已重置旧 LoRA")
             except Exception as e:
+                wrapper = None
                 print(f"   ⚠️ [Klein] 重置旧 LoRA 失败: {e}")
+
+            klein_loras = []
             for item in items_to_process:
                 lora_name = item.get("name", "").strip()
                 weight = float(item.get("weight", 1.0))
@@ -788,11 +791,8 @@ class MagicPowerLoraLoader:
                     print(f"⚠️ [MagicPowerLora] Klein LoRA not found: {lora_name}")
                     continue
 
-                try:
-                    wrapper.update_lora_params(lora_path, strength=weight)
-                    print(f"   ✅ Applied (Klein): {lora_name} (strength={weight})")
-                except Exception as e:
-                    print(f"   ❌ Failed (Klein): {lora_name} -> {e}")
+                klein_loras.append((lora_path, weight, lora_name, item))
+                print(f"   [Klein] Queued: {lora_name} (strength={weight})")
 
                 if "tags" in item and item.get("tags"):
                     active_tags.append(str(item["tags"]))
@@ -806,6 +806,28 @@ class MagicPowerLoraLoader:
                         preview_images.append(preview_tensor)
                     except Exception:
                         pass
+
+            if wrapper is not None and klein_loras:
+                try:
+                    if len(klein_loras) == 1:
+                        lora_path, weight, lora_name, _item = klein_loras[0]
+                        wrapper.update_lora_params(lora_path, strength=weight)
+                        print(f"   ✅ Applied (Klein): {lora_name} (strength={weight})")
+                    else:
+                        try:
+                            from nunchaku.lora.common import compose_lora
+                        except Exception:
+                            from nunchaku.lora.common.compose import compose_lora
+
+                        lora_specs = [(lora_path, weight) for lora_path, weight, _name, _item in klein_loras]
+                        composed_lora = compose_lora(lora_specs)
+                        wrapper.update_lora_params(composed_lora, strength=1.0)
+                        names = ", ".join(name for _path, _weight, name, _item in klein_loras)
+                        print(f"   ✅ Applied (Klein Compose): {len(klein_loras)} LoRA(s) mixed -> {names}")
+                except Exception as e:
+                    print(f"   ❌ Failed (Klein Compose): {e}")
+            elif wrapper is not None:
+                print(f"   ℹ️ [Klein] No valid LoRA to apply")
 
         elif sdnq_mode == "sdnq" and is_sdnq:
             # SDNQ 模式 - 链末端：先全局卸载，再按合并列表顺序加载（与 comfyui-sdnq 每次运行先卸再加载一致）

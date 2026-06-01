@@ -14,8 +14,16 @@
 
 > Latest Update / 最新更新：**2026-06-01**
 
+> **V1.3.6 版本介绍 / Version Introduction** 2026-06-01
+>
+> 1. **🐛 修复（重要）**: 修复 Klein 模式下，强力 LoRA 加载器只能应用单个 LoRA，而无法应用所有 LoRA 的问题，请一定要更新本版本！
+>    * **Bugfix (Important)**: Fixed an issue in Klein mode where Magic Power LoRA Loader could only apply a single LoRA instead of applying all LoRAs. Please make sure to update to this version!
+>
+> 2. **🐛 修复**: 修复部分当使用悬浮球进行中英文转换时，UI 的文本没有正确翻译的问题
+>    * **Bugfix**: Fixed an issue where some UI texts were not translated correctly when switching Chinese/English via the floating button
+>
 > **V1.3.5 版本介绍 / Version Introduction** 2026-06-01
-
+>
 > 1. **✨ 新增功能**: Magic Nunchaku FLUX.2 Klein Loader - LoRA 支持 ⭐
 >    * Klein 模型现已支持使用 LoRA！需要配合强力 LoRA 加载器使用
 >    * 在强力 LoRA 加载器设置中开启 Klein 模式即可正确使用 LoRA
@@ -76,6 +84,9 @@
 >    * Improved SDNQ mode LoRA application logic with better error handling
 >    * Optimized preview image loading process with reduced memory footprint
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.3 版本介绍 / Version Introduction** 2026-04-10
 
 > 1. **🐛 修复**: Magic Nunchaku FLUX.2 Klein Loader - 修复 klein 节点嵌入环境的问题
@@ -83,9 +94,6 @@
 >    * 增强了环境检测和嵌入的稳定性，提升使用体验
 >    * Fixed environment embedding issues in the nunchaku-flux2-klein node
 >    * Enhanced environment detection and embedding stability for better user experience
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.2 版本介绍 / Version Introduction** 2026-04-07
 
