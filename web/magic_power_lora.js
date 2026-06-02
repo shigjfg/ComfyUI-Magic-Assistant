@@ -3,6 +3,40 @@ import { api } from "../../scripts/api.js";
 
 const NODE_NAME = "MagicPowerLoraLoader";
 
+// ---------------------------------------------------------------------------
+// Debug switch (frontend)
+// ---------------------------------------------------------------------------
+// 用途：在浏览器端打印诊断日志，排查「旧工作流污染」「隐藏 widget 注入」「模式字段错位」等问题。
+//
+// 开启方式（任选其一）：
+// 1) 浏览器控制台执行并刷新页面：
+//    localStorage.setItem('MAGIC_ASSISTANT_DEBUG', '1'); location.reload();
+// 2) URL 参数（临时）：在 ComfyUI 页面地址后追加：
+//    ?MAGIC_ASSISTANT_DEBUG=1
+// 3) 代码临时开启：在控制台执行：
+//    window.MAGIC_ASSISTANT_DEBUG = true
+//
+// 关闭方式：
+//    localStorage.removeItem('MAGIC_ASSISTANT_DEBUG'); location.reload();
+//
+// 注意：开启后会打印较多日志，建议仅在排障期间启用。
+const MPL_DEBUG_KEY = "MAGIC_ASSISTANT_DEBUG";
+function mplIsDebugEnabled() {
+    try {
+        if (window.MAGIC_ASSISTANT_DEBUG === true) return true;
+        const qs = new URLSearchParams(window.location.search || "");
+        const qv = (qs.get(MPL_DEBUG_KEY) || "").trim().toLowerCase();
+        if (["1", "true", "yes", "y", "on"].includes(qv)) return true;
+        const lv = (localStorage.getItem(MPL_DEBUG_KEY) || "").trim().toLowerCase();
+        return ["1", "true", "yes", "y", "on"].includes(lv);
+    } catch (e) {
+        return false;
+    }
+}
+function mplDebugLog(...args) {
+    if (mplIsDebugEnabled()) console.log("[MagicAssistant DEBUG]", ...args);
+}
+
 // 全局LoRA图片缓存（类似参考代码的loraImages）
 let loraImagesCache = {};
 
@@ -11,7 +45,7 @@ async function loadLoraImageList() {
     try {
         const resp = await api.fetchApi("/ma/lora/images");
         loraImagesCache = await resp.json();
-        console.log("[MagicPowerLora] LoRA图片列表已加载，共", Object.keys(loraImagesCache).length, "个LoRA");
+        mplDebugLog("LoRA图片列表已加载，共", Object.keys(loraImagesCache).length, "个LoRA");
     } catch (e) {
         console.error("[MagicPowerLora] 加载LoRA图片列表时出错:", e);
         loraImagesCache = {};
@@ -162,22 +196,22 @@ app.registerExtension({
                 this._kleinModeWidget = kleinModeWidget;
 
                 // 初始化 INT8 模式（从属性中读取）
-                if (!this.int8Mode) {
+                if (this.int8Mode === undefined) {
                     this.int8Mode = this.properties["int8_mode"] || "none";
                 }
 
                 // 初始化 SDNQ 模式（从属性中读取）
-                if (!this.sdnqMode) {
+                if (this.sdnqMode === undefined) {
                     this.sdnqMode = this.properties["sdnq_mode"] || "none";
                 }
-
                 // 初始化自适应模式（从属性中读取）
-                if (!this.adaptiveMode) {
+                // 注意：不能用 `if (!this.adaptiveMode)`，否则 false 会被当作“未初始化”
+                if (this.adaptiveMode === undefined) {
                     this.adaptiveMode = this.properties["adaptive_mode"] === true || this.properties["adaptive_mode"] === "true";
                 }
 
                 // 初始化 Klein 模式（从属性中读取）
-                if (!this.kleinMode) {
+                if (this.kleinMode === undefined) {
                     this.kleinMode = this.properties["klein_mode"] || "auto";
                 }
 
@@ -526,16 +560,16 @@ app.registerExtension({
                 }
                 
                 // 恢复 INT8 模式设置
-                if (this.properties["int8_mode"]) {
-                    this.int8Mode = this.properties["int8_mode"];
+                if (this.properties["int8_mode"] !== undefined) {
+                    this.int8Mode = String(this.properties["int8_mode"] || "none");
                 } else {
                     this.int8Mode = "none";
                     this.properties["int8_mode"] = "none";
                 }
                 
                 // 恢复 SDNQ 模式设置
-                if (this.properties["sdnq_mode"]) {
-                    this.sdnqMode = this.properties["sdnq_mode"];
+                if (this.properties["sdnq_mode"] !== undefined) {
+                    this.sdnqMode = String(this.properties["sdnq_mode"] || "none");
                 } else {
                     this.sdnqMode = "none";
                     this.properties["sdnq_mode"] = "none";
@@ -548,10 +582,9 @@ app.registerExtension({
                     this.adaptiveMode = false;
                     this.properties["adaptive_mode"] = false;
                 }
-
                 // 恢复 Klein 模式设置
-                if (this.properties["klein_mode"]) {
-                    this.kleinMode = this.properties["klein_mode"];
+                if (this.properties["klein_mode"] !== undefined) {
+                    this.kleinMode = String(this.properties["klein_mode"] || "auto");
                 } else {
                     this.kleinMode = "auto";
                     this.properties["klein_mode"] = "auto";
@@ -600,28 +633,70 @@ app.registerExtension({
                 }
                 
                 // 从 widgets_values 恢复 INT8 模式（如果存在）
-                if (this.widgets_values && this.widgets_values.length > 3 && this.widgets_values[3]) {
+                if (this.widgets_values && this.widgets_values.length > 3 && this.widgets_values[3] !== undefined && this.widgets_values[3] !== "") {
                     this.int8Mode = this.widgets_values[3];
                     this.properties["int8_mode"] = this.int8Mode;
                 }
                 
                 // 从 widgets_values 恢复 SDNQ 模式（如果存在）
-                if (this.widgets_values && this.widgets_values.length > 4 && this.widgets_values[4]) {
+                if (this.widgets_values && this.widgets_values.length > 4 && this.widgets_values[4] !== undefined && this.widgets_values[4] !== "") {
                     this.sdnqMode = this.widgets_values[4];
                     this.properties["sdnq_mode"] = this.sdnqMode;
                 }
 
-                // 从 widgets_values 恢复自适应模式（如果存在）
-                if (this.widgets_values && this.widgets_values.length > 5 && this.widgets_values[5]) {
-                    this.adaptiveMode = this.widgets_values[5] === "true" || this.widgets_values[5] === true;
+                // 只从 widgets_values 恢复自适应模式（如果存在）
+                const wAdaptive = this.widgets_values?.[5];
+                const wAdaptiveHasValue = wAdaptive !== undefined && wAdaptive !== "";
+                if (this.widgets_values && this.widgets_values.length > 5 && wAdaptiveHasValue) {
+                    this.adaptiveMode = wAdaptive === "true" || wAdaptive === true;
                     this.properties["adaptive_mode"] = this.adaptiveMode;
                 }
 
                 // 从 widgets_values 恢复 Klein 模式（如果存在）
-                if (this.widgets_values && this.widgets_values.length > 6 && this.widgets_values[6]) {
+                const wKlein = this.widgets_values?.[6];
+                const wKleinHasValue = wKlein !== undefined && wKlein !== "";
+                if (this.widgets_values && this.widgets_values.length > 6 && wKleinHasValue) {
                     this.kleinMode = this.widgets_values[6];
                     this.properties["klein_mode"] = this.kleinMode;
                 }
+
+                // 归一化/自动修复旧工作流的模式字段（旧版本可能写入 true/false 等无效值）
+                const normalizeInt8 = (v) => (v === "stochastic" || v === "dynamic") ? v : "none";
+                const normalizeSdnq = (v) => v === "sdnq" ? "sdnq" : "none";
+                const normalizeKlein = (v) => v === "klein" ? "klein" : (v === "auto" ? "auto" : "none");
+
+                const fixedInt8 = normalizeInt8(this.int8Mode ?? this.properties["int8_mode"]);
+                if (fixedInt8 !== (this.int8Mode ?? this.properties["int8_mode"])) {
+                    this.int8Mode = fixedInt8;
+                    this.properties["int8_mode"] = fixedInt8;
+                    if (this._int8ModeWidget) this._int8ModeWidget.value = fixedInt8;
+                }
+
+                const fixedSdnq = normalizeSdnq(this.sdnqMode ?? this.properties["sdnq_mode"]);
+                if (fixedSdnq !== (this.sdnqMode ?? this.properties["sdnq_mode"])) {
+                    this.sdnqMode = fixedSdnq;
+                    this.properties["sdnq_mode"] = fixedSdnq;
+                    if (this._sdnqModeWidget) this._sdnqModeWidget.value = fixedSdnq;
+                }
+
+                const fixedKlein = normalizeKlein(this.kleinMode ?? this.properties["klein_mode"]);
+                if (fixedKlein !== (this.kleinMode ?? this.properties["klein_mode"])) {
+                    this.kleinMode = fixedKlein;
+                    this.properties["klein_mode"] = fixedKlein;
+                    if (this._kleinModeWidget) this._kleinModeWidget.value = fixedKlein;
+                }
+
+                // 自动修复旧工作流：某些旧版本会把 adaptive_mode 错误保存成 true
+                // 修复条件：properties 里是 true，但 widgets_values[5] 为空/false（说明不是用户显式选的自适应）
+                if ((this.properties["adaptive_mode"] === true || this.properties["adaptive_mode"] === "true")
+                    && (!wAdaptiveHasValue || wAdaptive === "false" || wAdaptive === false)) {
+                    this.adaptiveMode = false;
+                    this.properties["adaptive_mode"] = false;
+                    if (this._adaptiveModeWidget) this._adaptiveModeWidget.value = "false";
+                }
+
+                // 最后统一同步一次，确保 properties / 隐藏 widget 一致并写回工作流
+                this.updateWidget?.();
                 
                 setTimeout(() => { this.createDOMInterface(); this.renderEmbeddedList(); this._updateKleinBanner?.(); }, 100);
                 return r;

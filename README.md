@@ -12,8 +12,18 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-06-01**
+> Latest Update / 最新更新：**2026-06-02**
 
+> **V1.3.7 版本介绍 / Version Introduction** 2026-06-02
+>
+> 1. **🐛 修复（重要）**: 修复强力 LoRA 加载器模式切换的各种问题，大幅提升稳定性
+>    * 修复打开旧工作流时，INT8 模式、SDNQ 模式、Klein 模式等设置丢失或错乱的问题
+>    * 修复模式切换后实际未生效的问题，现已确保所有模式切换正确应用
+>    * 新增旧版本工作流设置自动修复功能，兼容并修复历史遗留的配置错误
+>    * Fixed settings lost or corrupted when opening old workflows (INT8/SDNQ/Klein modes)
+>    * Fixed mode switching not taking effect; all mode changes now apply correctly
+>    * Added auto-fix for legacy workflow settings to ensure backward compatibility
+>
 > **V1.3.6 版本介绍 / Version Introduction** 2026-06-01
 >
 > 1. **🐛 修复（重要）**: 修复 Klein 模式下，强力 LoRA 加载器只能应用单个 LoRA，而无法应用所有 LoRA 的问题，请一定要更新本版本！
@@ -53,6 +63,9 @@
 >    * Fixed drag issues in settings dialog and preset dialog
 >    * Dialogs can now be dragged normally for better user experience
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.4 版本介绍 / Version Introduction** 2026-05-20
 
 > 1. **🔧 更新**: Magic 提示词编辑器 - 编辑标签页重构为 3 个独立界面
@@ -83,9 +96,6 @@
 >    * Optimized LoRA caching mechanism to reduce duplicate loading and improve performance
 >    * Improved SDNQ mode LoRA application logic with better error handling
 >    * Optimized preview image loading process with reduced memory footprint
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.3 版本介绍 / Version Introduction** 2026-04-10
 

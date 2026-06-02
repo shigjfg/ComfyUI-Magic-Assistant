@@ -465,11 +465,45 @@ class MagicPowerLoraLoader:
         """
         # 重置本次执行使用的 LoRA 追踪（每次运行独立追踪）
         MagicPowerLoraLoader._reset_used_tracking()
-        
-        # 确保 adaptive_mode 是正确的布尔值（处理 JavaScript 传递的字符串 "false"）
+
+        # -------------------------
+        # 调试开关：MAGIC_ASSISTANT_DEBUG
+        # -------------------------
+        # 用途：排查前端传入的隐藏参数（adaptive/int8/sdnq/klein 等）是否正确。
+        # 为什么需要：ComfyUI 的 workflow/节点属性在不同版本之间可能出现“旧数据污染”或类型漂移（例如 true/false 字符串），
+        # 这会导致模式判断错误。打开此开关可以打印关键字段，快速定位是前端注入、workflow 保存，还是后端解析出了问题。
+        #
+        # 开启方式：在启动 ComfyUI 的环境变量中设置：
+        #   MAGIC_ASSISTANT_DEBUG=1
+        # 示例（Windows PowerShell）：
+        #   $env:MAGIC_ASSISTANT_DEBUG=1; python main.py
+        # 或者写进你的启动脚本/快捷方式环境。
+        #
+        # 注意：开启后会打印较多日志，建议仅在排障期间开启。
+        debug_enabled = os.getenv("MAGIC_ASSISTANT_DEBUG", "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+        if debug_enabled:
+            # [DEBUG] 打印 adaptive_mode 的原始输入值，用于排查模式判断错误
+            print(f"[DEBUG] adaptive_mode 原始值: {repr(adaptive_mode)} (type={type(adaptive_mode).__name__})", flush=True)
+
+            # [DEBUG] 打印 kwargs 中的相关字段（前端隐藏字段 / 串接字段）
+            debug_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if any(x in k for x in ["adaptive", "mode", "klein", "sdnq", "int8", "lora串"])
+            }
+            if debug_kwargs:
+                print(f"[DEBUG] kwargs 中的相关字段: {debug_kwargs}", flush=True)
+
+        # 确保 adaptive_mode 是正确的布尔值（处理前端可能传递的字符串 "false" / "true"）
+        # 说明：
+        # - 前端隐藏 widget 是 text 类型，历史原因可能传递字符串。
+        # - 这里统一转换为 Python bool，后续逻辑只看 bool。
         if isinstance(adaptive_mode, str):
-            adaptive_mode = adaptive_mode.lower() == "true"
+            adaptive_mode = adaptive_mode.strip().lower() == "true"
         adaptive_mode = bool(adaptive_mode)
+        if debug_enabled:
+            print(f"[DEBUG] adaptive_mode 转换后: {adaptive_mode}", flush=True)
 
         # 前端根据图连接注入 lora串输出已连接；未注入时默认 True（视为非末端，不加载，避免误加载）
         lora_output_connected = kwargs.get("lora串输出已连接", True)
