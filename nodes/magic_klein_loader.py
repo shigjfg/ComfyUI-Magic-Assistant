@@ -105,17 +105,11 @@ def _ensure_nunchaku_environment() -> bool:
 
 
 def _get_safetensor_files() -> list:
-    """Get all .safetensors files from ComfyUI's model directories."""
-    model_paths = folder_paths.get_folder_paths("diffusion_models") or []
-    files = []
-    for path in model_paths:
-        if not os.path.isdir(path):
-            continue
-        for f in os.listdir(path):
-            if f.lower().endswith((".safetensors", ".sft")):
-                files.append(f)
-    files.sort()
-    return files
+    files = folder_paths.get_filename_list("diffusion_models")
+    return [
+        f for f in files
+        if f.lower().endswith((".safetensors", ".sft"))
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -249,13 +243,7 @@ class MagicKleinLoader:
         device = torch.device(f"cuda:{device_id}")
         torch_dtype = torch.float16 if data_type == "float16" else torch.bfloat16
 
-        model_paths = folder_paths.get_folder_paths("diffusion_models") or []
-        model_path = None
-        for p in model_paths:
-            candidate = os.path.join(p, model_name)
-            if os.path.isfile(candidate):
-                model_path = candidate
-                break
+        model_path = folder_paths.get_full_path("diffusion_models", model_name)
 
         if model_path is None:
             raise FileNotFoundError(
@@ -294,14 +282,16 @@ class MagicKleinLoader:
                 self._cached_path = None
                 self._cached_device = None
                 self._cached_dtype = None
-                old_transformer.to("cpu")
+                
+                try:
+                    old_transformer.to("cpu")
+                except Exception:
+                    pass
+                
                 del old_transformer
                 gc.collect()
                 comfy.model_management.cleanup_models_gc()
                 comfy.model_management.soft_empty_cache()
-                comfy.model_management.free_memory(
-                    comfy.model_management.module_size(old_transformer), device
-                )
 
             logger.info(f"[Magic Klein] Loading model from: {model_path}")
             transformer, metadata = NunchakuFlux2Transformer2DModel.from_pretrained(
