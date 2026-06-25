@@ -8,7 +8,6 @@ ensuring files are always complete and up-to-date.
 Files downloaded from HuggingFace:
     {nunchaku_base}/torch_transfer_utils.py
     {nunchaku_base}/models/transformers/transformer_flux2.py
-    {nunchaku_base}/models/transformers/utils.py
     {nunchaku_base}/lora/common/__init__.py
     {nunchaku_base}/lora/common/compose.py
     {nunchaku_base}/lora/common/mixin.py
@@ -237,12 +236,20 @@ def get_nunchaku_base() -> str | None:
     return None
 
 def is_wrapper_installed() -> bool:
-    """Check if nunchaku.wrappers.klein is importable."""
+    """Check if nunchaku.wrappers.klein is importable or the file exists."""
+    # 先检查文件是否存在
+    nunchaku_base = get_nunchaku_base()
+    if nunchaku_base is not None:
+        klein_file = os.path.join(nunchaku_base, "wrappers", "klein.py")
+        if os.path.isfile(klein_file):
+            return True
+    # 回退到 import 检测
     try:
         from nunchaku.wrappers.klein import ComfyFlux2KleinWrapper
         return True
     except ImportError:
-        return False
+        pass
+    return False
 
 _FLUX2_MODEL = "NunchakuFlux2Transformer2DModel"
 
@@ -510,6 +517,33 @@ def install_wrapper_to_nunchaku(force_update: bool = False) -> tuple[bool, str]:
     print(f"[Magic Klein] Installation complete: {len(created)} created, {len(updated)} updated.")
     return True, "\n".join(parts)
 
+def _check_diffusers_version() -> tuple[bool, str, str]:
+    """
+    Check if diffusers version is sufficient for nunchaku FLUX.2 Klein.
+    
+    Returns:
+        (is_sufficient, current_version, min_required_version)
+    """
+    try:
+        import diffusers
+        current = diffusers.__version__
+    except ImportError:
+        return False, "not_installed", "0.37.0"
+    
+    # Minimum version for apply_lora_scale (used by nunchaku)
+    min_version = "0.37.0"
+    
+    from packaging import version
+    try:
+        if version.parse(current) >= version.parse(min_version):
+            return True, current, min_version
+        else:
+            return False, current, min_version
+    except Exception:
+        # If version parsing fails, assume it's too old
+        return False, current, min_version
+
+
 def check_environment() -> dict:
     """Check the current state of the nunchaku FLUX.2 environment.
 
@@ -523,10 +557,12 @@ def check_environment() -> dict:
         - common_available: bool          # lora/common/ present with all required files
         - common_files: dict              # per-file availability
         - needs_patch: bool
+        - diffusers_ok: bool              # diffusers version >= 0.37.0
+        - diffusers_version: str
         - comfyui_root: str | None
         - comfyui_python: str | None
         - comfyui_python_lib: str | None
-        - install_status: str  # "ready" | "needs_patch" | "missing_nunchaku" | "missing_transformer" | "missing_core_files" | "missing_common"
+        - install_status: str  # "ready" | "needs_patch" | "missing_nunchaku" | "missing_transformer" | "missing_core_files" | "missing_common" | "diffusers_old"
         - status_text: dict    # {"zh": str, "en": str}
         - suggestion: str
     """
@@ -542,6 +578,8 @@ def check_environment() -> dict:
             "common_available": False,
             "common_files": {},
             "needs_patch": False,
+            "diffusers_ok": False,
+            "diffusers_version": "unknown",
             "comfyui_root": None,
             "comfyui_python": None,
             "comfyui_python_lib": None,
@@ -570,33 +608,48 @@ def _check_environment_impl() -> dict:
     common_files = {}
     REQUIRED_COMMON_FILES = ["__init__.py", "compose.py", "mixin.py"]
     if nunchaku_found:
-        try:
-            from nunchaku.models.transformers.transformer_flux2 import NunchakuFlux2Transformer2DModel
-            transformer_available = True
-        except ImportError:
-            pass
-        try:
-            from nunchaku.torch_transfer_utils import pin_state_dict
-            torch_transfer_utils_available = True
-        except ImportError:
-            pass
+        # 先检查文件是否存在（文件系统检测），再尝试 import
+        # 这样即使 __init__.py 配置有问题，只要文件存在就认为是可用的
+        transformer_file = os.path.join(nunchaku_base, "models", "transformers", "transformer_flux2.py")
+        torch_transfer_file = os.path.join(nunchaku_base, "torch_transfer_utils.py")
+
+        if os.path.isfile(transformer_file):
+            try:
+                from nunchaku.models.transformers.transformer_flux2 import NunchakuFlux2Transformer2DModel
+                transformer_available = True
+            except ImportError:
+                # 文件存在但 import 失败，说明 __init__.py 未正确配置导入
+                # 这种情况也视为文件可用，只是需要 patch
+                transformer_available = True
+
+        if os.path.isfile(torch_transfer_file):
+            try:
+                from nunchaku.torch_transfer_utils import pin_state_dict
+                torch_transfer_utils_available = True
+            except ImportError:
+                torch_transfer_utils_available = True
         # 检查 lora/common/ 文件夹及文件完整性
-        try:
-            from nunchaku import lora as nunchaku_lora
-            common_pkg_path = os.path.dirname(nunchaku_lora.__file__)
-            common_dir = os.path.join(common_pkg_path, "common")
+        # 先用文件系统检测，import 只是辅助确认
+        common_files = {}
+        if nunchaku_base:
+            common_dir = os.path.join(nunchaku_base, "lora", "common")
             if os.path.isdir(common_dir):
                 common_files = {
                     fname: os.path.isfile(os.path.join(common_dir, fname))
                     for fname in REQUIRED_COMMON_FILES
                 }
-                common_available = all(common_files.values())
             else:
                 common_files = {fname: False for fname in REQUIRED_COMMON_FILES}
-        except Exception:
+            common_available = all(common_files.values())
+        else:
             common_files = {fname: False for fname in REQUIRED_COMMON_FILES}
+            common_available = False
 
     core_files_ok = transformer_available and torch_transfer_utils_available
+
+    # Check diffusers version
+    diffusers_ok, diffusers_version, diffusers_min = _check_diffusers_version()
+
     # common 文件夹不完整也视为需要更新
     needs_patch = (
         nunchaku_found
@@ -608,7 +661,20 @@ def _check_environment_impl() -> dict:
     status_text = {"zh": "环境就绪，可以正常加载模型", "en": "Environment ready, can load models normally"}
     suggestion = ""
 
-    if not nunchaku_found:
+    # diffusers version check has highest priority - needs to be fixed first
+    if not diffusers_ok:
+        install_status = "diffusers_old"
+        status_text = {
+            "zh": f"diffusers 版本过低（当前: {diffusers_version}，需要: ≥{diffusers_min}）",
+            "en": f"diffusers version too old (current: {diffusers_version}, required: ≥{diffusers_min})",
+        }
+        python_path = comfyui_python or "python"
+        suggestion = (
+            f"Please update diffusers in ComfyUI's Python environment:\n"
+            f'  {python_path} -m pip install -U diffusers\n'
+            f"Restart ComfyUI after updating."
+        )
+    elif not nunchaku_found:
         install_status = "missing_nunchaku"
         tried = (
             "; ".join(site_packages_searched)
@@ -676,6 +742,8 @@ def _check_environment_impl() -> dict:
         "common_available": common_available,
         "common_files": common_files,
         "needs_patch": needs_patch,
+        "diffusers_ok": diffusers_ok,
+        "diffusers_version": diffusers_version,
         "comfyui_root": comfyui_root,
         "comfyui_python": comfyui_python,
         "comfyui_python_lib": comfyui_python_lib,

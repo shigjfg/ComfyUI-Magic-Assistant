@@ -72,6 +72,7 @@ function statusBadgeColor(status) {
         case "missing_common": return "#FF9800";
         case "missing_nunchaku": return "#f44336";
         case "missing_transformer": return "#f44336";
+        case "diffusers_old": return "#f44336";
         case "check_failed":
         case "api_error":
         case "fetch_error":
@@ -92,6 +93,8 @@ function normalizeEnvPayload(raw, httpStatus, errMsg) {
                 common_available: false,
                 common_files: {},
                 needs_patch: false,
+                diffusers_ok: undefined,
+                diffusers_version: undefined,
                 install_status: "api_error",
                 status_text: {
                     zh: `接口错误: ${raw.error}`,
@@ -106,6 +109,8 @@ function normalizeEnvPayload(raw, httpStatus, errMsg) {
                 ...raw,
                 common_available: raw.common_available ?? false,
                 common_files: raw.common_files ?? {},
+                diffusers_ok: raw.diffusers_ok,
+                diffusers_version: raw.diffusers_version,
             };
         }
     }
@@ -117,6 +122,8 @@ function normalizeEnvPayload(raw, httpStatus, errMsg) {
         common_available: false,
         common_files: {},
         needs_patch: false,
+        diffusers_ok: undefined,
+        diffusers_version: undefined,
         install_status: "fetch_error",
         status_text: {
             zh: errMsg || `无法连接检测接口 (HTTP ${httpStatus ?? "?"})`,
@@ -264,15 +271,12 @@ app.registerExtension({
             const transformerOk = !!env?.transformer_available;
             const torchTransferOk = !!env?.torch_transfer_utils_available;
             const commonOk = !!env?.common_available;
-            /**
-             * needs_patch: 缺少文件，需要首次下载（force_update=false，仅写入缺失文件）
-             * !needs_patch: 文件已存在，用户想重新下载（force_update=true，强制覆盖）
-             */
-            const needsPatch = !!env?.needs_patch;
-            const canClick = nunchakuOk;
+            const diffusersOld = env?.diffusers_ok === false;
+            const canClick = nunchakuOk && !diffusersOld;
             const showNunchakuInstallHint = !nunchakuOk;
+            const showDiffusersOldHint = diffusersOld;
             const showOfficialPluginHint =
-                nunchakuOk && (!transformerOk || !torchTransferOk || !env?.wrapper_installed || !commonOk);
+                nunchakuOk && !diffusersOld && (!transformerOk || !torchTransferOk || !env?.wrapper_installed || !commonOk);
 
             const dialog = document.createElement("div");
             dialog.style.cssText = `
@@ -365,6 +369,14 @@ app.registerExtension({
                                     : `<span style="color:#f44336">✗</span> <span style="color:#888;font-size:11px;">(${Object.keys(env?.common_files || {}).length}/3)</span>`
                                 }
                             </div>
+                            <div class="mk-check-row">${t("diffusers:")}
+                                ${(env?.diffusers_ok === true || env?.diffusers_ok === false)
+                                    ? (env.diffusers_ok
+                                        ? `<span style="color:#4CAF50">✓</span> <span style="color:#888;font-size:11px;">(${env.diffusers_version || ""})</span>`
+                                        : `<span style="color:#f44336">✗</span> <span style="color:#888;font-size:11px;">(${env.diffusers_version || "?"} → 需要 ≥0.37.0)</span>`)
+                                    : `<span style="color:#888">?</span>`
+                                }
+                            </div>
                             ${env?.comfyui_python ? `
                             <div>${t("ComfyUI Python:")}
                                 <span style="color:#888;">${env.comfyui_python}</span>
@@ -404,10 +416,17 @@ app.registerExtension({
                     <div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:14px;">
                         <button id="__mk_install_btn" ${canClick ? "" : "disabled"}
                             style="${canClick ? btnStyleEnabled : btnStyleDisabled}"
-                        >${needsPatch ? t("📥 下载并安装") : t("🔄 强制重新下载")}</button>
+                        >${t("📥 下载并安装")}</button>
                         <div id="__mk_embed_side_hints" style="flex:1; min-width:220px; font-size:12px; line-height:1.6; color:#aaa;">
                             ${showNunchakuInstallHint
                                 ? `<div style="margin-bottom:8px;">${hintNunchakuHtml}</div>`
+                                : ""}
+                            ${showDiffusersOldHint
+                                ? `<div style="color:#f44336; margin-bottom:8px;">
+                                    <strong>diffusers 版本过低</strong><br>
+                                    请先更新 diffusers 再继续：<br>
+                                    <code style="font-size:11px; color:#888;">${env?.comfyui_python || "python"} -m pip install -U diffusers</code>
+                                   </div>`
                                 : ""}
                             ${showOfficialPluginHint
                                 ? `<div>${hintOfficialHtml}</div>`
@@ -465,21 +484,18 @@ app.registerExtension({
                 const resultDiv = document.getElementById("__mk_install_result");
                 if (!canClick || btn.disabled) return;
 
-                const forceUpdate = !needsPatch;
                 btn.disabled = true;
                 const btnOrigText = btn.textContent;
-                btn.textContent = forceUpdate ? t("⏳ 强制更新中...") : t("⏳ 安装中...");
+                btn.textContent = t("⏳ 下载并安装中...");
                 btn.style.opacity = "0.7";
                 resultDiv.style.color = "#888";
-                resultDiv.textContent = forceUpdate
-                    ? t("正在从 HuggingFace 下载最新文件...")
-                    : t("正在下载并安装文件...");
+                resultDiv.textContent = t("正在从 HuggingFace 下载文件...");
 
                 try {
                     const resp = await api.fetchApi("/ma/klein/patch_env", {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({force_update: forceUpdate}),
+                        body: JSON.stringify({force_update: true}),
                     });
                     const data = await resp.json();
 

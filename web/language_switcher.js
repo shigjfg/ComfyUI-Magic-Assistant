@@ -194,7 +194,32 @@ const loraLoaderTranslations = {
     " 个文件，查询 Civitai 中…": { zh: " 个文件，查询 Civitai 中…", en: " files, querying Civitai..." },
     "Civitai 最新: ": { zh: "Civitai 最新: ", en: "Civitai latest: " },
     "  ·  文件: ": { zh: "  ·  文件: ", en: "  ·  File: " },
-    "LoRA 检测: ": { zh: "LoRA 检测: ", en: "LoRA Scan: " }
+    "LoRA 检测: ": { zh: "LoRA 检测: ", en: "LoRA Scan: " },
+
+    // Klein 模式相关
+    "已检测到 Klein 模型，请前往 <b>&#x2699;&#xFE0F;设置 &rarr; LoRA 加载模式</b>\n启用 <b>tonera-Klein-Nunchaku</b> 模式以正确加载 LoRA": {
+        zh: "已检测到 Klein 模型，请前往 <b>&#x2699;&#xFE0F;设置 &rarr; LoRA 加载模式</b>\n启用 <b>tonera-Klein-Nunchaku</b> 模式以正确加载 LoRA",
+        en: "Klein model detected. Go to <b>&#x2699;&#xFE0F;Settings &rarr; LoRA Loading Mode</b>\nand enable <b>tonera-Klein-Nunchaku</b> mode to load LoRAs correctly"
+    },
+    "已检测到 Klein 模型，请前往 <b>⚙️设置 → LoRA 加载模式</b> 启用 <b>tonera-Klein-Nunchaku</b> 模式以正确加载 LoRA": {
+        zh: "已检测到 Klein 模型，请前往 <b>⚙️设置 → LoRA 加载模式</b> 启用 <b>tonera-Klein-Nunchaku</b> 模式以正确加载 LoRA",
+        en: "Klein model detected. Go to <b>⚙️Settings → LoRA Loading Mode</b> and enable <b>tonera-Klein-Nunchaku</b> mode to load LoRAs correctly"
+    },
+    "前往设置": { zh: "前往设置", en: "Go to Settings" },
+    "前往设置 →": { zh: "前往设置 →", en: "Go to Settings →" },
+    "tonera-Klein-Nunchaku LoRA 模式": { zh: "tonera-Klein-Nunchaku LoRA 模式", en: "tonera-Klein-Nunchaku LoRA Mode" },
+    "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认/INT8 模式）": {
+        zh: "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认/INT8 模式）",
+        en: "Native LoRA loading for tonera/FLUX.2-klein-9B-Nunchaku quantized models (use Default/INT8 mode for regular Klein models)"
+    },
+    "tonera-Klein-Nunchaku 模式（选中时激活）": { zh: "tonera-Klein-Nunchaku 模式（选中时激活）", en: "tonera-Klein-Nunchaku mode (activates when selected)" },
+    "tonera-Klein-Nunchaku 模式": { zh: "tonera-Klein-Nunchaku 模式", en: "tonera-Klein-Nunchaku Mode" },
+    "使用 Nunchaku 原生 LoRA API（update_lora_params）加载 tonera FLUX.2-klein-9B-Nunchaku 专用 LoRA": {
+        zh: "使用 Nunchaku 原生 LoRA API（update_lora_params）加载 tonera FLUX.2-klein-9B-Nunchaku 专用 LoRA",
+        en: "Use Nunchaku native LoRA API (update_lora_params) to load tonera FLUX.2-klein-9B-Nunchaku dedicated LoRAs"
+    },
+    "Klein 模式选中状态更新": { zh: "Klein 模式选中状态更新", en: "Klein mode selection status update" },
+    "选择 Klein 模式时取消其他模式": { zh: "选择 Klein 模式时取消其他模式", en: "When selecting Klein mode, deselect other modes" }
 };
 
 // 节点翻译映射表 - Magic SDNQ Loader & Sampler
@@ -1040,6 +1065,10 @@ const magicKleinLoaderTranslations = {
     "torch_transfer_utils:": { zh: "torch_transfer_utils:", en: "torch_transfer_utils:" },
     "wrappers/klein.py:": { zh: "wrappers/klein.py:", en: "wrappers/klein.py:" },
     "lora/common/:": { zh: "lora/common/:", en: "lora/common/:" },
+    "diffusers:": { zh: "diffusers:", en: "diffusers:" },
+    "需要 ≥0.37.0": { zh: "需要 ≥0.37.0", en: "Requires ≥0.37.0" },
+    "diffusers 版本过低": { zh: "diffusers 版本过低", en: "diffusers version too low" },
+    "请先更新 diffusers 再继续": { zh: "请先更新 diffusers 再继续", en: "Please update diffusers first to continue" },
     "ComfyUI Python:": { zh: "ComfyUI Python:", en: "ComfyUI Python:" },
 
     "🔧 嵌入到环境": { zh: "🔧 嵌入到环境", en: "🔧 Install to Environment" },

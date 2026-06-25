@@ -12,7 +12,23 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-06-02**
+> Latest Update / 最新更新：**2026-06-25**
+
+> **V1.3.8 版本介绍 / Version Introduction** 2026-06-25
+>
+> 1. **🐛 修复（重要）**: 修复 Klein 节点模型检测的路径方法，防止无法检测到 transform 和 klein 的问题
+>    * Fixed the model detection path method in Klein node to prevent inability to detect transform and klein
+>
+> 2. **🐛 修复**: 修复 magic_preset_tags 找不到而导致预设标签无法使用的问题
+>    * Fixed the issue where magic_preset_tags could not be found, causing preset tags to be unusable
+>
+> 3. **✨ 新增**: Magic Nunchaku FLUX.2 Klein Loader - diffusers 版本检测
+>    * 新增 diffusers 版本检测，在环境状态中显示当前 diffusers 版本号，方便排查环境问题
+>    * Added diffusers version detection in environment status
+>
+> 4. **✨ 优化**: 合并 PR #8，支持从子文件夹加载 Nunchaku Klein 模型，重构了模型文件获取逻辑
+>    * Merged PR #8: Added support for loading Nunchaku Klein models from subfolders, refactored model file retrieval logic
+>    * Thanks to Tom-M-Git for the contribution!
 
 > **V1.3.7 版本介绍 / Version Introduction** 2026-06-02
 >
@@ -31,7 +47,10 @@
 >
 > 2. **🐛 修复**: 修复部分当使用悬浮球进行中英文转换时，UI 的文本没有正确翻译的问题
 >    * **Bugfix**: Fixed an issue where some UI texts were not translated correctly when switching Chinese/English via the floating button
->
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.5 版本介绍 / Version Introduction** 2026-06-01
 >
 > 1. **✨ 新增功能**: Magic Nunchaku FLUX.2 Klein Loader - LoRA 支持 ⭐
@@ -62,9 +81,6 @@
 >    * 现在可以正常拖拽弹窗，提升使用体验
 >    * Fixed drag issues in settings dialog and preset dialog
 >    * Dialogs can now be dragged normally for better user experience
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.4 版本介绍 / Version Introduction** 2026-05-20
 

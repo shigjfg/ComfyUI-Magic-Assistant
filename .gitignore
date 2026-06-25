@@ -15,6 +15,7 @@ savedata/*
 !savedata/resolutions.txt
 !savedata/tag预设库.txt
 !savedata/danbooru预设库.txt
+!savedata/magic_preset_tags.txt
 
 # 3. 再次确保 API 设置文件绝对被忽略（双重保险）
 savedata/llm_settings.txt
