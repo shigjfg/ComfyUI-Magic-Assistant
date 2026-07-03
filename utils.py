@@ -2624,7 +2624,7 @@ async def check_update(request):
         
         if test_mode:
             # 测试模式：返回模拟的更新数据
-            current_version = "1.3.8"
+            current_version = "1.3.9"
             # 模拟一个更新的版本
             latest_version = "1.3.7"
             has_update = True
@@ -2659,7 +2659,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.3.8"  # Current version / 当前版本号
+        current_version = "1.3.9"  # Current version / 当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:

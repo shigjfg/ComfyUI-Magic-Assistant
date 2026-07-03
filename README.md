@@ -12,23 +12,35 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-06-25**
+> Latest Update / 最新更新：**2026-07-04**
 
-> **V1.3.8 版本介绍 / Version Introduction** 2026-06-25
+> **V1.3.9 版本介绍 / Version Introduction** 2026-07-04
 >
-> 1. **🐛 修复（重要）**: 修复 Klein 节点模型检测的路径方法，防止无法检测到 transform 和 klein 的问题
->    * Fixed the model detection path method in Klein node to prevent inability to detect transform and klein
+> 1. **🔧 更新**: Magic Nunchaku FLUX.2 Klein Loader - 新增 klein4b 模型支持与下载链接 ⭐
+>    * 更新了 Klein 节点支持的模型列表，新增 `tonera/FLUX.2-klein-4B-Nunchaku` 模型下载链接与模型支持
+>    * 无须重新下载环境文件即可使用 klein4b，与 klein9b / klein9bkv 共用同一套环境文件
+>    * 现有用户升级后即可在节点「⚙️ 设置」中看到并下载 klein4b 模型，无需重装环境
+>    * Updated Klein node supported model list with the new `tonera/FLUX.2-klein-4B-Nunchaku` model download link and support
+>    * klein4b can be used without re-downloading the environment files; shares the same environment as klein9b / klein9bkv
+>    * Existing users can directly see and download the klein4b model in node "⚙️ Settings" after upgrade; no need to re-embed the environment
 >
-> 2. **🐛 修复**: 修复 magic_preset_tags 找不到而导致预设标签无法使用的问题
->    * Fixed the issue where magic_preset_tags could not be found, causing preset tags to be unusable
+> 2. **🗑️ 移除**: Magic Power LoRA Loader - 移除 INT8 模式选项
+>    * ComfyUI 官方已在 `model_patcher.py` 中原生支持 INT8/FP8/INT4 等量化权重的 LoRA 应用
+>    * 强力 LoRA 加载器的「默认模式（标准 LoRA）」即可自动处理 INT8 等量化模型，无需任何额外适配
+>    * 故删除了独立的 INT8 模式选项，节点 UI 更简洁
+>    * 旧工作流中残留的 `int8_mode` 字段会被自动忽略（保留占位以兼容 widgets_values 索引），不会影响任何现有功能
+>    * ComfyUI officially now natively supports LoRA application for INT8/FP8/INT4 quantized weights in `model_patcher.py`
+>    * The "Default Mode (Standard LoRA)" of Magic Power LoRA Loader automatically handles INT8 and other quantized models without any additional adaptation
+>    * Therefore the dedicated INT8 mode option has been removed, making the node UI cleaner
+>    * Residual `int8_mode` fields in old workflows are automatically ignored (placeholders retained for widgets_values index compatibility) without affecting any existing functionality
 >
-> 3. **✨ 新增**: Magic Nunchaku FLUX.2 Klein Loader - diffusers 版本检测
->    * 新增 diffusers 版本检测，在环境状态中显示当前 diffusers 版本号，方便排查环境问题
->    * Added diffusers version detection in environment status
->
-> 4. **✨ 优化**: 合并 PR #8，支持从子文件夹加载 Nunchaku Klein 模型，重构了模型文件获取逻辑
->    * Merged PR #8: Added support for loading Nunchaku Klein models from subfolders, refactored model file retrieval logic
->    * Thanks to Tom-M-Git for the contribution!
+> 3. **✨ 新增**: Magic Power LoRA Loader - 默认模式支持 INT8 模型
+>    * 由于 ComfyUI 官方对 INT8 模型的 LoRA 支持，现在默认模式即可直接给 INT8 模型使用
+>    * 相比之前的 INT8 专属模式，使用更简单，无需手动切换模式
+>    * 默认走 ComfyUI 官方 LoRA 加载路径（`comfy.sd.load_lora_for_models`），自动适配 INT8/FP8/INT4 等量化权重
+>    * Since ComfyUI officially supports LoRA application for INT8 models, INT8 models can now be used directly in the default mode
+>    * Simpler than the previous dedicated INT8 mode - no need to manually switch modes
+>    * Follows ComfyUI's official LoRA loading path (`comfy.sd.load_lora_for_models`), automatically adapting to INT8/FP8/INT4 quantized weights
 
 > **V1.3.7 版本介绍 / Version Introduction** 2026-06-02
 >
@@ -39,7 +51,10 @@
 >    * Fixed settings lost or corrupted when opening old workflows (INT8/SDNQ/Klein modes)
 >    * Fixed mode switching not taking effect; all mode changes now apply correctly
 >    * Added auto-fix for legacy workflow settings to ensure backward compatibility
->
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.6 版本介绍 / Version Introduction** 2026-06-01
 >
 > 1. **🐛 修复（重要）**: 修复 Klein 模式下，强力 LoRA 加载器只能应用单个 LoRA，而无法应用所有 LoRA 的问题，请一定要更新本版本！
@@ -47,9 +62,6 @@
 >
 > 2. **🐛 修复**: 修复部分当使用悬浮球进行中英文转换时，UI 的文本没有正确翻译的问题
 >    * **Bugfix**: Fixed an issue where some UI texts were not translated correctly when switching Chinese/English via the floating button
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.5 版本介绍 / Version Introduction** 2026-06-01
 >
@@ -768,7 +780,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
 * **LoRA Detection**: New LoRA detection feature in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs.
-* **INT8 Mode Support**: Supports INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Supports latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
+* **INT8 Mode Support (Removed in V1.3.9)**: Previously supported INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Since ComfyUI officially added native INT8 support in `model_patcher.py`, the dedicated INT8 mode has been removed; **the default mode (Standard LoRA) now automatically handles INT8/FP8/INT4 quantized models** without any manual mode switching. Supported the latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
 * **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器).
 * **Klein Model Support**: Added LoRA loading support for Klein models (Nunchaku FLUX.2 Klein). Switch to Klein mode in node settings to enable LoRA support for Klein models. Enable adaptive mode for automatic model type detection.
 * **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
@@ -783,7 +795,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
 * **LoRA 检测功能**: LoRA 添加窗口新增 LoRA 检测功能，可以根据路径选择全部 LoRA 进行 LoRA 的查重和检测更新。
-* **INT8 模式支持**: 支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。支持最新的 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）。包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式。静态模式使用随机舍入保持更高精度，适合单个或少量 LoRA。动态模式支持运行时组合多个 LoRA，适合需要频繁切换的场景。
+* **INT8 模式支持（V1.3.9 已移除）**: 之前支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。由于 ComfyUI 官方已在 `model_patcher.py` 中原生支持 INT8 模型，**强力 LoRA 加载器的「默认模式（标准 LoRA）」现已可直接处理 INT8/FP8/INT4 等量化模型**，无需任何手动切换。曾支持的最新 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）现在使用默认模式即可正确加载。曾包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式，现已合并到默认模式。
 * **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器) 配合使用。
 * **Klein 模型支持**: 新增对 Klein 模型（Nunchaku FLUX.2 Klein）的 LoRA 加载支持。在节点设置中切换为 Klein 模式即可启用 Klein 模型的 LoRA 支持。开启自适应模式可自动检测模型类型。
 * **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
@@ -889,6 +901,7 @@ This node is based on the original author's implementation from [tonera/FLUX.2-k
 * **极速性能**: 速度提升是至今所有 klein9b 量化模型的 3-4 倍
 * **显存友好**: 推荐 30 系显卡和 40 系显卡用户使用
 * **klein9bkv 量化支持**: 支持 klein9bkv 量化
+* **klein4b 量化支持 (V1.3.9 新增)**: 支持 klein4b 模型，与 klein9b / klein9bkv 共用同一套环境文件，无须重新下载环境即可使用
 * **环境嵌入重构**: 新版环境嵌入直接从 HuggingFace 下载源文件，拥有更好的兼容性
 
 * **Easy to use**: Simply replace your unet loader with this node, no complex configuration needed
@@ -896,6 +909,7 @@ This node is based on the original author's implementation from [tonera/FLUX.2-k
 * **Fast performance**: 3-4x faster than any previous klein9b quantized model
 * **VRAM friendly**: Recommended for RTX 30 series and RTX 40 series users
 * **klein9bkv quantization support**: Supports klein9bkv quantization
+* **klein4b quantization support (New in V1.3.9)**: Supports the klein4b model; shares the same environment files as klein9b / klein9bkv, no need to re-download the environment
 * **Environment embedding refactored**: New version downloads source files directly from HuggingFace with better compatibility
 
 #### LoRA 使用方法 / LoRA Usage
@@ -923,9 +937,11 @@ This node now supports LoRA! Usage:
 >
 > **下载地址/Download Link 2（klein9bkv）**: https://huggingface.co/tonera/FLUX.2-klein-9b-kv-Nunchaku/tree/main
 >
-> 两个链接均为同作者量化，环境文件通用，无需重复嵌入。
+> **下载地址/Download Link 3（klein4b）**: https://huggingface.co/tonera/FLUX.2-klein-4B-Nunchaku/tree/main
+>
+> 三个链接均为同作者量化，环境文件通用，无需重复嵌入。所有模型均无需重新下载环境文件即可使用。
 > 
-> Both links are quantized by the same author and share the same environment files; no repeated embedding is required.
+> All three links are quantized by the same author and share the same environment files; no repeated embedding is required. All models can be used without re-downloading the environment files.
 
 #### 首次使用 / First Time Setup
 

@@ -32,93 +32,6 @@ try:
 except ImportError:
     from ..utils import MagicUtils
 
-# =============================================================================
-# INT8 LoRA 支持 - 整合的代码（不依赖外部导入）
-# =============================================================================
-
-# 尝试导入 LoRAAdapter（ComfyUI 的适配器基类）
-try:
-    from comfy.weight_adapter.lora import LoRAAdapter
-    _LORA_ADAPTER_AVAILABLE = True
-except ImportError:
-    _LORA_ADAPTER_AVAILABLE = False
-
-# --- INT8 量化工具函数 ---
-
-def stochastic_round_int8_delta(x: torch.Tensor, scale, seed: int = 0) -> torch.Tensor:
-    """
-    使用随机舍入将 delta 张量量化为 INT8。
-    用于 LoRA deltas 以最小化量化误差。
-    """
-    generator = torch.Generator(device=x.device)
-    generator.manual_seed(seed)
-    
-    # 缩放到 INT8 范围
-    if isinstance(scale, torch.Tensor):
-        scale_val = scale.item() if scale.numel() == 1 else scale
-    else:
-        scale_val = float(scale)
-    
-    x_scaled = x / scale_val
-    
-    # 随机舍入
-    x_floor = torch.floor(x_scaled)
-    fraction = x_scaled - x_floor
-    
-    # 在目标设备上直接创建随机值
-    random_vals = torch.rand(x_scaled.shape, generator=generator, device=x.device, dtype=x_scaled.dtype)
-    x_rounded = torch.where(random_vals < fraction, x_floor + 1, x_floor)
-    
-    return torch.clamp(x_rounded, -128, 127).to(torch.int8)
-
-# --- INT8 LoRA 适配器 ---
-
-if _LORA_ADAPTER_AVAILABLE:
-    class INT8LoRAPatchAdapter(LoRAAdapter):
-        """
-        专门的 LoRA 适配器，在 INT8 空间内就地补丁 INT8 权重。
-        """
-        def __init__(self, loaded_keys, weights, weight_scale, seed=0):
-            super().__init__(loaded_keys, weights)
-            self.weight_scale = weight_scale
-            self.seed = seed
-
-        def calculate_weight(self, weight, key, strength, strength_model, offset, function, intermediate_dtype=torch.float32, original_weight=None):
-            v = self.weights
-            up, down, alpha = v[0], v[1], v[2]
-            
-            rank = down.shape[0] if down.ndim >= 2 else 1
-            scale = (alpha / rank) * strength if alpha is not None else strength
-            
-            device = weight.device
-            
-            # 在高精度 GPU 上计算 LoRA Delta
-            comp_device = torch.device("cuda") if torch.cuda.is_available() else device
-            
-            up_f = up.to(comp_device, dtype=intermediate_dtype)
-            down_f = down.to(comp_device, dtype=intermediate_dtype)
-            
-            # 处理可能的 mid weights (LoCon/LoHA)
-            if v[3] is not None:
-                mid_f = v[3].to(comp_device, dtype=intermediate_dtype)
-                lora_diff = torch.mm(up_f.flatten(1), torch.mm(mid_f.flatten(1), down_f.flatten(1))).reshape(weight.shape)
-            else:
-                lora_diff = torch.mm(up_f.flatten(1), down_f.flatten(1)).reshape(weight.shape)
-            
-            # 应用补丁
-            if weight.dtype == torch.int8:
-                # --- INT8 空间补丁 ---
-                delta_f = lora_diff * scale
-                delta_int8 = stochastic_round_int8_delta(delta_f, self.weight_scale, self.seed)
-                
-                # 执行整数加法（int32 安全）然后钳制
-                res = weight.to(comp_device, torch.int32) + delta_int8.to(comp_device, torch.int32)
-                return torch.clamp(res, -128, 127).to(torch.int8).to(device)
-            else:
-                # 回退：标准浮点补丁
-                return weight + (lora_diff * scale).to(weight.device, weight.dtype)
-else:
-    INT8LoRAPatchAdapter = None
 
 # --- LoRA 串（lora_chain）格式：仅本加载器识别，用于节点间传递 LoRA 列表 ---
 MAGIC_LORA_CHAIN_KEY = "_magic_lora_chain"
@@ -153,115 +66,6 @@ def _serialize_lora_chain(items):
     """将 LoRA 列表打包为 lora串输出（dict 格式，作为 MAGIC_LORA_CHAIN 类型传递）。"""
     return {MAGIC_LORA_CHAIN_KEY: True, "loras": items}
 
-# --- 动态 LoRA 同步 Hook ---
-
-class DynamicLoRAHook:
-    """
-    在 diffusion_model 上注册的 Hook，用于在每次前向传播开始时
-    将动态 LoRA 属性与当前 ModelPatcher 上下文同步。
-    """
-    def __init__(self):
-        self.current_lora_id = None
-
-    def pre_forward(self, module, input_args, input_kwargs):
-        # 1. 尝试查找 transformer_options
-        transformer_options = input_kwargs.get("transformer_options", {})
-        if not transformer_options:
-            # 回退：某些模型在 context 中传递
-            context = input_args[2] if len(input_args) > 2 else None
-            if isinstance(context, dict) and "transformer_options" in context:
-                transformer_options = context["transformer_options"]
-        
-        dynamic_loras = transformer_options.get("dynamic_loras", [])
-        
-        # 2. 为此 LoRA 集合生成唯一 ID
-        # 使用 handles/strengths 检测变化
-        lora_id = hash(tuple((id(d["patches"]), d["strength"]) for d in dynamic_loras)) if dynamic_loras else None
-        
-        if lora_id == self.current_lora_id:
-            return None  # 已同步
-        
-        # 3. 同步所有线性层
-        self.apply_composition(module, dynamic_loras)
-        self.current_lora_id = lora_id
-        return None
-
-    def apply_composition(self, diffusion_model, dynamic_loras):
-        # 按层预分组补丁
-        layer_patches = {}
-        if dynamic_loras:
-            for entry in dynamic_loras:
-                strength = entry["strength"]
-                for key, adapter in entry["patches"].items():
-                    if key not in layer_patches:
-                        layer_patches[key] = []
-                    layer_patches[key].append((adapter, strength))
-
-        # 更新所有模块
-        for name, module in diffusion_model.named_modules():
-            # 检查是否是线性层（需要支持 LoRA）
-            if not isinstance(module, torch.nn.Linear):
-                continue
-            
-            # 如果模块没有 lora_A 属性，初始化它（用于动态模式）
-            if not hasattr(module, "lora_A"):
-                module.lora_A = None
-            if not hasattr(module, "lora_B"):
-                module.lora_B = None
-            if not hasattr(module, "lora_alpha"):
-                module.lora_alpha = None
-            
-            # 查找此模块的补丁
-            # ComfyUI 键通常是 'diffusion_model.path.to.weight' 或 'path.to.weight'
-            possible_keys = [f"diffusion_model.{name}.weight", f"{name}.weight"]
-            patches = None
-            for pk in possible_keys:
-                if pk in layer_patches:
-                    patches = layer_patches[pk]
-                    break
-            
-            if not patches:
-                module.lora_A = None
-                module.lora_B = None
-                module.lora_alpha = None
-                continue
-
-            # 组合
-            all_A = []
-            all_B = []
-            for adapter, strength in patches:
-                v = adapter.weights
-                up, down, alpha, mid = v[0], v[1], v[2], v[3]
-                rank = down.shape[0] if down.ndim >= 2 else 1
-                scale = (alpha / rank) * strength if alpha is not None else strength
-                
-                curr_A = down
-                if mid is not None:
-                    curr_A = torch.mm(mid.flatten(1), down.flatten(1)).reshape(down.shape)
-                
-                all_A.append(curr_A * scale)
-                all_B.append(up)
-            
-            if all_A:
-                device = getattr(module, "weight", torch.tensor(0)).device
-                module.lora_A = torch.cat(all_A, dim=0).to(device)
-                module.lora_B = torch.cat(all_B, dim=1).to(device)
-                module.lora_alpha = None
-            else:
-                module.lora_A = None
-                module.lora_B = None
-
-    @classmethod
-    def register(cls, diffusion_model):
-        if not hasattr(diffusion_model, "_dynamic_lora_hook"):
-            hook = cls()
-            diffusion_model._dynamic_lora_hook = hook
-            diffusion_model.register_forward_pre_hook(hook.pre_forward, with_kwargs=True)
-        return diffusion_model._dynamic_lora_hook
-
-# INT8 支持可用性标志
-INT8_AVAILABLE = _LORA_ADAPTER_AVAILABLE and INT8LoRAPatchAdapter is not None
-
 
 class MagicPowerLoraLoader:
     @classmethod
@@ -276,6 +80,8 @@ class MagicPowerLoraLoader:
                 "lora串接受": ("MAGIC_LORA_CHAIN",),
             },
             "hidden": {
+                # int8_mode 仅为向后兼容旧工作流的 widgets_values 索引占位，节点完全忽略其值。
+                # ComfyUI 官方 model_patcher.py 已原生支持 INT8/FP8 等量化权重的 LoRA 应用。
                 "int8_mode": ("STRING", {"default": "none"}),
                 "sdnq_mode": ("STRING", {"default": "none"}),
                 "klein_mode": ("STRING", {"default": "auto"}),
@@ -366,26 +172,6 @@ class MagicPowerLoraLoader:
             for k in keys_to_remove:
                 del cls._loaded_loras[k]
 
-    # 检测模型是否为 INT8 量化模型
-    @staticmethod
-    def is_int8_model(model):
-        """检测模型是否使用 INT8 量化"""
-        try:
-            if not hasattr(model, 'model') or not hasattr(model.model, 'diffusion_model'):
-                return False
-            
-            # 检查是否有量化层
-            for name, module in model.model.diffusion_model.named_modules():
-                if hasattr(module, '_is_quantized') and module._is_quantized:
-                    return True
-                # 检查权重是否为 INT8
-                if hasattr(module, 'weight') and hasattr(module.weight, 'dtype'):
-                    if module.weight.dtype == torch.int8:
-                        return True
-            return False
-        except Exception:
-            return False
-
     # 检测模型是否为 SDNQ 模型（DiffusionPipeline 或 Magic SDNQ Loader 的 wrapper）
     @staticmethod
     def is_sdnq_model(model):
@@ -456,12 +242,17 @@ class MagicPowerLoraLoader:
         except Exception:
             return None
 
-    def apply_loras(self, lora_stack, model=None, clip=None, adaptive_mode=False, int8_mode="none", sdnq_mode="none", klein_mode="auto", **kwargs):
+    def apply_loras(self, lora_stack, model=None, clip=None, adaptive_mode=False, sdnq_mode="none", klein_mode="auto", **kwargs):
         """
         应用 LoRA
-        int8_mode: "none" (默认), "stochastic" (静态), "dynamic" (动态)
         sdnq_mode: "none" (默认), "sdnq" (SDNQ 模式，用于 DiffusionPipeline)
+        klein_mode: "none" | "klein" | "auto" (auto 在自适应模式或自动检测时使用)
         链末端由「lora串输出」是否被连接判定：未连接则为末端，末端才加载 LoRA 并需连接 model/clip。
+
+        注意：ComfyUI 官方已在 model_patcher.py 中提供 INT8 等量化权重的 LoRA 支持
+        （应用补丁后调用 comfy.float.stochastic_rounding 把结果舍入回权重的原始 dtype），
+        因此本加载器与官方 LoraLoader 的默认路径完全一致，可自动处理 FP8/INT8/INT4 等
+        量化模型，无需任何特殊适配。
         """
         # 重置本次执行使用的 LoRA 追踪（每次运行独立追踪）
         MagicPowerLoraLoader._reset_used_tracking()
@@ -469,7 +260,7 @@ class MagicPowerLoraLoader:
         # -------------------------
         # 调试开关：MAGIC_ASSISTANT_DEBUG
         # -------------------------
-        # 用途：排查前端传入的隐藏参数（adaptive/int8/sdnq/klein 等）是否正确。
+        # 用途：排查前端传入的隐藏参数（adaptive/sdnq/klein 等）是否正确。
         # 为什么需要：ComfyUI 的 workflow/节点属性在不同版本之间可能出现“旧数据污染”或类型漂移（例如 true/false 字符串），
         # 这会导致模式判断错误。打开此开关可以打印关键字段，快速定位是前端注入、workflow 保存，还是后端解析出了问题。
         #
@@ -490,7 +281,7 @@ class MagicPowerLoraLoader:
             debug_kwargs = {
                 k: v
                 for k, v in kwargs.items()
-                if any(x in k for x in ["adaptive", "mode", "klein", "sdnq", "int8", "lora串"])
+                if any(x in k for x in ["adaptive", "mode", "klein", "sdnq", "lora串"])
             }
             if debug_kwargs:
                 print(f"[DEBUG] kwargs 中的相关字段: {debug_kwargs}", flush=True)
@@ -560,30 +351,23 @@ class MagicPowerLoraLoader:
         items_to_process = merged  # 末端用合并后的整链列表加载
 
         # 检测模型类型
-        is_int8 = self.is_int8_model(out_model)
         is_sdnq = self.is_sdnq_model(out_model)
         is_klein = self.is_klein_model(out_model)
 
         # ========== 自适应模式检测 ==========
         if adaptive_mode:
-            print(f"🔄 [MagicPowerLora] 自适应模式：检测到 Klein={is_klein}, SDNQ={is_sdnq}, INT8={is_int8}")
+            print(f"🔄 [MagicPowerLora] 自适应模式：检测到 Klein={is_klein}, SDNQ={is_sdnq}")
             if is_klein:
                 klein_mode = "klein"
-                int8_mode = "none"
                 sdnq_mode = "none"
                 print(f"   → 自动切换到 Klein 模式")
             elif is_sdnq:
                 sdnq_mode = "sdnq"
-                int8_mode = "none"
                 print(f"   → 自动切换到 SDNQ 模式")
-            elif is_int8:
-                int8_mode = "dynamic"
-                sdnq_mode = "none"
-                print(f"   → 自动切换到 INT8 动态模式")
             else:
-                int8_mode = "none"
                 sdnq_mode = "none"
-                print(f"   → 自动切换到标准模式")
+                klein_mode = "none"
+                print(f"   → 自动切换到标准模式（与官方 LoraLoader 一致，INT8/FP8 等量化模型由 model_patcher 自动处理）")
         # ====================================
 
         # 确保 klein_mode 有值（前端未注入时默认 "auto"）
@@ -605,17 +389,8 @@ class MagicPowerLoraLoader:
             klein_mode = "none"
         if klein_mode == "none" and is_klein:
             print(f"💡 [MagicPowerLora] 检测到 Klein 模型（Nunchaku FLUX.2 Klein），建议在设置中启用 Klein 模式")
-        # 仅在实际会走标准路径时才提示 INT8
-        # Klein/SDNQ 启用时优先走对应模式，不应触发 INT8 提示（Klein 模型的 ComfyFlux2KleinWrapper
-        # 内部使用 int8 权重，会导致 is_int8_model 误判，但 Klein 模式有独立的加载逻辑）
-        special_mode_active = klein_mode == "klein" or sdnq_mode == "sdnq"
-        if not special_mode_active:
-            if int8_mode != "none" and not is_int8:
-                print(f"⚠️ [MagicPowerLora] INT8 模式已启用，但模型似乎不是 INT8 量化模型，将尝试使用 INT8 加载器")
-            if int8_mode == "none" and is_int8:
-                print(f"💡 [MagicPowerLora] 检测到 INT8 模型，建议在设置中启用 INT8 模式以获得更好的兼容性")
 
-        mode_str = f"{int8_mode}" if int8_mode != "none" else (f"{sdnq_mode}" if sdnq_mode == "sdnq" else (f"{klein_mode}" if klein_mode == "klein" else "standard"))
+        mode_str = f"{sdnq_mode}" if sdnq_mode == "sdnq" else (f"{klein_mode}" if klein_mode == "klein" else "standard")
         adaptive_str = f" (Adaptive)" if adaptive_mode else ""
         
         # 如果没有LoRA需要加载，直接返回（不做任何加载尝试）
@@ -628,181 +403,7 @@ class MagicPowerLoraLoader:
         print(f"🚀 [MagicPowerLora] 链末端：加载 {len(items_to_process)} 个 LoRA（含串接）... (Mode: {mode_str}{adaptive_str})")
 
         # 根据模式选择加载方式
-        if int8_mode == "stochastic" and INT8_AVAILABLE:
-            # 静态模式（Stochastic）- 整合的 INT8 LoRA 加载逻辑
-            for item in items_to_process:
-                lora_name = item.get("name")
-                weight = float(item.get("weight", 1.0))
-                if not lora_name: continue
-
-                lora_path = folder_paths.get_full_path("loras", lora_name)
-                if lora_path is None:
-                    print(f"⚠️ [MagicPowerLora] Lora not found: {lora_name}")
-                    continue
-
-                try:
-                    # 使用缓存加载 LoRA 文件
-                    lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
-                    
-                    # 克隆 model patcher
-                    model_patcher = out_model.clone()
-                    
-                    # 获取键映射
-                    key_map = {}
-                    if model_patcher.model.model_type.name != "ModelType.CLIP":
-                        key_map = comfy.lora.model_lora_keys_unet(model_patcher.model, key_map)
-                    
-                    # 使用 ComfyUI 的 load_lora 处理各种 LoRA 格式
-                    patch_dict = comfy.lora.load_lora(lora, key_map, log_missing=True)
-                    
-                    # 升级补丁以支持高精度 INT8 空间补丁
-                    final_patch_dict = {}
-                    applied_count = 0
-                    seed = 318008  # 默认 seed
-                    
-                    for key, adapter in patch_dict.items():
-                        # key 可以是 "layer.name.weight" 或 ("layer.name", (dim, start, size))
-                        layer_name = key[0] if isinstance(key, tuple) else key
-                        if layer_name.endswith(".weight"):
-                            layer_name = layer_name[:-7]
-                        
-                        # 解析模块以检查量化状态并获取 scale
-                        try:
-                            parts = layer_name.split(".")
-                            target_module = model_patcher.model.diffusion_model
-                            for part in parts[1:] if parts[0] == "diffusion_model" else parts:
-                                if part.isdigit():
-                                    target_module = target_module[int(part)]
-                                else:
-                                    target_module = getattr(target_module, part)
-                            
-                            # 如果模块已量化，升级适配器到我们的高精度版本
-                            if hasattr(target_module, '_is_quantized') and target_module._is_quantized:
-                                w_scale = target_module.weight_scale
-                                if isinstance(w_scale, torch.Tensor):
-                                    w_scale = w_scale.item() if w_scale.numel() == 1 else w_scale
-                                
-                                # 创建专门的 INT8 适配器
-                                if INT8LoRAPatchAdapter:
-                                    new_adapter = INT8LoRAPatchAdapter(
-                                        adapter.loaded_keys, 
-                                        adapter.weights, 
-                                        w_scale,
-                                        seed=seed
-                                    )
-                                    final_patch_dict[key] = new_adapter
-                                    applied_count += 1
-                                else:
-                                    final_patch_dict[key] = adapter
-                            else:
-                                final_patch_dict[key] = adapter
-                                
-                        except (AttributeError, KeyError, IndexError, TypeError):
-                            final_patch_dict[key] = adapter
-                    
-                    # 添加补丁到 patcher
-                    model_patcher.add_patches(final_patch_dict, weight)
-                    out_model = model_patcher
-                    
-                    print(f"   ✅ Applied (INT8 Stochastic): {lora_name} ({applied_count} quantized layers)")
-                except Exception as e:
-                    print(f"   ❌ Failed (INT8 Stochastic): {lora_name} -> {e}")
-                    # 回退到标准模式
-                    try:
-                        lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
-                        out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
-                        print(f"   ✅ Applied (Fallback): {lora_name}")
-                    except Exception as e2:
-                        print(f"   ❌ Failed (Fallback): {lora_name} -> {e2}")
-
-                if "tags" in item and item["tags"]:
-                    active_tags.append(str(item["tags"]))
-
-                # 为每个lora尝试加载预览图
-                img_path = self.get_preview_path(lora_name)
-                if img_path:
-                    try:
-                        i = Image.open(img_path).convert("RGB")
-                        i = np.array(i).astype(np.float32) / 255.0
-                        preview_tensor = torch.from_numpy(i)[None,]
-                        preview_images.append(preview_tensor)
-                    except Exception as e:
-                        print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
-
-        elif int8_mode == "dynamic" and INT8_AVAILABLE:
-            # 动态模式（Dynamic）- 整合的 INT8 动态 LoRA 加载逻辑
-            for item in items_to_process:
-                lora_name = item.get("name")
-                weight = float(item.get("weight", 1.0))
-                if not lora_name: continue
-
-                lora_path = folder_paths.get_full_path("loras", lora_name)
-                if lora_path is None:
-                    print(f"⚠️ [MagicPowerLora] Lora not found: {lora_name}")
-                    continue
-
-                try:
-                    # 使用缓存加载 LoRA 文件
-                    lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
-                    
-                    # 克隆 model patcher
-                    model_patcher = out_model.clone()
-                    
-                    # 1. 获取补丁映射
-                    key_map = {}
-                    if model_patcher.model.model_type.name != "ModelType.CLIP":
-                        key_map = comfy.lora.model_lora_keys_unet(model_patcher.model, key_map)
-                    
-                    patch_dict = comfy.lora.load_lora(lora, key_map, log_missing=True)
-                    
-                    # 2. 注册全局 Hook（如果不存在）
-                    DynamicLoRAHook.register(model_patcher.model.diffusion_model)
-                    
-                    # 3. 添加到 transformer_options 中的动态 LoRA 列表
-                    # 这确保 ComfyUI 的克隆处理所有内容，并且是非粘性的
-                    if "transformer_options" not in model_patcher.model_options:
-                        model_patcher.model_options["transformer_options"] = {}
-                    
-                    opts = model_patcher.model_options["transformer_options"]
-                    if "dynamic_loras" not in opts:
-                        opts["dynamic_loras"] = []
-                    else:
-                        # 浅拷贝列表以避免修改父 patcher 的列表
-                        opts["dynamic_loras"] = opts["dynamic_loras"].copy()
-                    
-                    opts["dynamic_loras"].append({
-                        "name": lora_name,
-                        "strength": weight,
-                        "patches": patch_dict
-                    })
-                    
-                    out_model = model_patcher
-                    print(f"   ✅ Applied (INT8 Dynamic): {lora_name}")
-                except Exception as e:
-                    print(f"   ❌ Failed (INT8 Dynamic): {lora_name} -> {e}")
-                    # 回退到标准模式
-                    try:
-                        lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
-                        out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
-                        print(f"   ✅ Applied (Fallback): {lora_name}")
-                    except Exception as e2:
-                        print(f"   ❌ Failed (Fallback): {lora_name} -> {e2}")
-
-                if "tags" in item and item["tags"]:
-                    active_tags.append(str(item["tags"]))
-
-                # 为每个lora尝试加载预览图
-                img_path = self.get_preview_path(lora_name)
-                if img_path:
-                    try:
-                        i = Image.open(img_path).convert("RGB")
-                        i = np.array(i).astype(np.float32) / 255.0
-                        preview_tensor = torch.from_numpy(i)[None,]
-                        preview_images.append(preview_tensor)
-                    except Exception as e:
-                        print(f"   ⚠️ Failed to load preview for {lora_name}: {e}")
-
-        elif klein_mode == "klein" and is_klein:
+        if klein_mode == "klein" and is_klein:
             # Klein/nunchaku 的 update_lora_params 每次调用都会先重置旧 LoRA。
             # 因此多 LoRA 必须先 compose 成一个 state dict，再一次性应用。
             try:
@@ -968,7 +569,9 @@ class MagicPowerLoraLoader:
         
         else:
             # 标准模式（默认）或回退模式
-            # 只有在没有选择 INT8 或 SDNQ 模式时才执行
+            # 与官方 LoraLoader 默认行为一致；ComfyUI 的 model_patcher.py 会在应用补丁后
+            # 通过 comfy.float.stochastic_rounding 把权重舍入到 weight.dtype（如 torch.int8），
+            # 因此 FP8/INT8/INT4 等量化模型也走这条路径，无需任何额外处理。
             for item in items_to_process:
                 lora_name = item.get("name")
                 weight = float(item.get("weight", 1.0))

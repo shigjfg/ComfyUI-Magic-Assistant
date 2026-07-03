@@ -159,13 +159,16 @@ app.registerExtension({
                     this.removeInput(stackInputIdx);
                 }
 
-                // INT8 模式设置（隐藏的 widget）
+                // INT8 模式占位（向后兼容）：ComfyUI 官方已在 model_patcher.py 提供 INT8 等量化
+                // 权重的 LoRA 支持，不再需要自定义模式。此处仅保留同名 widget 占位，避免旧工作流
+                // 的 widgets_values 索引错位；其值固定为 "none"，本节点完全忽略。
                 let int8ModeWidget = this.widgets.find(w => w.name === "int8_mode");
                 if (!int8ModeWidget) {
                     int8ModeWidget = this.addWidget("text", "int8_mode", "none", () => {}, {});
                 }
                 int8ModeWidget.hidden = true;
                 int8ModeWidget.computeSize = () => [0, 0];
+                int8ModeWidget.value = "none"; // 强制覆盖任何旧值
                 this._int8ModeWidget = int8ModeWidget;
 
                 // SDNQ 模式设置（隐藏的 widget）
@@ -194,11 +197,6 @@ app.registerExtension({
                 kleinModeWidget.hidden = true;
                 kleinModeWidget.computeSize = () => [0, 0];
                 this._kleinModeWidget = kleinModeWidget;
-
-                // 初始化 INT8 模式（从属性中读取）
-                if (this.int8Mode === undefined) {
-                    this.int8Mode = this.properties["int8_mode"] || "none";
-                }
 
                 // 初始化 SDNQ 模式（从属性中读取）
                 if (this.sdnqMode === undefined) {
@@ -475,15 +473,6 @@ app.registerExtension({
                     this._stackWidget.value = JSON.stringify(stack);
                 }
                 
-                // 更新 INT8 模式 widget
-                if (!this._int8ModeWidget) {
-                    this._int8ModeWidget = this.widgets?.find(w => w.name === "int8_mode");
-                }
-                if (this._int8ModeWidget) {
-                    const int8Mode = this.int8Mode || this.properties["int8_mode"] || "none";
-                    this._int8ModeWidget.value = int8Mode;
-                }
-                
                 // 更新 SDNQ 模式 widget
                 if (!this._sdnqModeWidget) {
                     this._sdnqModeWidget = this.widgets?.find(w => w.name === "sdnq_mode");
@@ -513,7 +502,6 @@ app.registerExtension({
                 }
 
                 this.properties["lora_data_state"] = JSON.stringify(this.loraData);
-                this.properties["int8_mode"] = this.int8Mode || "none";
                 this.properties["sdnq_mode"] = this.sdnqMode || "none";
                 this.properties["klein_mode"] = this.kleinMode || "auto";
                 // 与隐藏 widget、设置弹窗一致：始终用严格布尔，避免 "false" 字符串导致 !adaptiveMode 误判
@@ -537,10 +525,12 @@ app.registerExtension({
                     if (stackInputIdx >= 0) {
                         this.removeInput(stackInputIdx);
                     }
+                    // 兼容旧工作流的 int8_mode widget（占位隐藏，节点已忽略其值）
                     const int8ModeWidget = this.widgets.find(w => w.name === "int8_mode");
                     if (int8ModeWidget) {
                         int8ModeWidget.hidden = true;
                         int8ModeWidget.computeSize = () => [0, 0];
+                        int8ModeWidget.value = "none";
                     }
                     const sdnqModeWidget = this.widgets.find(w => w.name === "sdnq_mode");
                     if (sdnqModeWidget) {
@@ -557,14 +547,6 @@ app.registerExtension({
                         kleinModeWidget.hidden = true;
                         kleinModeWidget.computeSize = () => [0, 0];
                     }
-                }
-                
-                // 恢复 INT8 模式设置
-                if (this.properties["int8_mode"] !== undefined) {
-                    this.int8Mode = String(this.properties["int8_mode"] || "none");
-                } else {
-                    this.int8Mode = "none";
-                    this.properties["int8_mode"] = "none";
                 }
                 
                 // 恢复 SDNQ 模式设置
@@ -631,13 +613,13 @@ app.registerExtension({
                         };
                     } catch(e) {}
                 }
-                
-                // 从 widgets_values 恢复 INT8 模式（如果存在）
+                // 兼容旧工作流：旧的 int8_mode widget（widgets_values[3]）保留占位，但其值已被忽略
+                // （ComfyUI 官方 model_patcher.py 现在直接处理 INT8/FP8 等量化权重，无需自定义模式）
                 if (this.widgets_values && this.widgets_values.length > 3 && this.widgets_values[3] !== undefined && this.widgets_values[3] !== "") {
-                    this.int8Mode = this.widgets_values[3];
-                    this.properties["int8_mode"] = this.int8Mode;
+                    // 不读取 this.widgets_values[3]，仅覆盖占位 widget 的值，确保不污染后续索引
+                    if (this._int8ModeWidget) this._int8ModeWidget.value = "none";
                 }
-                
+
                 // 从 widgets_values 恢复 SDNQ 模式（如果存在）
                 if (this.widgets_values && this.widgets_values.length > 4 && this.widgets_values[4] !== undefined && this.widgets_values[4] !== "") {
                     this.sdnqMode = this.widgets_values[4];
@@ -661,16 +643,8 @@ app.registerExtension({
                 }
 
                 // 归一化/自动修复旧工作流的模式字段（旧版本可能写入 true/false 等无效值）
-                const normalizeInt8 = (v) => (v === "stochastic" || v === "dynamic") ? v : "none";
                 const normalizeSdnq = (v) => v === "sdnq" ? "sdnq" : "none";
                 const normalizeKlein = (v) => v === "klein" ? "klein" : (v === "auto" ? "auto" : "none");
-
-                const fixedInt8 = normalizeInt8(this.int8Mode ?? this.properties["int8_mode"]);
-                if (fixedInt8 !== (this.int8Mode ?? this.properties["int8_mode"])) {
-                    this.int8Mode = fixedInt8;
-                    this.properties["int8_mode"] = fixedInt8;
-                    if (this._int8ModeWidget) this._int8ModeWidget.value = fixedInt8;
-                }
 
                 const fixedSdnq = normalizeSdnq(this.sdnqMode ?? this.properties["sdnq_mode"]);
                 if (fixedSdnq !== (this.sdnqMode ?? this.properties["sdnq_mode"])) {
@@ -4523,23 +4497,21 @@ app.registerExtension({
             nodeType.prototype.showSettingsModal = function() {
                 // 从节点 / 属性 / 隐藏 widget 读取并归一化（避免 adaptive_mode 为字符串 "false" 时 !this.adaptiveMode 误判）
                 const parseAdaptive = (v) => v === true || v === "true" || v === 1;
-                const int8Raw = this.int8Mode ?? this.properties["int8_mode"] ?? this._int8ModeWidget?.value ?? "none";
                 const sdnqRaw = this.sdnqMode ?? this.properties["sdnq_mode"] ?? this._sdnqModeWidget?.value ?? "none";
                 const kleinRaw = this.kleinMode ?? this.properties["klein_mode"] ?? this._kleinModeWidget?.value ?? "auto";
                 const adaptiveRaw = this.adaptiveMode ?? this.properties["adaptive_mode"] ?? this._adaptiveModeWidget?.value;
-                const currentInt8Mode = String(int8Raw || "none").toLowerCase();
                 const currentSdnqMode = String(sdnqRaw || "none").toLowerCase();
                 const currentKleinMode = String(kleinRaw || "auto").toLowerCase();
                 const isAdaptive = parseAdaptive(adaptiveRaw);
-                const int8On = currentInt8Mode === "stochastic" || currentInt8Mode === "dynamic";
                 const sdnqOn = currentSdnqMode === "sdnq";
                 const kleinOn = currentKleinMode === "klein";
-                // 与确定按钮逻辑一致：自适应 > Klein > SDNQ > INT8 > 默认（标准）
+                // 与确定按钮逻辑一致：自适应 > Klein > SDNQ > 默认（标准，与官方 LoraLoader 一致）
+                // 注：ComfyUI 官方已在 model_patcher.py 提供 INT8/FP8 等量化权重的 LoRA 支持，
+                // 因此本加载器不再需要专门的 INT8 模式选项，默认即可处理 INT8 模型。
                 let primaryMode = "default";
                 if (isAdaptive) primaryMode = "adaptive";
                 else if (kleinOn) primaryMode = "klein";
                 else if (sdnqOn) primaryMode = "sdnq";
-                else if (int8On) primaryMode = currentInt8Mode;
                 
                 // 创建遮罩层
                 const overlay = document.createElement("div");
@@ -4635,7 +4607,7 @@ app.registerExtension({
                 labelAdaptiveTitle.textContent = "自适应模式";
                 labelAdaptiveTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
                 const labelAdaptiveDesc = document.createElement("div");
-                labelAdaptiveDesc.textContent = "自动检测模型类型并选择合适的加载模式（SDNQ→SDNQ，INT8→动态，普通→标准）";
+                labelAdaptiveDesc.textContent = "自动检测模型类型并选择合适的加载模式（Klein→Nunchaku 原生 API，SDNQ→SDNQ，普通→标准；INT8/FP8 等量化模型走标准模式，由 ComfyUI 官方 model_patcher 自动处理）";
                 labelAdaptiveDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
                 labelAdaptive.appendChild(labelAdaptiveTitle);
                 labelAdaptive.appendChild(labelAdaptiveDesc);
@@ -4658,7 +4630,7 @@ app.registerExtension({
                 labelDefaultTitle.textContent = "默认模式（标准 LoRA）";
                 labelDefaultTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
                 const labelDefaultDesc = document.createElement("div");
-                labelDefaultDesc.textContent = "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型";
+                labelDefaultDesc.textContent = "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型（官方 model_patcher.py 已原生支持 INT8/FP8/INT4 等量化权重的 LoRA 应用）";
                 labelDefaultDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
                 labelDefault.appendChild(labelDefaultTitle);
                 labelDefault.appendChild(labelDefaultDesc);
@@ -4690,11 +4662,8 @@ app.registerExtension({
                 radioAdaptive.addEventListener("change", () => {
                     updateModeSelection();
                     if (radioAdaptive.checked) {
-                        radioStochastic.checked = false;
-                        radioDynamic.checked = false;
                         radioSdnqSdnq.checked = false;
                         radioKleinKlein.checked = false;
-                        updateInt8Selection();
                         updateSdnqSelection();
                         updateKleinSelection();
                     }
@@ -4704,11 +4673,8 @@ app.registerExtension({
                 radioDefault.addEventListener("change", () => {
                     updateModeSelection();
                     if (radioDefault.checked) {
-                        radioStochastic.checked = false;
-                        radioDynamic.checked = false;
                         radioSdnqSdnq.checked = false;
                         radioKleinKlein.checked = false;
-                        updateInt8Selection();
                         updateSdnqSelection();
                         updateKleinSelection();
                     }
@@ -4719,115 +4685,9 @@ app.registerExtension({
                 defaultSection.appendChild(defaultModeContainer);
                 settingsContainer.appendChild(defaultSection);
 
-                // ========== INT8 模式设置区域 ==========
-                const int8Section = document.createElement("div");
-                int8Section.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
-
-                const int8Title = document.createElement("div");
-                int8Title.textContent = "INT8 LoRA 模式";
-                int8Title.style.cssText = `
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #fff;
-                    margin-bottom: 8px;
-                `;
-
-                const int8Desc = document.createElement("div");
-                int8Desc.textContent = "选择 INT8 量化模型的 LoRA 加载方式";
-                int8Desc.style.cssText = `
-                    font-size: 12px;
-                    color: #aaa;
-                    margin-bottom: 12px;
-                    line-height: 1.5;
-                `;
-
-                // INT8 模式选择容器
-                const int8ModeContainer = document.createElement("div");
-                int8ModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
-
-                // 静态模式（Stochastic）
-                const modeStochastic = document.createElement("label");
-                modeStochastic.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
-                const radioStochastic = document.createElement("input");
-                radioStochastic.type = "radio";
-                radioStochastic.name = "int8_mode";
-                radioStochastic.value = "stochastic";
-                radioStochastic.checked = primaryMode === "stochastic";
-                radioStochastic.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
-                const labelStochastic = document.createElement("div");
-                labelStochastic.style.cssText = "flex: 1;";
-                const labelStochasticTitle = document.createElement("div");
-                labelStochasticTitle.textContent = "INT8 静态模式（Stochastic）";
-                labelStochasticTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
-                const labelStochasticDesc = document.createElement("div");
-                labelStochasticDesc.textContent = "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高";
-                labelStochasticDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
-                labelStochastic.appendChild(labelStochasticTitle);
-                labelStochastic.appendChild(labelStochasticDesc);
-                modeStochastic.appendChild(radioStochastic);
-                modeStochastic.appendChild(labelStochastic);
-
-                // 动态模式（Dynamic）
-                const modeDynamic = document.createElement("label");
-                modeDynamic.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
-                const radioDynamic = document.createElement("input");
-                radioDynamic.type = "radio";
-                radioDynamic.name = "int8_mode";
-                radioDynamic.value = "dynamic";
-                radioDynamic.checked = primaryMode === "dynamic";
-                radioDynamic.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
-                const labelDynamic = document.createElement("div");
-                labelDynamic.style.cssText = "flex: 1;";
-                const labelDynamicTitle = document.createElement("div");
-                labelDynamicTitle.textContent = "INT8 动态模式（Dynamic）";
-                labelDynamicTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
-                const labelDynamicDesc = document.createElement("div");
-                labelDynamicDesc.textContent = "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景";
-                labelDynamicDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
-                labelDynamic.appendChild(labelDynamicTitle);
-                labelDynamic.appendChild(labelDynamicDesc);
-                modeDynamic.appendChild(radioDynamic);
-                modeDynamic.appendChild(labelDynamic);
-
-                // INT8 模式选中状态更新
-                const updateInt8Selection = () => {
-                    [modeStochastic, modeDynamic].forEach(mode => {
-                        const radio = mode.querySelector('input[type="radio"]');
-                        if (radio.checked) {
-                            mode.style.borderColor = "#2196F3";
-                            mode.style.background = "#2a3a4a";
-                        } else {
-                            mode.style.borderColor = "transparent";
-                            mode.style.background = "#333";
-                        }
-                    });
-                };
-
-                [radioStochastic, radioDynamic].forEach(radio => {
-                    radio.addEventListener("change", () => {
-                        updateInt8Selection();
-                        // 选择 INT8 模式时，取消默认模式和 SDNQ 模式和 Klein 模式
-                        if (radio.checked) {
-                            radioAdaptive.checked = false;
-                            radioDefault.checked = false;
-                            radioSdnqSdnq.checked = false;
-                            radioKleinKlein.checked = false;
-                            updateModeSelection();
-                            updateSdnqSelection();
-                            updateKleinSelection();
-                        }
-                    });
-                });
-                updateInt8Selection();
-
-                int8ModeContainer.appendChild(modeStochastic);
-                int8ModeContainer.appendChild(modeDynamic);
-
-                int8Section.appendChild(int8Title);
-                int8Section.appendChild(int8Desc);
-                int8Section.appendChild(int8ModeContainer);
-
-                settingsContainer.appendChild(int8Section);
+                // 注意：ComfyUI 官方已在 model_patcher.py 提供 INT8/FP8 等量化权重的 LoRA 支持
+                // （apply_loras 后调用 comfy.float.stochastic_rounding 把权重舍入到 weight.dtype），
+                // 因此本加载器不再需要专门的 INT8 模式选项，默认模式即可正确加载 INT8 LoRA。
 
                 // ========== tonera-Klein-Nunchaku 模式设置区域 ==========
                 const kleinSection = document.createElement("div");
@@ -4843,7 +4703,7 @@ app.registerExtension({
                 `;
 
                 const kleinDesc = document.createElement("div");
-                kleinDesc.textContent = "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认/INT8 模式）";
+                kleinDesc.textContent = "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认模式）";
                 kleinDesc.style.cssText = `
                     font-size: 12px;
                     color: #aaa;
@@ -4896,11 +4756,8 @@ app.registerExtension({
                     if (radioKleinKlein.checked) {
                         radioAdaptive.checked = false;
                         radioDefault.checked = false;
-                        radioStochastic.checked = false;
-                        radioDynamic.checked = false;
                         radioSdnqSdnq.checked = false;
                         updateModeSelection();
-                        updateInt8Selection();
                         updateSdnqSelection();
                     }
                 });
@@ -4978,15 +4835,12 @@ app.registerExtension({
 
                 radioSdnqSdnq.addEventListener("change", () => {
                     updateSdnqSelection();
-                    // 选择 SDNQ 模式时，取消默认模式和 INT8 模式和 Klein 模式
+                    // 选择 SDNQ 模式时，取消默认模式和 Klein 模式
                     if (radioSdnqSdnq.checked) {
                         radioAdaptive.checked = false;
                         radioDefault.checked = false;
-                        radioStochastic.checked = false;
-                        radioDynamic.checked = false;
                         radioKleinKlein.checked = false;
                         updateModeSelection();
-                        updateInt8Selection();
                         updateKleinSelection();
                     }
                 });
@@ -5026,10 +4880,6 @@ app.registerExtension({
                     const isAdaptiveSelected = radioAdaptive.checked;
                     const isDefaultSelected = radioDefault.checked;
                     const scope = overlay;
-                    let selectedInt8Mode = "none";
-                    if (!isDefaultSelected && !isAdaptiveSelected) selectedInt8Mode = scope.querySelector('input[name="int8_mode"]:checked')?.value || "none";
-                    this.int8Mode = selectedInt8Mode;
-                    this.properties["int8_mode"] = selectedInt8Mode;
                     let selectedSdnqMode = "none";
                     if (!isDefaultSelected && !isAdaptiveSelected) selectedSdnqMode = scope.querySelector('input[name="sdnq_mode"]:checked')?.value || "none";
                     this.sdnqMode = selectedSdnqMode;
@@ -5040,7 +4890,6 @@ app.registerExtension({
                     if (!isDefaultSelected && !isAdaptiveSelected) selectedKleinMode = scope.querySelector('input[name="klein_mode"]:checked')?.value || "none";
                     this.kleinMode = selectedKleinMode;
                     this.properties["klein_mode"] = selectedKleinMode;
-                    if (this._int8ModeWidget) this._int8ModeWidget.value = selectedInt8Mode;
                     if (this._sdnqModeWidget) this._sdnqModeWidget.value = selectedSdnqMode;
                     if (this._kleinModeWidget) this._kleinModeWidget.value = selectedKleinMode;
                     if (this._adaptiveModeWidget) this._adaptiveModeWidget.value = String(isAdaptiveSelected);

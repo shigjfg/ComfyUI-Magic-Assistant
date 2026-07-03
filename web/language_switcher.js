@@ -138,17 +138,10 @@ const loraLoaderTranslations = {
     "设置": { zh: "设置", en: "Settings" },
     "LoRA 加载模式": { zh: "LoRA 加载模式", en: "LoRA Loading Mode" },
     "自适应模式": { zh: "自适应模式", en: "Adaptive Mode" },
-    "自动检测模型类型并选择合适的加载模式（SDNQ→SDNQ，INT8→动态，普通→标准）": { zh: "自动检测模型类型并选择合适的加载模式（SDNQ→SDNQ，INT8→动态，普通→标准）", en: "Automatically detect model type and select appropriate loading mode (SDNQ→SDNQ, INT8→Dynamic, Normal→Standard)" },
-    "INT8 LoRA 模式": { zh: "INT8 LoRA 模式", en: "INT8 LoRA Mode" },
-    "选择 INT8 量化模型的 LoRA 加载方式": { zh: "选择 INT8 量化模型的 LoRA 加载方式", en: "Select INT8 quantized model LoRA loading method" },
-    "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。": { zh: "选择 INT8 量化模型的 LoRA 加载方式。如果模型不是 INT8 量化模型，建议使用默认模式。", en: "Select INT8 quantized model LoRA loading method. If the model is not INT8 quantized, it is recommended to use the default mode." },
+    "自动检测模型类型并选择合适的加载模式（Klein→Nunchaku 原生 API，SDNQ→SDNQ，普通→标准；INT8/FP8 等量化模型走标准模式，由 ComfyUI 官方 model_patcher 自动处理）": { zh: "自动检测模型类型并选择合适的加载模式（Klein→Nunchaku 原生 API，SDNQ→SDNQ，普通→标准；INT8/FP8 等量化模型走标准模式，由 ComfyUI 官方 model_patcher 自动处理）", en: "Automatically detect model type and select appropriate loading mode (Klein→Nunchaku native API, SDNQ→SDNQ, Normal→Standard; INT8/FP8 and other quantized models use Standard mode, handled automatically by ComfyUI's official model_patcher)" },
     "默认模式（标准 LoRA）": { zh: "默认模式（标准 LoRA）", en: "Default Mode (Standard LoRA)" },
-    "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型": { zh: "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型", en: "Use ComfyUI standard LoRA loading method, suitable for all model types" },
-    "INT8 静态模式（Stochastic）": { zh: "INT8 静态模式（Stochastic）", en: "INT8 Static Mode (Stochastic)" },
-    "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高": { zh: "使用随机舍入的 INT8 LoRA 适配器，适合单个或少量 LoRA，精度更高", en: "Use stochastic rounding INT8 LoRA adapter, suitable for single or few LoRAs with higher precision" },
-    "INT8 动态模式（Dynamic）": { zh: "INT8 动态模式（Dynamic）", en: "INT8 Dynamic Mode (Dynamic)" },
-    "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景": { zh: "运行时动态组合多个 LoRA，适合需要频繁切换或组合多个 LoRA 的场景", en: "Dynamically compose multiple LoRAs at runtime, suitable for scenarios requiring frequent switching or combining multiple LoRAs" },
-    
+    "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型（官方 model_patcher.py 已原生支持 INT8/FP8/INT4 等量化权重的 LoRA 应用）": { zh: "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型（官方 model_patcher.py 已原生支持 INT8/FP8/INT4 等量化权重的 LoRA 应用）", en: "Use ComfyUI standard LoRA loading method, suitable for all model types (official model_patcher.py natively supports LoRA application for INT8/FP8/INT4 and other quantized weights)" },
+
     // SDNQ 模式设置
     "SDNQ LoRA 模式": { zh: "SDNQ LoRA 模式", en: "SDNQ LoRA Mode" },
     "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式": { zh: "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式", en: "Select SDNQ quantized model (DiffusionPipeline) LoRA loading method" },
@@ -208,9 +201,9 @@ const loraLoaderTranslations = {
     "前往设置": { zh: "前往设置", en: "Go to Settings" },
     "前往设置 →": { zh: "前往设置 →", en: "Go to Settings →" },
     "tonera-Klein-Nunchaku LoRA 模式": { zh: "tonera-Klein-Nunchaku LoRA 模式", en: "tonera-Klein-Nunchaku LoRA Mode" },
-    "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认/INT8 模式）": {
-        zh: "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认/INT8 模式）",
-        en: "Native LoRA loading for tonera/FLUX.2-klein-9B-Nunchaku quantized models (use Default/INT8 mode for regular Klein models)"
+    "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认模式）": {
+        zh: "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认模式）",
+        en: "Native LoRA loading for tonera/FLUX.2-klein-9B-Nunchaku quantized models (use Default mode for regular Klein models)"
     },
     "tonera-Klein-Nunchaku 模式（选中时激活）": { zh: "tonera-Klein-Nunchaku 模式（选中时激活）", en: "tonera-Klein-Nunchaku mode (activates when selected)" },
     "tonera-Klein-Nunchaku 模式": { zh: "tonera-Klein-Nunchaku 模式", en: "tonera-Klein-Nunchaku Mode" },
@@ -1073,12 +1066,12 @@ const magicKleinLoaderTranslations = {
 
     "🔧 嵌入到环境": { zh: "🔧 嵌入到环境", en: "🔧 Install to Environment" },
     "KLEIN_DOWNLOAD_DESC": {
-        zh: "从 HuggingFace（tonera/FLUX.2-klein-9B-Nunchaku）下载核心运行文件（<code style='color:#a78bfa'>torch_transfer_utils.py</code>、<code style='color:#a78bfa'>transformer_flux2.py</code>、<code style='color:#a78bfa'>lora/common/</code>），同时写入 ComfyUI 专用桥接层 <code style='color:#a78bfa'>wrappers/klein.py</code>。",
+        zh: "从 HuggingFace（tonera/FLUX.2-klein-*B-Nunchaku）下载核心运行文件（<code style='color:#a78bfa'>torch_transfer_utils.py</code>、<code style='color:#a78bfa'>transformer_flux2.py</code>、<code style='color:#a78bfa'>lora/common/</code>），同时写入 ComfyUI 专用桥接层 <code style='color:#a78bfa'>wrappers/klein.py</code>。",
         en: "Downloads core runtime files from HuggingFace (torch_transfer_utils.py, transformer_flux2.py, lora/common/) and writes the ComfyUI-specific bridge (wrappers/klein.py).",
     },
     "KLEIN_DOWNLOAD_SOURCE": {
-        zh: "📥 源：HuggingFace / tonera/FLUX.2-klein-9B-Nunchaku",
-        en: "📥 Source: HuggingFace / tonera/FLUX.2-klein-9B-Nunchaku",
+        zh: "📥 源：HuggingFace / tonera/FLUX.2-klein-*B-Nunchaku",
+        en: "📥 Source: HuggingFace / tonera/FLUX.2-klein-*B-Nunchaku",
     },
     "📥 下载并安装": { zh: "📥 下载并安装", en: "📥 Download & Install" },
     "🔄 强制重新下载": { zh: "🔄 强制重新下载", en: "🔄 Force Re-download" },
@@ -1112,6 +1105,10 @@ const magicKleinLoaderTranslations = {
         zh: "量化者：tonera | 量化方式：FP4/INT4 + KV Cache（SVDQuant/Nunchaku）",
         en: "Quantized by: tonera | Method: FP4/INT4 + KV cache (SVDQuant/Nunchaku)",
     },
+    "KLEIN_MODEL_CAPTION_4B": {
+        zh: "量化者：tonera | 量化方式：FP4/INT4（SVDQuant/Nunchaku）",
+        en: "Quantized by: tonera | Method: FP4/INT4 (SVDQuant/Nunchaku) ",
+    },
 
     "📖 Magic Klein 说明": { zh: "📖 Magic Klein 说明", en: "📖 Magic Klein Documentation" },
     "🔮 Magic Nunchaku FLUX.2 Klein Loader": {
@@ -1130,6 +1127,10 @@ const magicKleinLoaderTranslations = {
     "KLEIN_MODEL_LINE2_KV": {
         zh: "量化方式：FP4/INT4 + KV Cache（由 tonera 使用 SVDQuant/Nunchaku 量化）",
         en: "Quantization: FP4/INT4 + KV cache by tonera using SVDQuant/Nunchaku",
+    },
+    "KLEIN_MODEL_LINE2_4B": {
+        zh: "量化方式：FP4/INT4（由 tonera 使用 SVDQuant/Nunchaku 量化）",
+        en: "Quantization: FP4/INT4 by tonera using SVDQuant/Nunchaku ",
     },
     "首次使用步骤": { zh: "首次使用步骤", en: "First-Time Setup" },
     "KLEIN_STEP1": {
