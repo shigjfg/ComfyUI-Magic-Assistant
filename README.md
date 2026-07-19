@@ -42,6 +42,22 @@
 >    * Simpler than the previous dedicated INT8 mode - no need to manually switch modes
 >    * Follows ComfyUI's official LoRA loading path (`comfy.sd.load_lora_for_models`), automatically adapting to INT8/FP8/INT4 quantized weights
 
+> **V1.3.8 版本介绍 / Version Introduction** 2026-06-25
+>
+> 1. **🐛 修复（重要）**: 修复 Klein 节点模型检测的路径方法，防止无法检测到 transform 和 klein 的问题
+>    * Fixed the model detection path method in Klein node to prevent inability to detect transform and klein
+>
+> 2. **🐛 修复**: 修复 magic_preset_tags 找不到而导致预设标签无法使用的问题
+>    * Fixed the issue where magic_preset_tags could not be found, causing preset tags to be unusable
+>
+> 3. **✨ 新增**: Magic Nunchaku FLUX.2 Klein Loader - diffusers 版本检测
+>    * 新增 diffusers 版本检测，在环境状态中显示当前 diffusers 版本号，方便排查环境问题
+>    * Added diffusers version detection in environment status
+>
+> 4. **✨ 优化**: 合并 PR #8，支持从子文件夹加载 Nunchaku Klein 模型，重构了模型文件获取逻辑
+>    * Merged PR #8: Added support for loading Nunchaku Klein models from subfolders, refactored model file retrieval logic
+>    * Thanks to Tom-M-Git for the contribution!
+
 > **V1.3.7 版本介绍 / Version Introduction** 2026-06-02
 >
 > 1. **🐛 修复（重要）**: 修复强力 LoRA 加载器模式切换的各种问题，大幅提升稳定性
