@@ -243,13 +243,7 @@ class MagicKleinLoader:
         device = torch.device(f"cuda:{device_id}")
         torch_dtype = torch.float16 if data_type == "float16" else torch.bfloat16
 
-        model_path = folder_paths.get_full_path("diffusion_models", model_name)
-
-        if model_path is None:
-            raise FileNotFoundError(
-                f"Model file not found: {model_name}\n"
-                f"Searched in: {model_paths}"
-            )
+        model_path = folder_paths.get_full_path_or_raise("diffusion_models", model_name)
 
         if device_id >= torch.cuda.device_count():
             raise ValueError(
@@ -332,18 +326,23 @@ class MagicKleinLoader:
 
         model = model_config.get_model({})
 
+        offload_device = comfy.model_management.unet_offload_device()
         model.diffusion_model = ComfyFlux2KleinWrapper(
             transformer,
             config=comfy_config["model_config"],
             ctx_for_copy={
                 "comfy_config": comfy_config,
                 "model_config": model_config,
-                "device": device,
-                "device_id": device_id,
+                "load_device": device,
+                "offload_device": offload_device,
             },
         )
 
-        patcher = comfy.model_patcher.ModelPatcher(model, device, device_id)
+        patcher = comfy.model_patcher.CoreModelPatcher(
+            model,
+            load_device=device,
+            offload_device=offload_device,
+        )
         return (patcher,)
 
     def _build_comfy_config(self, metadata: dict) -> dict:

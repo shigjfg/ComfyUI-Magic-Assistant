@@ -52,14 +52,6 @@ app.registerExtension({
                     showPhotopeaModal(this);
                 });
                 
-                const widget = this.widgets.find(w => w.name === "image");
-                if (widget) {
-                    const originalCallback = widget.callback;
-                    widget.callback = (value) => {
-                        if (originalCallback) originalCallback(value);
-                        updateNodePreview(this, value);
-                    };
-                }
                 return r;
             };
         }
@@ -85,7 +77,7 @@ function showGalleryModal(node) {
     let selectedFiles = new Set();
     let pinnedFiles = getPinnedFiles(); // 🌟 加载固定列表
     // 过滤掉 clipspace 文件（历史遗留数据兼容）
-    pinnedFiles = new Set([...pinnedFiles].filter(f => !f.startsWith("clipspace/")));
+    pinnedFiles = new Set([...pinnedFiles].filter(f => !f.toLowerCase().startsWith("clipspace-") && !f.startsWith("clipspace/")));
     savePinnedFiles(pinnedFiles);
 
     // --- DOM 结构 ---
@@ -147,7 +139,9 @@ function showGalleryModal(node) {
             if (data.status === "success") {
                 const idx = widget.options.values.indexOf(oldName);
                 if (idx !== -1) widget.options.values[idx] = newName;
-                if (widget.value === oldName) widget.value = newName;
+                if (widget.value === oldName) {
+                    setNodeImageWidgetValue(node, newName);
+                }
                 
                 // 🌟 如果文件被重命名，也要更新 pinnedFiles
                 if (pinnedFiles.has(oldName)) {
@@ -266,7 +260,8 @@ function showGalleryModal(node) {
                 clearCacheBtn.textContent = "⏳...";
                 const res = await clearClipspaceAPI();
                 if (res.status === "success") {
-                    alert(`✅ 清理完成！\n\n🗂️ clipspace: ${res.clipspace_count} 张\n📋 pasted: ${res.pasted_count} 张\n📦 共计: ${res.total_count} 张`);
+                    const rootCount = res.root_cache_count || 0;
+                alert(`✅ 清理完成！\n\n🗂️ clipspace: ${res.clipspace_count} 张\n📋 pasted: ${res.pasted_count} 张\n📂 根目录缓存 ${rootCount} 张\n📦 共计: ${res.total_count} 张`);
                     fetchFileList();
                 }
                 clearCacheBtn.innerHTML = "🧹 清空缓存";
@@ -317,8 +312,7 @@ function showGalleryModal(node) {
                     if (selectedFiles.has(filename)) card.classList.add("selected");
                     else card.classList.remove("selected");
                 } else {
-                    widget.value = filename;
-                    if (widget.callback) widget.callback(filename);
+                    setNodeImageWidgetValue(node, filename);
                     modal.remove();
                 }
             };
@@ -329,7 +323,7 @@ function showGalleryModal(node) {
             img.loading = "lazy";
             
             const safeName = encodeURIComponent(filename);
-            if (filename.startsWith("clipspace/")) {
+            if (filename.toLowerCase().startsWith("clipspace-") || filename.startsWith("clipspace/")) {
                  img.src = api.apiURL(`/view?filename=${safeName}&type=input`);
             } else {
                 img.onload = () => { img.style.opacity = "1"; };
@@ -339,7 +333,7 @@ function showGalleryModal(node) {
             card.appendChild(imgContainer);
 
             // 🌟 编辑模式下的按钮逻辑
-            if (isEditMode && !filename.startsWith("clipspace/")) {
+            if (isEditMode && !filename.toLowerCase().startsWith("clipspace-") && !filename.startsWith("clipspace/")) {
                 // 1. 固定按钮 (Pin Button)
                 const pinBtn = document.createElement("button");
                 pinBtn.className = isPinned ? "mp-card-pin active" : "mp-card-pin";
@@ -381,7 +375,7 @@ function showGalleryModal(node) {
             label.textContent = filename;
             label.title = filename;
 
-            if (isEditMode && !filename.startsWith("clipspace/") && !isPinned) {
+            if (isEditMode && !filename.toLowerCase().startsWith("clipspace-") && !filename.startsWith("clipspace/") && !isPinned) {
                 label.style.cursor = "text";
                 label.style.textDecoration = "underline";
                 label.onclick = (e) => {
@@ -607,20 +601,21 @@ function showPhotopeaModal(node) {
 // ============================================================
 // 🛠️ Helpers
 // ============================================================
-function updateNodePreview(node, filename) {
-    if (!filename || filename === "canvas_empty.png") return;
-    const safeName = encodeURIComponent(filename);
-    const img = new Image();
-    img.onload = () => { node.imgs = [img]; app.graph.setDirtyCanvas(true, true); };
-    img.src = api.apiURL(`/view?filename=${safeName}&type=input&t=${Date.now()}`);
+function setNodeImageWidgetValue(node, newFileName) {
+    const widget = node.widgets.find(w => w.name === "image");
+    if (!widget) return;
+
+    const oldValue = widget.value;
+    widget.value = newFileName;
+    widget.callback?.(newFileName);
+    node.onWidgetChanged?.(widget.name, newFileName, oldValue, widget);
 }
 
-async function refreshNodeImageWidget(node, newFileName) {
+function refreshNodeImageWidget(node, newFileName) {
     const widget = node.widgets.find(w => w.name === "image");
     if (!widget) return;
     if (!widget.options.values.includes(newFileName)) {
         widget.options.values.unshift(newFileName);
     }
-    widget.value = newFileName;
-    updateNodePreview(node, newFileName);
+    setNodeImageWidgetValue(node, newFileName);
 }

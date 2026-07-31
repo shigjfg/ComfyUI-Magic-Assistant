@@ -212,7 +212,24 @@ const loraLoaderTranslations = {
         en: "Use Nunchaku native LoRA API (update_lora_params) to load tonera FLUX.2-klein-9B-Nunchaku dedicated LoRAs"
     },
     "Klein 模式选中状态更新": { zh: "Klein 模式选中状态更新", en: "Klein mode selection status update" },
-    "选择 Klein 模式时取消其他模式": { zh: "选择 Klein 模式时取消其他模式", en: "When selecting Klein mode, deselect other modes" }
+    "选择 Klein 模式时取消其他模式": { zh: "选择 Klein 模式时取消其他模式", en: "When selecting Klein mode, deselect other modes" },
+
+    // LoRA 布局样式设置（权重控件样式）
+    "布局样式": { zh: "布局样式", en: "Layout Style" },
+    "模式切换": { zh: "模式切换", en: "Mode Switch" },
+    "权重控件样式": { zh: "权重控件样式", en: "Weight Control Style" },
+    "选择 LoRA 列表中权重调节控件的样式。滑条模式下可直接拖动调整权重，数值仍可点击编辑。": { zh: "选择 LoRA 列表中权重调节控件的样式。滑条模式下可直接拖动调整权重，数值仍可点击编辑。", en: "Choose the weight control style in the LoRA list. In slider mode, you can drag to adjust weight and still click the value to edit." },
+    "箭头按钮（默认）": { zh: "箭头按钮（默认）", en: "Arrow Buttons (Default)" },
+    "左右两个箭头按钮，每次点击 ±0.01；中间数字可点击直接输入。": { zh: "左右两个箭头按钮，每次点击 ±0.01；中间数字可点击直接输入。", en: "Arrow buttons: ±0.01 per click; center number is editable." },
+    "滑条": { zh: "滑条", en: "Slider" },
+    "水平滑条拖动调整权重；右侧显示当前数值，数值仍可点击编辑。": { zh: "水平滑条拖动调整权重；右侧显示当前数值，数值仍可点击编辑。", en: "Drag the horizontal slider to adjust weight; the current value is shown and still clickable for editing." },
+    "滑条参数": { zh: "滑条参数", en: "Slider Settings" },
+    "步长": { zh: "步长", en: "Step" },
+    "最小值": { zh: "最小值", en: "Min" },
+    "最大值": { zh: "最大值", en: "Max" },
+    "滑条宽度(px)": { zh: "滑条宽度(px)", en: "Slider Width (px)" },
+    "滑条旁显示当前数值": { zh: "滑条旁显示当前数值", en: "Show Current Value Next to Slider" },
+    "拖动时吸附 0（±0.02 范围内）": { zh: "拖动时吸附 0（±0.02 范围内）", en: "Snap to 0 while dragging (within ±0.02)" }
 };
 
 // 节点翻译映射表 - Magic SDNQ Loader & Sampler
@@ -459,7 +476,9 @@ const photopeaTranslations = {
     
     // 保存按钮
     "💾 保存并发送 (Save)": { zh: "💾 保存并发送 (Save)", en: "💾 Save and Send" },
-    "⏳ 传输中...": { zh: "⏳ 传输中...", en: "⏳ Transferring..." }
+    "⏳ 传输中...": { zh: "⏳ 传输中...", en: "⏳ Transferring..." },
+    "确定要清空 clipspace 和 pasted 缓存吗？": { zh: "确定要清空 clipspace 和 pasted 缓存吗？", en: "Are you sure you want to clear the clipspace and pasted caches?" },
+    "clipspace-": { zh: "clipspace-", en: "clipspace-" }
 };
 
 // 节点翻译映射表 - Magic Resolution Resize & Magic Resolution
@@ -606,8 +625,8 @@ const cacheTranslations = {
     "在": { zh: "在", en: "Within" },
     "到": { zh: "到", en: " to " },
     "步数范围内启用特征缓存": { zh: "步数范围内启用特征缓存", en: " step range, enable feature caching" },
-    "通过": { zh: "通过", en: "Control feature reuse sensitivity via" },
-    "控制特征重用灵敏度": { zh: "控制特征重用灵敏度", en: "" },
+    "通过": { zh: "通过", en: "via" },
+    "控制特征重用灵敏度": { zh: "控制特征重用灵敏度", en: "control feature reuse sensitivity" },
     "当残差差异低于阈值时，重用前一步的特征块": { zh: "当残差差异低于阈值时，重用前一步的特征块", en: "When residual difference is below threshold, reuse feature blocks from previous step" },
     "支持限制最大连续缓存命中次数（": { zh: "支持限制最大连续缓存命中次数（", en: "Supports limiting maximum consecutive cache hits (" },
     "）": { zh: "）", en: ")" },
@@ -708,7 +727,7 @@ const magicPromptBoxTranslations = {
 
     // 选中弹窗
     "选中 0 个标签": { zh: "选中 0 个标签", en: "0 tags selected" },
-    "选中 ": { zh: "选中 ", en: "" },
+    "选中 ": { zh: "选中 ", en: "Selected " },
     " 个标签": { zh: " 个标签", en: " tags selected" },
     "一键复制": { zh: "一键复制", en: "Copy All" },
     "一键屏蔽（*）": { zh: "一键屏蔽（*）", en: "Disable All (*)" },
@@ -1363,6 +1382,28 @@ function translateText(text, lang, nodeType = null) {
         const filename = deleteFileMatch[1];
         if (lang === "en") {
             return `Are you sure you want to delete ${filename}?`;
+        }
+        return text;
+    }
+    
+    // 处理Photopea动态文本：`确定要清空 clipspace 和 pasted 缓存吗？`
+    const clearCacheConfirmMatch = text.match(/^确定要清空\s*clipspace\s*和\s*pasted\s*缓存吗？$/);
+    if (clearCacheConfirmMatch) {
+        if (lang === "en") {
+            return "Are you sure you want to clear the clipspace and pasted caches?";
+        }
+        return text;
+    }
+    
+    // 处理Photopea动态文本：`✅ 清理完成！...`（清空缓存结果，含根目录缓存）
+    const cleanupCompleteMatch = text.match(/^✅ 清理完成！\n\n🗂️ clipspace: (\d+) 张\n📋 pasted: (\d+) 张(?:\n📂 根目录缓存 (\d+) 张)?\n📦 共计: (\d+) 张$/);
+    if (cleanupCompleteMatch) {
+        const clipspaceCount = cleanupCompleteMatch[1];
+        const pastedCount = cleanupCompleteMatch[2];
+        const rootCount = cleanupCompleteMatch[3] || "0";
+        const totalCount = cleanupCompleteMatch[4];
+        if (lang === "en") {
+            return `✅ Cleanup completed!\n\n🗂️ clipspace: ${clipspaceCount} images\n📋 pasted: ${pastedCount} images\n📂 Root cache: ${rootCount} images\n📦 Total: ${totalCount} images`;
         }
         return text;
     }

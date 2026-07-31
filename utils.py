@@ -2101,11 +2101,27 @@ async def clear_clipspace(request):
                 except Exception:
                     pass
 
+        # 清理新版 mask editor 直接写入 input 根目录的 clipspace-* 缓存文件
+        # (如 clipspace-painted-*.png / clipspace-mask-*.png / clipspace-paint-*.png 等)
+        root_cache_count = 0
+        if os.path.exists(input_dir):
+            for f in os.listdir(input_dir):
+                if not f.lower().startswith("clipspace-"):
+                    continue
+                file_path = os.path.join(input_dir, f)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                        root_cache_count += 1
+                except Exception:
+                    pass
+
         return web.json_response({
             "status": "success",
             "clipspace_count": clipspace_count,
             "pasted_count": pasted_count,
-            "total_count": clipspace_count + pasted_count
+            "root_cache_count": root_cache_count,
+            "total_count": clipspace_count + pasted_count + root_cache_count
         })
     except Exception as e:
         return web.json_response({"status": "error", "message": str(e)})
@@ -2118,8 +2134,14 @@ async def get_file_list(request):
         
         if os.path.exists(input_dir):
             for f in os.listdir(input_dir):
-                if os.path.isfile(os.path.join(input_dir, f)) and f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff')):
-                    files.append(f)
+                if not os.path.isfile(os.path.join(input_dir, f)):
+                    continue
+                if not f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tiff')):
+                    continue
+                # 杩囨护 mask editor 缂撳瓨鏂囦欢 (clipspace-painted-*.png / clipspace-mask-*.png / clipspace-paint-*.png)
+                if f.lower().startswith("clipspace-"):
+                    continue
+                files.append(f)
         
         def get_mtime(fname):
             p = os.path.join(input_dir, fname)
@@ -2624,9 +2646,9 @@ async def check_update(request):
         
         if test_mode:
             # 测试模式：返回模拟的更新数据
-            current_version = "1.3.9"
+            current_version = "1.4.0"
             # 模拟一个更新的版本
-            latest_version = "1.3.7"
+            latest_version = "1.4.1"
             has_update = True
             
             # 读取本地 README 文件作为测试数据
@@ -2659,7 +2681,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.3.9"  # Current version / 当前版本号
+        current_version = "1.4.0"  # Current version / 当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:
@@ -2734,7 +2756,7 @@ async def check_update(request):
         })
     except Exception as e:
         return web.json_response({
-            "current_version": "1.3.7",
+            "current_version": "1.4.0",
             "latest_version": None,
             "has_update": False,
             "update_info": "",

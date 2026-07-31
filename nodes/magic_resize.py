@@ -1,7 +1,7 @@
-import torch
-import torch.nn.functional as F
 import os
 import sys
+
+import comfy.utils
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -82,31 +82,37 @@ class MagicResolutionResize:
         ret_latent = None
 
         if image is not None:
-            if image.dtype != torch.float32: image = image.float()
-            b, h, w, c = image.shape
+            _, h, w, _ = image.shape
             new_h, new_w = self.calculate_new_size(mode, h, w, resolution, scale_ratio, width_px, height_px, False)
-            
+
             if new_h != h or new_w != w:
                 print(f"🔮 [Magic-Resize] Image: {w}x{h} -> {new_w}x{new_h} | Mode: {mode}")
-                py_method = "bilinear" if method == "bislerp" else ("bicubic" if method == "lanczos" else method)
-                align = None if py_method in ["area", "nearest", "nearest-exact"] else False
-                samples = image.permute(0, 3, 1, 2)
-                s = F.interpolate(samples, size=(new_h, new_w), mode=py_method, align_corners=align)
-                ret_image = s.permute(0, 2, 3, 1)
+                samples = image.movedim(-1, 1)
+                ret_image = comfy.utils.common_upscale(
+                    samples,
+                    new_w,
+                    new_h,
+                    method,
+                    "disabled",
+                ).movedim(1, -1)
             else:
                 ret_image = image
 
         if latent is not None:
             samples = latent["samples"]
-            b, c, h, w = samples.shape
+            _, _, h, w = samples.shape
             new_h, new_w = self.calculate_new_size(mode, h, w, resolution, scale_ratio, width_px, height_px, True)
 
             if new_h != h or new_w != w:
                 print(f"🔮 [Magic-Resize] Latent: {w}x{h} -> {new_w}x{new_h}")
-                py_method = "bilinear" if method == "bislerp" else ("bicubic" if method == "lanczos" else method)
-                align = None if py_method in ["area", "nearest", "nearest-exact"] else False
-                s = F.interpolate(samples, size=(new_h, new_w), mode=py_method, align_corners=align)
-                ret_latent = {"samples": s}
+                ret_latent = latent.copy()
+                ret_latent["samples"] = comfy.utils.common_upscale(
+                    samples,
+                    new_w,
+                    new_h,
+                    method,
+                    "disabled",
+                )
             else:
                 ret_latent = latent
 

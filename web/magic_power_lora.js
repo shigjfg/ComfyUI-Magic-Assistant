@@ -130,7 +130,16 @@ app.registerExtension({
             const origComputeSize = nodeType.prototype.computeSize;
             nodeType.prototype.computeSize = function() {
                 const result = origComputeSize ? origComputeSize.apply(this, arguments) : (this.size || [MPL_MIN_W, MPL_MIN_H]);
-                const w = Math.max(Array.isArray(result) ? result[0] : MPL_MIN_W, MPL_MIN_W);
+                // 根据 layoutSettings 计算动态最小宽度
+                // 箭头模式控件约 80px，滑条模式约 sliderWidth + 46px
+                // 额外加 20px padding 确保按钮完全显示
+                let dynMinW = MPL_MIN_W + 20;
+                if (this.layoutSettings && this.layoutSettings.weightStyle === "slider") {
+                    const sw = this.layoutSettings.sliderWidth ?? 110;
+                    const sv = this.layoutSettings.showWeightValue !== false ? 46 : 0;
+                    dynMinW = Math.max(MPL_MIN_W + 20, MPL_MIN_W + 20 + Math.max(0, sw + sv - 60));
+                }
+                const w = Math.max(Array.isArray(result) ? result[0] : MPL_MIN_W, dynMinW);
                 const h = Math.max(Array.isArray(result) ? result[1] : MPL_MIN_H, MPL_MIN_H);
                 return [w, h];
             };
@@ -213,15 +222,45 @@ app.registerExtension({
                     this.kleinMode = this.properties["klein_mode"] || "auto";
                 }
 
+                // 初始化布局设置（权重控件样式等）
+                if (!this.layoutSettings) {
+                    const saved = this.properties["layout_settings"];
+                    const defaults = {
+                        weightStyle: "arrows",
+                        sliderStep: 0.05,
+                        sliderMin: -2,
+                        sliderMax: 2,
+                        sliderWidth: 110,
+                        showWeightValue: true,
+                        snapToZero: true,
+                    };
+                    this.layoutSettings = (saved && typeof saved === "object")
+                        ? Object.assign({}, defaults, saved)
+                        : defaults;
+                }
+
                 this._stackWidget = stackWidget;
-                this.size = [MPL_MIN_W, MPL_MIN_H];
-                this.minWidth = MPL_MIN_W;
+
+                // 根据 layoutSettings 计算最小宽度（滑条模式需要更宽）
+                // 额外加 20px padding 确保按钮完全显示
+                const computeMinWidth = (layout) => {
+                    if (layout && layout.weightStyle === "slider") {
+                        const sw = layout.sliderWidth ?? 110;
+                        const sv = layout.showWeightValue !== false ? 46 : 0;
+                        return Math.max(MPL_MIN_W + 20, MPL_MIN_W + 20 + Math.max(0, sw + sv - 60));
+                    }
+                    return MPL_MIN_W + 20;
+                };
+                const initMinW = computeMinWidth(this.layoutSettings);
+                this.size = [Math.max(initMinW, MPL_MIN_W), MPL_MIN_H];
+                this.minWidth = initMinW;
                 this.minHeight = MPL_MIN_H;
 
                 // onResize：用户拖拽调整时强制不小于最小尺寸
                 this.onResize = function(size) {
                     if (size && size[0] !== undefined && size[1] !== undefined) {
-                        size[0] = Math.max(size[0], MPL_MIN_W);
+                        const curMinW = computeMinWidth(this.layoutSettings);
+                        size[0] = Math.max(size[0], curMinW);
                         size[1] = Math.max(size[1], MPL_MIN_H);
                     }
                 };
@@ -246,13 +285,11 @@ app.registerExtension({
                     // 如果列表滚到底了，也不要传给画布
                 }, { passive: false });
 
-                // B. 拦截点击/拖拽 (防止移动画布)
+                // B. 拦截点击 (防止移动画布)
+                // 注意：pointermove 和 pointerup 不能 stopPropagation，否则会阻止 document 上的滑块拖动监听器
                 const stopProp = (e) => { e.stopPropagation(); };
                 this.embeddedDiv.addEventListener("pointerdown", stopProp);
-                this.embeddedDiv.addEventListener("pointermove", stopProp);
-                this.embeddedDiv.addEventListener("pointerup", stopProp);
                 this.embeddedDiv.addEventListener("mousedown", stopProp);
-                this.embeddedDiv.addEventListener("mouseup", stopProp);
                 this.embeddedDiv.addEventListener("click", stopProp);
                 this.embeddedDiv.addEventListener("dblclick", stopProp);
 
@@ -570,6 +607,22 @@ app.registerExtension({
                 } else {
                     this.kleinMode = "auto";
                     this.properties["klein_mode"] = "auto";
+                }
+
+                // 恢复布局设置（从 properties 读取，确保刷新浏览器后仍生效）
+                const layoutDefaults = {
+                    weightStyle: "arrows",
+                    sliderStep: 0.05,
+                    sliderMin: -2,
+                    sliderMax: 2,
+                    sliderWidth: 110,
+                    showWeightValue: true,
+                    snapToZero: true,
+                };
+                if (this.properties["layout_settings"] && typeof this.properties["layout_settings"] === "object") {
+                    this.layoutSettings = Object.assign({}, layoutDefaults, this.properties["layout_settings"]);
+                } else {
+                    this.layoutSettings = Object.assign({}, layoutDefaults);
                 }
                 
                 if (this.properties["lora_data_state"]) {
@@ -2803,10 +2856,12 @@ app.registerExtension({
 
                 // 添加点击事件：点击lora行本身也能切换enabled状态
                 row.onclick = (e) => {
-                    // 排除交互元素：checkbox、input、button
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || 
-                        e.target.classList.contains('mpl-mini-btn') || 
-                        e.target.classList.contains('mpl-mini-input')) {
+                    // 排除交互元素：checkbox、input、button、备注框、权重控件
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' ||
+                        e.target.classList.contains('mpl-mini-btn') ||
+                        e.target.classList.contains('mpl-mini-input') ||
+                        e.target === noteInput || e.target.closest('.mpl-mini-input') ||
+                        e.target === weightContainer || e.target.closest('.mpl-weight-container')) {
                         return;
                     }
                     // 切换enabled状态
@@ -3137,6 +3192,181 @@ app.registerExtension({
                 weightContainer.appendChild(decreaseBtn);
                 weightContainer.appendChild(weightDisplay);
                 weightContainer.appendChild(increaseBtn);
+
+                // ========== 滑条模式（追加在箭头模式之后） ==========
+                const layoutCfg = this.layoutSettings || { weightStyle: "arrows" };
+                if (layoutCfg.weightStyle === "slider") {
+                    // 清空箭头模式的子元素
+                    while (weightContainer.firstChild) weightContainer.removeChild(weightContainer.firstChild);
+
+                    const sliderMin = layoutCfg.sliderMin ?? -2;
+                    const sliderMax = layoutCfg.sliderMax ?? 2;
+                    const sliderWidth = layoutCfg.sliderWidth ?? 110;
+                    const sliderStep = layoutCfg.sliderStep ?? 0.05;
+                    const showValue = layoutCfg.showWeightValue !== false;
+                    const snapToZero = layoutCfg.snapToZero !== false;
+
+                    // 给 weightContainer 设置固定宽度，防止被 row 的 flex 布局挤压
+                    weightContainer.style.flexShrink = "0";
+                    weightContainer.style.width = (sliderWidth + (showValue ? 46 : 0)) + "px";
+
+                    // 滑条更新函数
+                    const applySliderWeight = (newVal) => {
+                        const clamped = Math.max(sliderMin, Math.min(sliderMax, newVal));
+                        lora.weight = parseFloat(clamped.toFixed(2));
+                        updateSliderUI();
+                        this.updateWidget();
+                    };
+
+                    // 滑条轨道
+                    const track = document.createElement("div");
+                    track.style.cssText = `
+                        position: relative;
+                        flex: 1 1 0;
+                        min-width: 0;
+                        height: 22px;
+                        background: #2a2a2a;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        padding: 0 6px;
+                        box-sizing: border-box;
+                    `;
+
+                    const zeroLine = document.createElement("div");
+                    zeroLine.style.cssText = `
+                        position: absolute;
+                        left: 50%;
+                        top: 4px;
+                        bottom: 4px;
+                        width: 1px;
+                        background: #555;
+                        pointer-events: none;
+                    `;
+                    track.appendChild(zeroLine);
+
+                    const fill = document.createElement("div");
+                    fill.style.cssText = `
+                        position: absolute;
+                        top: 9px;
+                        height: 4px;
+                        background: #2196F3;
+                        border-radius: 2px;
+                        pointer-events: none;
+                    `;
+                    track.appendChild(fill);
+
+                    const thumb = document.createElement("div");
+                    thumb.style.cssText = `
+                        position: absolute;
+                        top: 50%;
+                        width: 10px;
+                        height: 14px;
+                        background: #fff;
+                        border: 1px solid #2196F3;
+                        border-radius: 2px;
+                        transform: translate(-50%, -50%);
+                        cursor: grab;
+                        pointer-events: none;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+                    `;
+                    track.appendChild(thumb);
+
+                    const valueDisplay = document.createElement("div");
+                    valueDisplay.className = "mpl-weight-display";
+                    valueDisplay.textContent = parseFloat(lora.weight).toFixed(2);
+                    valueDisplay.style.cssText = `
+                        min-width: 38px;
+                        padding: 2px 4px;
+                        text-align: center;
+                        color: #fff;
+                        font-size: 11px;
+                        user-select: none;
+                        background: #1a1a1a;
+                        height: 22px;
+                        display: ${showValue ? "flex" : "none"};
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        border-left: 1px solid #444;
+                        flex-shrink: 0;
+                    `;
+                    valueDisplay.onclick = (e) => {
+                        e.stopPropagation();
+                        const newVal = prompt("输入权重:", lora.weight);
+                        if (newVal !== null) {
+                            const numVal = parseFloat(newVal);
+                            if (!isNaN(numVal)) {
+                                applySliderWeight(numVal);
+                            }
+                        }
+                    };
+
+                    const valueToPercent = (v) => {
+                        const range = sliderMax - sliderMin;
+                        if (range === 0) return 50;
+                        return ((v - sliderMin) / range) * 100;
+                    };
+                    const percentToValue = (pct) => {
+                        const range = sliderMax - sliderMin;
+                        return sliderMin + (pct / 100) * range;
+                    };
+
+                    const updateSliderUI = () => {
+                        const pct = Math.max(0, Math.min(100, valueToPercent(lora.weight)));
+                        thumb.style.left = pct + "%";
+                        if (lora.weight >= 0) {
+                            fill.style.left = "50%";
+                            fill.style.width = (pct - 50) + "%";
+                            fill.style.background = "#2196F3";
+                        } else {
+                            fill.style.left = pct + "%";
+                            fill.style.width = (50 - pct) + "%";
+                            fill.style.background = "#f44336";
+                        }
+                        valueDisplay.textContent = lora.weight.toFixed(2);
+                    };
+
+                    let isDragging = false;
+                    const onPointerMove = (e) => {
+                        if (!isDragging) return;
+                        const rect = track.getBoundingClientRect();
+                        const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                        let newVal = percentToValue(pct);
+                        if (snapToZero && Math.abs(newVal) < 0.02) newVal = 0;
+                        newVal = Math.round(newVal / sliderStep) * sliderStep;
+                        applySliderWeight(newVal);
+                    };
+                    const onPointerUp = () => {
+                        isDragging = false;
+                        document.removeEventListener("pointermove", onPointerMove);
+                        document.removeEventListener("pointerup", onPointerUp);
+                    };
+
+                    track.addEventListener("pointerdown", (e) => {
+                        e.stopPropagation();
+                        isDragging = true;
+                        const rect = track.getBoundingClientRect();
+                        const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+                        let newVal = percentToValue(pct);
+                        if (snapToZero && Math.abs(newVal) < 0.02) newVal = 0;
+                        newVal = Math.round(newVal / sliderStep) * sliderStep;
+                        applySliderWeight(newVal);
+                        document.addEventListener("pointermove", onPointerMove);
+                        document.addEventListener("pointerup", onPointerUp);
+                    });
+
+                    track.addEventListener("wheel", (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const delta = e.deltaY > 0 ? -sliderStep : sliderStep;
+                        applySliderWeight(lora.weight + delta);
+                    }, { passive: false });
+
+                    weightContainer.appendChild(track);
+                    weightContainer.appendChild(valueDisplay);
+                    updateSliderUI();
+                }
 
                 const tagBtn = document.createElement("button");
                 tagBtn.className = `mpl-mini-btn tag ${lora.tags ? 'active' : ''}`;
@@ -4564,6 +4794,61 @@ app.registerExtension({
                     flex-shrink: 0;
                 `;
 
+                // Tab 切换栏
+                const tabBar = document.createElement("div");
+                tabBar.style.cssText = `
+                    display: flex;
+                    background: #1f1f1f;
+                    border-bottom: 1px solid #444;
+                    flex-shrink: 0;
+                `;
+                const tabButtons = {};
+                const tabContents = {};
+                const tabDefs = [
+                    { id: "mode", label: "模式切换" },
+                    { id: "layout", label: "布局样式" },
+                ];
+                let currentTab = "mode";
+                tabDefs.forEach((tab) => {
+                    const btn = document.createElement("button");
+                    btn.textContent = tab.label;
+                    btn.dataset.tab = tab.id;
+                    const active = currentTab === tab.id;
+                    btn.style.cssText = `
+                        flex: 1;
+                        padding: 10px 16px;
+                        background: ${active ? "#2a2a2a" : "transparent"};
+                        border: none;
+                        border-bottom: 3px solid ${active ? "#2196F3" : "transparent"};
+                        color: ${active ? "#fff" : "#888"};
+                        cursor: pointer;
+                        font-size: 13px;
+                        font-weight: ${active ? "500" : "400"};
+                        transition: all 0.15s;
+                    `;
+                    btn.onmouseenter = () => {
+                        if (currentTab !== tab.id) btn.style.color = "#ccc";
+                    };
+                    btn.onmouseleave = () => {
+                        if (currentTab !== tab.id) btn.style.color = "#888";
+                    };
+                    btn.onclick = () => {
+                        currentTab = tab.id;
+                        tabDefs.forEach((t) => {
+                            const b = tabButtons[t.id];
+                            const c = tabContents[t.id];
+                            const isActive = t.id === currentTab;
+                            b.style.background = isActive ? "#2a2a2a" : "transparent";
+                            b.style.borderBottomColor = isActive ? "#2196F3" : "transparent";
+                            b.style.color = isActive ? "#fff" : "#888";
+                            b.style.fontWeight = isActive ? "500" : "400";
+                            c.style.display = isActive ? "block" : "none";
+                        });
+                    };
+                    tabButtons[tab.id] = btn;
+                    tabBar.appendChild(btn);
+                });
+
                 // 内容区域（可滚动）
                 const content = document.createElement("div");
                 content.style.cssText = "flex: 1; overflow-y: auto; padding: 16px 20px; min-height: 0;";
@@ -4854,7 +5139,137 @@ app.registerExtension({
 
                 settingsContainer.appendChild(sdnqSection);
 
-                content.appendChild(settingsContainer);
+                // ========== 模式切换 Tab 内容 ==========
+                const modeTabContent = document.createElement("div");
+                modeTabContent.style.cssText = "display: block;";
+                modeTabContent.appendChild(settingsContainer);
+                tabContents["mode"] = modeTabContent;
+
+                // ========== 布局样式 Tab 内容 ==========
+                const layoutTabContent = document.createElement("div");
+                layoutTabContent.style.cssText = "display: none;";
+                tabContents["layout"] = layoutTabContent;
+
+                const layoutContainer = document.createElement("div");
+                layoutContainer.style.cssText = "display: flex; flex-direction: column; gap: 18px;";
+
+                const layoutTitle = document.createElement("div");
+                layoutTitle.textContent = "权重控件样式";
+                layoutTitle.style.cssText = "font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px;";
+                const layoutDesc = document.createElement("div");
+                layoutDesc.textContent = "选择 LoRA 列表中权重调节控件的样式。滑条模式下可直接拖动调整权重，数值仍可点击编辑。";
+                layoutDesc.style.cssText = "font-size: 12px; color: #aaa; margin-bottom: 12px; line-height: 1.5;";
+
+                const styleSection = document.createElement("div");
+                styleSection.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+
+                const buildStyleOption = (value, label, desc) => {
+                    const wrap = document.createElement("label");
+                    wrap.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                    const radio = document.createElement("input");
+                    radio.type = "radio";
+                    radio.name = "mpl_weight_style";
+                    radio.value = value;
+                    radio.checked = (this.layoutSettings?.weightStyle || "arrows") === value;
+                    radio.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                    const info = document.createElement("div");
+                    info.style.cssText = "flex: 1;";
+                    const t = document.createElement("div");
+                    t.textContent = label;
+                    t.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                    const d = document.createElement("div");
+                    d.textContent = desc;
+                    d.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                    info.appendChild(t);
+                    info.appendChild(d);
+                    wrap.appendChild(radio);
+                    wrap.appendChild(info);
+                    return { wrap, radio };
+                };
+
+                const styleArrows = buildStyleOption("arrows", "箭头按钮（默认）", "左右两个箭头按钮，每次点击 ±0.01；中间数字可点击直接输入。");
+                const styleSlider = buildStyleOption("slider", "滑条", "水平滑条拖动调整权重；右侧显示当前数值，数值仍可点击编辑。");
+                styleSection.appendChild(styleArrows.wrap);
+                styleSection.appendChild(styleSlider.wrap);
+
+                const sliderParamsSection = document.createElement("div");
+                sliderParamsSection.style.cssText = "display: flex; flex-direction: column; gap: 12px; padding: 12px; background: #2a2a2a; border-radius: 4px; border: 1px solid #444;";
+
+                const sliderParamsTitle = document.createElement("div");
+                sliderParamsTitle.textContent = "滑条参数";
+                sliderParamsTitle.style.cssText = "color: #fff; font-size: 13px; font-weight: 500; margin-bottom: 4px;";
+                sliderParamsSection.appendChild(sliderParamsTitle);
+
+                const buildNumberRow = (labelText, key, min, max, step) => {
+                    const row = document.createElement("div");
+                    row.style.cssText = "display: flex; align-items: center; gap: 10px;";
+                    const lab = document.createElement("div");
+                    lab.textContent = labelText;
+                    lab.style.cssText = "color: #ccc; font-size: 12px; min-width: 80px;";
+                    const input = document.createElement("input");
+                    input.type = "number";
+                    input.min = String(min);
+                    input.max = String(max);
+                    input.step = String(step);
+                    input.value = String(this.layoutSettings?.[key] ?? 0);
+                    input.style.cssText = "flex: 1; padding: 4px 8px; background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #fff; font-size: 12px;";
+                    row.appendChild(lab);
+                    row.appendChild(input);
+                    return { row, input };
+                };
+
+                const stepRow = buildNumberRow("步长", "sliderStep", 0.01, 1, 0.01);
+                const minRow = buildNumberRow("最小值", "sliderMin", -10, 0, 0.1);
+                const maxRow = buildNumberRow("最大值", "sliderMax", 0, 10, 0.1);
+                const widthRow = buildNumberRow("滑条宽度(px)", "sliderWidth", 60, 300, 5);
+                sliderParamsSection.appendChild(stepRow.row);
+                sliderParamsSection.appendChild(minRow.row);
+                sliderParamsSection.appendChild(maxRow.row);
+                sliderParamsSection.appendChild(widthRow.row);
+
+                const buildCheckboxRow = (labelText, key) => {
+                    const row = document.createElement("label");
+                    row.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 0;";
+                    const cb = document.createElement("input");
+                    cb.type = "checkbox";
+                    cb.checked = this.layoutSettings?.[key] ?? true;
+                    cb.style.cssText = "width: 16px; height: 16px; cursor: pointer;";
+                    const lab = document.createElement("div");
+                    lab.textContent = labelText;
+                    lab.style.cssText = "color: #ccc; font-size: 12px;";
+                    row.appendChild(cb);
+                    row.appendChild(lab);
+                    return { row, cb };
+                };
+                const showValueRow = buildCheckboxRow("滑条旁显示当前数值", "showWeightValue");
+                const snapRow = buildCheckboxRow("拖动时吸附 0（±0.02 范围内）", "snapToZero");
+                sliderParamsSection.appendChild(showValueRow.row);
+                sliderParamsSection.appendChild(snapRow.row);
+
+                const updateStyleSelection = () => {
+                    [styleArrows, styleSlider].forEach((s) => {
+                        if (s.radio.checked) {
+                            s.wrap.style.borderColor = "#2196F3";
+                            s.wrap.style.background = "#2a3a4a";
+                        } else {
+                            s.wrap.style.borderColor = "transparent";
+                            s.wrap.style.background = "#333";
+                        }
+                    });
+                    sliderParamsSection.style.display = styleSlider.radio.checked ? "flex" : "none";
+                };
+                styleArrows.radio.addEventListener("change", updateStyleSelection);
+                styleSlider.radio.addEventListener("change", updateStyleSelection);
+                updateStyleSelection();
+
+                layoutContainer.appendChild(layoutTitle);
+                layoutContainer.appendChild(layoutDesc);
+                layoutContainer.appendChild(styleSection);
+                layoutContainer.appendChild(sliderParamsSection);
+                layoutTabContent.appendChild(layoutContainer);
+
+                content.appendChild(modeTabContent);
+                content.appendChild(layoutTabContent);
 
                 // 点击遮罩层关闭
                 overlay.onclick = (e) => {
@@ -4893,8 +5308,42 @@ app.registerExtension({
                     if (this._sdnqModeWidget) this._sdnqModeWidget.value = selectedSdnqMode;
                     if (this._kleinModeWidget) this._kleinModeWidget.value = selectedKleinMode;
                     if (this._adaptiveModeWidget) this._adaptiveModeWidget.value = String(isAdaptiveSelected);
+
+                    // 保存布局设置
+                    const selectedStyle = scope.querySelector('input[name="mpl_weight_style"]:checked')?.value || "arrows";
+                    const newLayout = {
+                        weightStyle: selectedStyle,
+                        sliderStep: Math.max(0.01, parseFloat(stepRow.input.value) || 0.05),
+                        sliderMin: Math.min(0, parseFloat(minRow.input.value) || -2),
+                        sliderMax: Math.max(0, parseFloat(maxRow.input.value) || 2),
+                        sliderWidth: Math.max(60, Math.min(300, parseInt(widthRow.input.value, 10) || 110)),
+                        showWeightValue: showValueRow.cb.checked,
+                        snapToZero: snapRow.cb.checked,
+                    };
+                    if (newLayout.sliderMin >= newLayout.sliderMax) {
+                        newLayout.sliderMax = newLayout.sliderMin + 0.1;
+                    }
+                    this.layoutSettings = newLayout;
+                    this.properties["layout_settings"] = newLayout;
+
+                    // 根据布局调整节点最小宽度（仅在用户未手动调大时）
+                    // 箭头模式控件宽度约 80px，滑条模式约 sliderWidth + 46px
+                    // 额外加 20px padding 确保按钮完全显示
+                    const arrowMinW = 490;
+                    const sliderMinW = 490 + Math.max(0, (newLayout.sliderWidth ?? 110) + (newLayout.showWeightValue !== false ? 46 : 0) - 60);
+                    const targetMinW = newLayout.weightStyle === "slider" ? Math.max(arrowMinW, sliderMinW) : arrowMinW;
+                    if (this.minWidth !== undefined && this.minWidth < targetMinW) {
+                        this.minWidth = targetMinW;
+                    }
+                    // 如果当前宽度小于新的最小宽度，自动扩展
+                    if (this.size && Array.isArray(this.size) && this.size[0] < targetMinW) {
+                        this.size[0] = targetMinW;
+                        this.setDirtyCanvas?.(true, true);
+                    }
+
                     this.updateWidget();
                     this._updateKleinBanner?.();
+                    this.renderEmbeddedList?.();
                     document.body.removeChild(overlay);
                 };
 
@@ -4908,6 +5357,7 @@ app.registerExtension({
                 buttonContainer.appendChild(cancelBtn);
                 buttonContainer.appendChild(confirmBtn);
                 dialog.appendChild(title);
+                dialog.appendChild(tabBar);
                 dialog.appendChild(content);
                 dialog.appendChild(buttonContainer);
                 overlay.appendChild(dialog);

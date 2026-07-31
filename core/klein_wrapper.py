@@ -778,7 +778,8 @@ from typing import Callable, Optional, Tuple
 
 import torch
 from comfy.ldm.common_dit import pad_to_patch_size
-from comfy.model_patcher import ModelPatcher
+import comfy.model_management
+import comfy.model_patcher
 from einops import rearrange, repeat
 from torch import nn
 
@@ -1038,7 +1039,7 @@ class ComfyFlux2KleinWrapper(nn.Module):
         self._prev_timestep = timestep_float
         return out
 
-def copy_with_ctx(model_wrapper: ComfyFlux2KleinWrapper) -> Tuple[ComfyFlux2KleinWrapper, ModelPatcher]:
+def copy_with_ctx(model_wrapper: ComfyFlux2KleinWrapper) -> Tuple[ComfyFlux2KleinWrapper, comfy.model_patcher.ModelPatcher]:
     """
     Duplicates a ComfyFlux2KleinWrapper object with its initialization context.
 
@@ -1053,13 +1054,17 @@ def copy_with_ctx(model_wrapper: ComfyFlux2KleinWrapper) -> Tuple[ComfyFlux2Klei
         ctx_for_copy={
             "comfy_config": ctx_for_copy["comfy_config"],
             "model_config": ctx_for_copy["model_config"],
-            "device": ctx_for_copy["device"],
-            "device_id": ctx_for_copy["device_id"],
+            "load_device": ctx_for_copy["load_device"],
+            "offload_device": ctx_for_copy["offload_device"],
         },
     )
     model_base = ctx_for_copy["model_config"].get_model({})
     model_base.diffusion_model = ret_model_wrapper
-    ret_model = ModelPatcher(model_base, ctx_for_copy["device"], ctx_for_copy["device_id"])
+    ret_model = comfy.model_patcher.CoreModelPatcher(
+        model_base,
+        load_device=ctx_for_copy["load_device"],
+        offload_device=ctx_for_copy["offload_device"],
+    )
     return ret_model_wrapper, ret_model
 '''
 
