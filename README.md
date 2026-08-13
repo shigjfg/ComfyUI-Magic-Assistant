@@ -6,7 +6,11 @@
 > 💬 **Join our Discord community for support, feature requests, and latest updates!**
 > 💬 **加入我们的 Discord 社区，获取技术支持、功能请求！**
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/H9YFdJAs4R)
+> 📥 **Download our standalone LoRA batch download tool — no Python install needed; batch-fetch trigger words, model info, preview images and recommended weights from Civitai, and choose to save beside the LoRA or in a magicloradate subfolder!**
+> 📥 **下载我们的独立 LoRA 批量下载工具 —— 无需安装 Python，批量获取 Civitai 的触发词、模型介绍、预览图与推荐权重，并可选存于 LoRA 同层级或 magicloradate 子文件夹！**
+
+
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/H9YFdJAs4R) [![LoRA下载工具](https://img.shields.io/badge/LoRA%E4%B8%8B%E8%BD%BD%E5%B7%A5%E5%85%B7-Download-4285F4?style=for-the-badge&logo=googledrive&logoColor=white)](https://drive.google.com/file/d/1C0TgxaEmMhi9goHvb7zzlC2vnEb9aWmp/view?usp=sharing)
 
 ---
 
