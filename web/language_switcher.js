@@ -149,6 +149,18 @@ const loraLoaderTranslations = {
     "SDNQ 模式": { zh: "SDNQ 模式", en: "SDNQ Mode" },
     "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）": { zh: "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）", en: "Use diffusers PEFT adapter system to load LoRAs, supports parallel application of multiple LoRAs, suitable for SDNQ quantized models (DiffusionPipeline)" },
 
+    // Anima 2.9B 模式设置
+    "Anima 2.9B LoRA 模式": { zh: "Anima 2.9B LoRA 模式", en: "Anima 2.9B LoRA Mode" },
+    "专用于 Anima 2.9B（40 层）模型加载旧版 28 层 Anima LoRA：标准加载路径下自动在内存中暂存重映射（28→40 层），不写盘、不改原文件、不新增文件": {
+        zh: "专用于 Anima 2.9B（40 层）模型加载旧版 28 层 Anima LoRA：标准加载路径下自动在内存中暂存重映射（28→40 层），不写盘、不改原文件、不新增文件",
+        en: "For loading legacy 28-layer Anima LoRAs on Anima 2.9B (40-layer) models: automatically remap layers in memory on the standard loading path (28→40 layers), without writing to disk, modifying original files, or creating new files"
+    },
+    "Anima 2.9B 模式": { zh: "Anima 2.9B 模式", en: "Anima 2.9B Mode" },
+    "标准加载路径下自动把 28 层 Anima LoRA 重映射为 40 层（仅对 Anima LoRA 生效，其他 LoRA 原样加载）": {
+        zh: "标准加载路径下自动把 28 层 Anima LoRA 重映射为 40 层（仅对 Anima LoRA 生效，其他 LoRA 原样加载）",
+        en: "Automatically remap 28-layer Anima LoRAs to 40 layers on the standard loading path (only affects Anima LoRAs; other LoRAs are loaded unchanged)"
+    },
+
     // LoRA 串连功能相关
     "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。": { zh: "lora串接受 收到了无效数据，请确保连接自「强力 LoRA 加载器」的 lora串输出，不要接入其他文本或节点。", en: "lora串接受 received invalid data. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader, not from other text or nodes." },
     "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。": { zh: "lora串接受 收到了非 LoRA 串格式的数据，请确保连接自「强力 LoRA 加载器」的 lora串输出。", en: "lora串接受 received data that is not in LoRA chain format. Please ensure it is connected from the lora串输出 of a Magic Power LoRA Loader." },
@@ -229,7 +241,17 @@ const loraLoaderTranslations = {
     "最大值": { zh: "最大值", en: "Max" },
     "滑条宽度(px)": { zh: "滑条宽度(px)", en: "Slider Width (px)" },
     "滑条旁显示当前数值": { zh: "滑条旁显示当前数值", en: "Show Current Value Next to Slider" },
-    "拖动时吸附 0（±0.02 范围内）": { zh: "拖动时吸附 0（±0.02 范围内）", en: "Snap to 0 while dragging (within ±0.02)" }
+    "拖动时吸附 0（±0.02 范围内）": { zh: "拖动时吸附 0（±0.02 范围内）", en: "Snap to 0 while dragging (within ±0.02)" },
+
+    // LLM 请求容错（节点 2 多功能AI提示词替换 / 节点 6 多功能提示词框 共用「管理 LLM」对话框，及节点 2 设置弹窗）
+    "请求容错 / Request Resilience": { zh: "请求容错 / Request Resilience", en: "Request Resilience" },
+    "连接超时(秒)": { zh: "连接超时(秒)", en: "Connect Timeout (s)" },
+    "DNS/TCP/TLS 建立连接的最长等待时间": { zh: "DNS/TCP/TLS 建立连接的最长等待时间", en: "Max wait time for DNS/TCP/TLS to establish the connection" },
+    "读取超时(秒)": { zh: "读取超时(秒)", en: "Read Timeout (s)" },
+    "连接成功后等待模型生成响应的最长时间": { zh: "连接成功后等待模型生成响应的最长时间", en: "Max wait time for the model to generate a response after connection" },
+    "重试次数": { zh: "重试次数", en: "Max Retries" },
+    "读取超时、临时 HTTP 错误或空响应时的最多重试次数": { zh: "读取超时、临时 HTTP 错误或空响应时的最多重试次数", en: "Max retries on read timeout, transient HTTP errors, or empty responses" },
+    "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。": { zh: "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。", en: "Tip: set read timeout to 180–300s for slow models; retries increase max wait time and possible billing." }
 };
 
 // 节点翻译映射表 - Magic SDNQ Loader & Sampler

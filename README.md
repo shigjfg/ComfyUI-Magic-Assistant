@@ -16,8 +16,31 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-07-31**
+> Latest Update / 最新更新：**2026-08-15**
 
+> **V1.4.1 版本介绍 / Version Introduction** 2026-08-15
+>
+> 1. **✨ 新增**: Magic Power LoRA Loader - Anima 2.9B LoRA 模式
+>    * 新增「Anima 2.9B 模式」开关，可在 Anima 2.9B（40 层）模型上直接加载旧版 28 层 Anima LoRA
+>    * 重映射在内存中完成（28→40 层），**不写盘、不改原文件、不生成副本**；非 Anima 或已是 40 层的 LoRA 原样加载，不会中断工作流
+>    * 仅标准加载路径生效；Klein / SDNQ 模式走专用加载器，会自动跳过并提示不适用
+>    * Added "Anima 2.9B Mode" toggle to load legacy 28-layer Anima LoRAs on Anima 2.9B (40-layer) models
+>    * Remapping happens in memory (28→40 layers) — **no disk writes, no changes to original files, no copies**; non-Anima or already-40-layer LoRAs load unchanged without breaking the workflow
+>    * Applies only to the standard loading path; Klein / SDNQ modes use dedicated loaders and skip with a notice
+><img width="413" height="494" alt="Image" src="https://github.com/user-attachments/assets/b9f3b42e-a2b0-4eb0-84b8-499b6af1eb32" />
+> 
+> 2. **🔧 更新**: 多功能AI提示词替换 - LLM 调用更稳、更可控
+>    * 重写 LLM 请求层：支持可配置超时与**自动重试**（退避策略），网络抖动或服务商临时错误不再一失败就中断
+>    * 报错更易懂（带请求编号），后台日志**不再打印 API Key 与完整提示词**，更安全
+>    * LLM 配置新增「请求容错」三项：连接超时、读取超时、重试次数（慢速模型建议把读取超时调到 180–300 秒）
+>    * Rewrote the LLM request layer with configurable timeouts and **automatic retries** (backoff); transient network/provider errors no longer abort the run
+>    * Clearer errors (with request IDs); backend logs **no longer print API keys or full prompts** for better safety
+>    * LLM config gains a "Request Resilience" trio: Connect Timeout, Read Timeout, Max Retries (slow models: raise Read Timeout to 180–300s)
+>
+> 3. **🔧 更新**: 多功能提示词框 - 共用 LLM 配置新增「请求容错」
+>    * 其「管理 LLM」对话框与多功能AI提示词替换共用同一份配置，本次同步出现连接/读取超时、重试次数三项，可统一管理 LLM 容错参数
+>    * Its "Manage LLM" dialog shares the same config as AI Prompt Replace; the same Connect/Read Timeout and Max Retries now appear for centralized LLM resilience control
+>
 > **V1.4.0 版本介绍 / Version Introduction** 2026-07-31
 >
 > 1. **🔧 更新**: 适配 ComfyUI 0.29.0 新版接口（Magic Nunchaku FLUX.2 Klein Loader、Magic Resolution Resize、Magic Photopea）
@@ -76,6 +99,9 @@
 >    * Simpler than the previous dedicated INT8 mode - no need to manually switch modes
 >    * Follows ComfyUI's official LoRA loading path (`comfy.sd.load_lora_for_models`), automatically adapting to INT8/FP8/INT4 quantized weights
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.8 版本介绍 / Version Introduction** 2026-06-25
 >
 > 1. **🐛 修复（重要）**: 修复 Klein 节点模型检测的路径方法，防止无法检测到 transform 和 klein 的问题
@@ -91,9 +117,6 @@
 > 4. **✨ 优化**: 合并 PR #8，支持从子文件夹加载 Nunchaku Klein 模型，重构了模型文件获取逻辑
 >    * Merged PR #8: Added support for loading Nunchaku Klein models from subfolders, refactored model file retrieval logic
 >    * Thanks to Tom-M-Git for the contribution!
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.7 版本介绍 / Version Introduction** 2026-06-02
 >
@@ -676,6 +699,12 @@
 * **AI 驱动**: 无缝对接 OpenAI 格式接口，智能润色或重写提示词。
 * **角色扮演**: 内置多种预设，让 AI 化身"提示词专家"或"翻译官"。
 * **本地预设**: 支持保存和一键调用常用规则。
+* **LLM 调用更稳（V1.4.1）**: 重写请求层，支持可配置超时与自动重试（退避策略）；网络抖动或服务商临时错误不再一失败就中断。
+* **报错更清晰安全**: 失败时返回带请求编号的错误，后台日志不再打印 API Key 与完整提示词。
+* **请求容错设置（V1.4.1）**: LLM 配置（及节点设置弹窗）新增连接超时、读取超时、重试次数三项，慢速模型可调大读取超时。
+* **More robust LLM calls (V1.4.1)**: Rewritten request layer with configurable timeouts and automatic retries (backoff); transient errors no longer abort the run.
+* **Clearer & safer errors**: Failures return an error with a request ID; backend logs no longer print API keys or full prompts.
+* **Request Resilience settings (V1.4.1)**: LLM config (and node settings modal) adds Connect Timeout, Read Timeout, and Max Retries; raise Read Timeout for slow models.
 
 </details>
 
@@ -788,12 +817,14 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Danbooru 数据模式**: 切换补全与标签搜索的数据来源为「本地标签库」或「Danbooru 远端」；切换 Danbooru 模式后每次打开编辑界面会实时检测连接状态，连接成功才替换补全功能，否则自动回退并保存为本地模式
 * **格式化详细设置**: 对应 💫 格式化按钮，调用 `/ma/format_prompt`。清理逗号、修复括号始终执行；高级选项：下划线、权重语法、括号转义等可独立开启
 * **翻译功能**: 与「管理 LLM」「多功能AI提示词替换」共用 `userdata/llm_settings.txt`；支持正常/强制翻译模式
+* **LLM 请求容错（V1.4.1）**: 「管理 LLM」对话框新增连接超时、读取超时、重试次数三项，与多功能AI提示词替换共用同一配置，可统一管理 LLM 容错参数
 * **补全与历史**: 补全列表条数上限、运行历史保留条数、LLM 翻译缓存条数
 
 * **Editor Display**: Toggle visibility of toolbar buttons; **enable/disable autocomplete popup** (closing it hides the dropdown while typing in the editor; tag search and Edit Tags autocomplete are unaffected)
 * **Danbooru Data Mode**: Switch data source for autocomplete and tag search between "Local Tag Library" and "Danbooru Remote"; switching to Danbooru mode checks connection on every open; only replaces functions if connected, otherwise falls back and saves as local mode
 * **Format Options**: Clean commas, fix brackets (always); advanced: underscores, weight syntax, bracket escaping
 * **Translation**: Shares `userdata/llm_settings.txt` with Manage LLM and AI Prompt Replace; normal/force translate modes
+* **LLM Request Resilience (V1.4.1)**: The "Manage LLM" dialog adds Connect Timeout, Read Timeout, and Max Retries, sharing the same config as AI Prompt Replace for centralized resilience control
 * **Completion & History**: Autocomplete limit, history max entries, LLM cache size
 
 #### 核心功能速览 / Feature Summary
@@ -851,6 +882,8 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Klein 模型支持**: 新增对 Klein 模型（Nunchaku FLUX.2 Klein）的 LoRA 加载支持。在节点设置中切换为 Klein 模式即可启用 Klein 模型的 LoRA 支持。开启自适应模式可自动检测模型类型。
 * **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
 * **自定义权重调节方式（V1.4.0 新增）**: 在“设置 → 界面设置”中，可为每个 LoRA 的权重调节切换原有的紧凑箭头按钮或水平滑条。滑条模式支持自定义步长、最小值、最大值及宽度，可选择显示并直接编辑当前数值，也可开启 ±0.02 范围内自动吸附到 0；节点会自动扩展最小宽度，保证滑条控件完整显示。
+* **Anima 2.9B 模式（V1.4.1 新增）**: 新增 Anima 2.9B（40 层）LoRA 模式。在节点设置中开启后，可在 Anima 2.9B（40 层）模型上加载旧版 28 层 Anima LoRA；重映射在内存中完成（28→40 层），不写盘、不改原文件、不生成副本。仅标准加载路径生效（Klein / SDNQ 模式走专用加载器，不受影响）；非 Anima 或已是 40 层的 LoRA 原样加载。
+* **Anima 2.9B Mode (New in V1.4.1)**: Added Anima 2.9B (40-layer) LoRA mode. Enable it in node settings to load legacy 28-layer Anima LoRAs on Anima 2.9B (40-layer) models; remapping happens in memory (28→40 layers) without writing to disk or modifying original files. Applies only to the standard loading path (Klein / SDNQ modes use dedicated loaders and are unaffected); non-Anima or already-40-layer LoRAs load unchanged.
 
 </details>
 

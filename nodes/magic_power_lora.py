@@ -32,6 +32,42 @@ try:
 except ImportError:
     from ..utils import MagicUtils
 
+# Anima 2.9B（40 层）LoRA 内存层转换：仅在「加载」时把旧 28 层 Anima LoRA 的键名重映射，
+# 不写盘、不改动原文件与缓存（详见 nodes/anima_lora_remap.py）。
+# 模块缺失时整体降级为「不转换」，保证节点仍可正常工作。
+try:
+    from .anima_lora_remap import (
+        remap_lora_state_dict_safe,
+        is_anima_40_model,
+        is_anima_model,
+        STATUS_CONVERTED,
+        STATUS_ALREADY_40,
+        STATUS_NOT_ANIMA,
+        STATUS_ERROR,
+    )
+    ANIMA_REMAP_AVAILABLE = True
+except Exception:
+    try:
+        from anima_lora_remap import (
+            remap_lora_state_dict_safe,
+            is_anima_40_model,
+            is_anima_model,
+            STATUS_CONVERTED,
+            STATUS_ALREADY_40,
+            STATUS_NOT_ANIMA,
+            STATUS_ERROR,
+        )
+        ANIMA_REMAP_AVAILABLE = True
+    except Exception:
+        ANIMA_REMAP_AVAILABLE = False
+        remap_lora_state_dict_safe = None
+        is_anima_40_model = lambda model: False  # noqa: E731
+        is_anima_model = lambda model: False  # noqa: E731
+        STATUS_CONVERTED = "converted"
+        STATUS_ALREADY_40 = "already_40"
+        STATUS_NOT_ANIMA = "not_anima"
+        STATUS_ERROR = "error"
+
 
 # --- LoRA 串（lora_chain）格式：仅本加载器识别，用于节点间传递 LoRA 列表 ---
 MAGIC_LORA_CHAIN_KEY = "_magic_lora_chain"
@@ -86,6 +122,7 @@ class MagicPowerLoraLoader:
                 "sdnq_mode": ("STRING", {"default": "none"}),
                 "klein_mode": ("STRING", {"default": "auto"}),
                 "adaptive_mode": ("BOOLEAN", {"default": False}),  # 自适应模式：自动检测模型类型选择合适模式
+                "anima_mode": ("STRING", {"default": "none"}),  # Anima 2.9B 模式：none 关闭 / anima 启用（与 Klein/SDNQ 一致，单值开关；仅标准加载路径生效，内存暂存不写盘）
                 "lora串输出已连接": ("BOOLEAN", {"default": True}),  # 由前端根据图连接注入：未连接=链末端
             }
         }
@@ -242,7 +279,7 @@ class MagicPowerLoraLoader:
         except Exception:
             return None
 
-    def apply_loras(self, lora_stack, model=None, clip=None, adaptive_mode=False, sdnq_mode="none", klein_mode="auto", **kwargs):
+    def apply_loras(self, lora_stack, model=None, clip=None, adaptive_mode=False, sdnq_mode="none", klein_mode="auto", anima_mode="none", **kwargs):
         """
         应用 LoRA
         sdnq_mode: "none" (默认), "sdnq" (SDNQ 模式，用于 DiffusionPipeline)
@@ -353,6 +390,8 @@ class MagicPowerLoraLoader:
         # 检测模型类型
         is_sdnq = self.is_sdnq_model(out_model)
         is_klein = self.is_klein_model(out_model)
+        # Anima 2.9B：是否为 40 层 Anima 主干模型（auto 模式下据此决定是否启用层转换）
+        is_anima_40 = is_anima_40_model(out_model) if ANIMA_REMAP_AVAILABLE else False
 
         # ========== 自适应模式检测 ==========
         if adaptive_mode:
@@ -390,6 +429,25 @@ class MagicPowerLoraLoader:
         if klein_mode == "none" and is_klein:
             print(f"💡 [MagicPowerLora] 检测到 Klein 模型（Nunchaku FLUX.2 Klein），建议在设置中启用 Klein 模式")
 
+        # ========== Anima 2.9B 模式解析 ==========
+        # 仅 "anima" 表示启用（与 Klein/SDNQ 一致，单值开关，互斥）。
+        # 转换只在「标准」加载路径生效（Klein/SDNQ 走各自文件加载器，无法套用内存 state_dict 重映射）。
+        # remap_lora_state_dict_safe 本身只对 28 层 Anima LoRA 生效，其他 LoRA / 已为 40 层 / 非 Anima 模型原样返回，
+        # 因此「启用即自动」：标准加载路径下对适用的 Anima LoRA 暂存重映射，其余原样。
+        anima_active = False
+        if ANIMA_REMAP_AVAILABLE:
+            am_raw = anima_mode
+            if isinstance(am_raw, bool):
+                am = "anima" if am_raw else "none"
+            elif isinstance(am_raw, str):
+                am = am_raw.strip().lower()
+            else:
+                am = str(am_raw).strip().lower()
+            if am == "anima":
+                anima_active = True
+                print(f"🔄 [MagicPowerLora] Anima 2.9B 模式已启用：标准加载路径下将把 28 层 Anima LoRA 暂存重映射为 40 层（不写盘、不改原文件/缓存）")
+        # =========================================
+
         mode_str = f"{sdnq_mode}" if sdnq_mode == "sdnq" else (f"{klein_mode}" if klein_mode == "klein" else "standard")
         adaptive_str = f" (Adaptive)" if adaptive_mode else ""
         
@@ -404,6 +462,8 @@ class MagicPowerLoraLoader:
 
         # 根据模式选择加载方式
         if klein_mode == "klein" and is_klein:
+            if anima_active:
+                print(f"ℹ️ [Anima 2.9B] 当前为 Klein 模式，Anima 层转换不适用（Klein 走专用文件加载器）；如需 28→40 层转换请使用标准模式。")
             # Klein/nunchaku 的 update_lora_params 每次调用都会先重置旧 LoRA。
             # 因此多 LoRA 必须先 compose 成一个 state dict，再一次性应用。
             try:
@@ -465,6 +525,8 @@ class MagicPowerLoraLoader:
                 print(f"   ℹ️ [Klein] No valid LoRA to apply")
 
         elif sdnq_mode == "sdnq" and is_sdnq:
+            if anima_active:
+                print(f"ℹ️ [Anima 2.9B] 当前为 SDNQ 模式，Anima 层转换不适用（SDNQ 走专用文件加载器）；如需 28→40 层转换请使用标准模式。")
             # SDNQ 模式 - 链末端：先全局卸载，再按合并列表顺序加载（与 comfyui-sdnq 每次运行先卸再加载一致）
             sdnq_success = False
             try:
@@ -585,6 +647,14 @@ class MagicPowerLoraLoader:
                 try:
                     # 使用缓存加载 LoRA
                     lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
+                    # Anima 2.9B：标准加载路径下，对 28 层 Anima LoRA 做内存暂存层转换。
+                    # remap 返回的是新 dict（张量仅引用不 clone），原缓存与磁盘文件均不改动。
+                    if anima_active and remap_lora_state_dict_safe is not None:
+                        lora, anima_status, anima_msg = remap_lora_state_dict_safe(lora, source_name=lora_name)
+                        if anima_status == STATUS_CONVERTED:
+                            print(f"   🔄 [Anima 2.9B] {anima_msg}")
+                        elif debug_enabled or anima_status == STATUS_ERROR:
+                            print(f"   ℹ️ [Anima 2.9B] {anima_msg}")
                     out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
                     print(f"   ✅ Applied: {lora_name}")
                 except Exception as e:

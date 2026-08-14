@@ -207,6 +207,15 @@ app.registerExtension({
                 kleinModeWidget.computeSize = () => [0, 0];
                 this._kleinModeWidget = kleinModeWidget;
 
+                // Anima 2.9B 模式设置（隐藏的 widget）：none 关闭 / auto 自动检测 40 层 Anima / anima 强制 28→40 层转换
+                let animaModeWidget = this.widgets.find(w => w.name === "anima_mode");
+                if (!animaModeWidget) {
+                    animaModeWidget = this.addWidget("text", "anima_mode", "none", () => {}, {});
+                }
+                animaModeWidget.hidden = true;
+                animaModeWidget.computeSize = () => [0, 0];
+                this._animaModeWidget = animaModeWidget;
+
                 // 初始化 SDNQ 模式（从属性中读取）
                 if (this.sdnqMode === undefined) {
                     this.sdnqMode = this.properties["sdnq_mode"] || "none";
@@ -220,6 +229,11 @@ app.registerExtension({
                 // 初始化 Klein 模式（从属性中读取）
                 if (this.kleinMode === undefined) {
                     this.kleinMode = this.properties["klein_mode"] || "auto";
+                }
+
+                // 初始化 Anima 2.9B 模式（从属性中读取）
+                if (this.animaMode === undefined) {
+                    this.animaMode = this.properties["anima_mode"] || "none";
                 }
 
                 // 初始化布局设置（权重控件样式等）
@@ -538,9 +552,19 @@ app.registerExtension({
                     this._kleinModeWidget.value = kleinMode;
                 }
 
+                // 更新 Anima 2.9B 模式 widget
+                if (!this._animaModeWidget) {
+                    this._animaModeWidget = this.widgets?.find(w => w.name === "anima_mode");
+                }
+                if (this._animaModeWidget) {
+                    const animaMode = this.animaMode || this.properties["anima_mode"] || "none";
+                    this._animaModeWidget.value = animaMode;
+                }
+
                 this.properties["lora_data_state"] = JSON.stringify(this.loraData);
                 this.properties["sdnq_mode"] = this.sdnqMode || "none";
                 this.properties["klein_mode"] = this.kleinMode || "auto";
+                this.properties["anima_mode"] = this.animaMode || "none";
                 // 与隐藏 widget、设置弹窗一致：始终用严格布尔，避免 "false" 字符串导致 !adaptiveMode 误判
                 this.adaptiveMode = adaptiveBool;
                 this.properties["adaptive_mode"] = adaptiveBool;
@@ -584,6 +608,11 @@ app.registerExtension({
                         kleinModeWidget.hidden = true;
                         kleinModeWidget.computeSize = () => [0, 0];
                     }
+                    const animaModeWidget = this.widgets.find(w => w.name === "anima_mode");
+                    if (animaModeWidget) {
+                        animaModeWidget.hidden = true;
+                        animaModeWidget.computeSize = () => [0, 0];
+                    }
                 }
                 
                 // 恢复 SDNQ 模式设置
@@ -608,6 +637,16 @@ app.registerExtension({
                     this.kleinMode = "auto";
                     this.properties["klein_mode"] = "auto";
                 }
+                // 恢复 Anima 2.9B 模式设置（优先隐藏 widget 的 widgets_values，其次 properties）
+                const animaWidgetVal = (this.widgets?.find(w => w.name === "anima_mode") || this._animaModeWidget)?.value;
+                if (animaWidgetVal !== undefined && animaWidgetVal !== "") {
+                    this.animaMode = String(animaWidgetVal);
+                } else if (this.properties["anima_mode"] !== undefined) {
+                    this.animaMode = String(this.properties["anima_mode"] || "none");
+                } else {
+                    this.animaMode = "none";
+                }
+                this.properties["anima_mode"] = this.animaMode;
 
                 // 恢复布局设置（从 properties 读取，确保刷新浏览器后仍生效）
                 const layoutDefaults = {
@@ -4730,6 +4769,8 @@ app.registerExtension({
                 const sdnqRaw = this.sdnqMode ?? this.properties["sdnq_mode"] ?? this._sdnqModeWidget?.value ?? "none";
                 const kleinRaw = this.kleinMode ?? this.properties["klein_mode"] ?? this._kleinModeWidget?.value ?? "auto";
                 const adaptiveRaw = this.adaptiveMode ?? this.properties["adaptive_mode"] ?? this._adaptiveModeWidget?.value;
+                const animaRaw = this.animaMode ?? this.properties["anima_mode"] ?? this._animaModeWidget?.value ?? "none";
+                const currentAnimaMode = String(animaRaw || "none").toLowerCase();
                 const currentSdnqMode = String(sdnqRaw || "none").toLowerCase();
                 const currentKleinMode = String(kleinRaw || "auto").toLowerCase();
                 const isAdaptive = parseAdaptive(adaptiveRaw);
@@ -4742,6 +4783,7 @@ app.registerExtension({
                 if (isAdaptive) primaryMode = "adaptive";
                 else if (kleinOn) primaryMode = "klein";
                 else if (sdnqOn) primaryMode = "sdnq";
+                else if (currentAnimaMode === "anima") primaryMode = "anima";
                 
                 // 创建遮罩层
                 const overlay = document.createElement("div");
@@ -4949,6 +4991,8 @@ app.registerExtension({
                     if (radioAdaptive.checked) {
                         radioSdnqSdnq.checked = false;
                         radioKleinKlein.checked = false;
+                        if (radioAnima) radioAnima.checked = false;
+                        if (typeof updateAnimaSelection === "function") updateAnimaSelection();
                         updateSdnqSelection();
                         updateKleinSelection();
                     }
@@ -4960,6 +5004,8 @@ app.registerExtension({
                     if (radioDefault.checked) {
                         radioSdnqSdnq.checked = false;
                         radioKleinKlein.checked = false;
+                        if (radioAnima) radioAnima.checked = false;
+                        if (typeof updateAnimaSelection === "function") updateAnimaSelection();
                         updateSdnqSelection();
                         updateKleinSelection();
                     }
@@ -5042,6 +5088,8 @@ app.registerExtension({
                         radioAdaptive.checked = false;
                         radioDefault.checked = false;
                         radioSdnqSdnq.checked = false;
+                        if (radioAnima) radioAnima.checked = false;
+                        if (typeof updateAnimaSelection === "function") updateAnimaSelection();
                         updateModeSelection();
                         updateSdnqSelection();
                     }
@@ -5120,11 +5168,13 @@ app.registerExtension({
 
                 radioSdnqSdnq.addEventListener("change", () => {
                     updateSdnqSelection();
-                    // 选择 SDNQ 模式时，取消默认模式和 Klein 模式
+                    // 选择 SDNQ 模式时，取消默认模式、Klein 模式和 Anima 模式
                     if (radioSdnqSdnq.checked) {
                         radioAdaptive.checked = false;
                         radioDefault.checked = false;
                         radioKleinKlein.checked = false;
+                        if (radioAnima) radioAnima.checked = false;
+                        if (typeof updateAnimaSelection === "function") updateAnimaSelection();
                         updateModeSelection();
                         updateKleinSelection();
                     }
@@ -5138,6 +5188,89 @@ app.registerExtension({
                 sdnqSection.appendChild(sdnqModeContainer);
 
                 settingsContainer.appendChild(sdnqSection);
+
+                // ========== Anima 2.9B LoRA 模式设置区域（与 Klein/SDNQ 互斥，仅标准加载路径生效） ==========
+                const animaSection = document.createElement("div");
+                animaSection.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+
+                const animaTitle = document.createElement("div");
+                animaTitle.textContent = "Anima 2.9B LoRA 模式";
+                animaTitle.style.cssText = `
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #fff;
+                    margin-bottom: 8px;
+                `;
+
+                const animaDesc = document.createElement("div");
+                animaDesc.textContent = "专用于 Anima 2.9B（40 层）模型加载旧版 28 层 Anima LoRA：标准加载路径下自动在内存中暂存重映射（28→40 层），不写盘、不改原文件、不新增文件";
+                animaDesc.style.cssText = `
+                    font-size: 12px;
+                    color: #aaa;
+                    margin-bottom: 12px;
+                    line-height: 1.5;
+                `;
+
+                const animaModeContainer = document.createElement("div");
+                animaModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+
+                // Anima 2.9B 模式（选中时激活，与 Klein/SDNQ 互斥）
+                const animaModeAnima = document.createElement("label");
+                animaModeAnima.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                const radioAnima = document.createElement("input");
+                radioAnima.type = "radio";
+                radioAnima.name = "anima_mode";
+                radioAnima.value = "anima";
+                radioAnima.checked = currentAnimaMode === "anima";
+                radioAnima.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                const labelAnima = document.createElement("div");
+                labelAnima.style.cssText = "flex: 1;";
+                const labelAnimaTitle = document.createElement("div");
+                labelAnimaTitle.textContent = "Anima 2.9B 模式";
+                labelAnimaTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                const labelAnimaDesc = document.createElement("div");
+                labelAnimaDesc.textContent = "标准加载路径下自动把 28 层 Anima LoRA 重映射为 40 层（仅对 Anima LoRA 生效，其他 LoRA 原样加载）";
+                labelAnimaDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelAnima.appendChild(labelAnimaTitle);
+                labelAnima.appendChild(labelAnimaDesc);
+                animaModeAnima.appendChild(radioAnima);
+                animaModeAnima.appendChild(labelAnima);
+
+                // Anima 模式选中状态更新
+                const updateAnimaSelection = () => {
+                    [animaModeAnima].forEach(mode => {
+                        const radio = mode.querySelector('input[type="radio"]');
+                        if (radio.checked) {
+                            mode.style.borderColor = "#9C27B0";
+                            mode.style.background = "#3a2a3a";
+                        } else {
+                            mode.style.borderColor = "transparent";
+                            mode.style.background = "#333";
+                        }
+                    });
+                };
+
+                radioAnima.addEventListener("change", () => {
+                    updateAnimaSelection();
+                    if (radioAnima.checked) {
+                        radioAdaptive.checked = false;
+                        radioDefault.checked = false;
+                        radioKleinKlein.checked = false;
+                        radioSdnqSdnq.checked = false;
+                        updateModeSelection();
+                        updateKleinSelection();
+                        updateSdnqSelection();
+                    }
+                });
+                updateAnimaSelection();
+
+                animaModeContainer.appendChild(animaModeAnima);
+
+                animaSection.appendChild(animaTitle);
+                animaSection.appendChild(animaDesc);
+                animaSection.appendChild(animaModeContainer);
+
+                settingsContainer.appendChild(animaSection);
 
                 // ========== 模式切换 Tab 内容 ==========
                 const modeTabContent = document.createElement("div");
@@ -5308,6 +5441,12 @@ app.registerExtension({
                     if (this._sdnqModeWidget) this._sdnqModeWidget.value = selectedSdnqMode;
                     if (this._kleinModeWidget) this._kleinModeWidget.value = selectedKleinMode;
                     if (this._adaptiveModeWidget) this._adaptiveModeWidget.value = String(isAdaptiveSelected);
+
+                    // Anima 2.9B 模式（独立于加载模式，仅标准加载路径生效）
+                    let selectedAnimaMode = scope.querySelector('input[name="anima_mode"]:checked')?.value || "none";
+                    this.animaMode = selectedAnimaMode;
+                    this.properties["anima_mode"] = selectedAnimaMode;
+                    if (this._animaModeWidget) this._animaModeWidget.value = selectedAnimaMode;
 
                     // 保存布局设置
                     const selectedStyle = scope.querySelector('input[name="mpl_weight_style"]:checked')?.value || "arrows";

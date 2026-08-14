@@ -82,7 +82,7 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
             select.innerHTML = "";
             const keys = Object.keys(ma_config.llm);
             if (keys.length === 0) {
-                ma_config.llm.Default = { base_url: "", api_key: "", model: "" };
+                ma_config.llm.Default = { base_url: "", api_key: "", model: "", connect_timeout: 15, read_timeout: 180, max_retries: 1 };
                 keys.push("Default");
             }
             if (!curLLMName || !ma_config.llm[curLLMName]) curLLMName = keys[0];
@@ -147,6 +147,39 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
         const urlInp = createInp("Base URL");
         const keyInp = createInp("API Key", "password");
 
+        const requestOptionsTitle = document.createElement("div");
+        requestOptionsTitle.textContent = "请求容错 / Request Resilience";
+        requestOptionsTitle.style.cssText =
+            "margin:14px 0 8px;color:#bbb;font-size:12px;font-weight:bold;border-top:1px solid #444;padding-top:12px;";
+        content.appendChild(requestOptionsTitle);
+        const timeoutRow = document.createElement("div");
+        timeoutRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;";
+        const createNumberInp = (label, min, max, fallback, title) => {
+            const wrap = document.createElement("label");
+            wrap.style.cssText = "display:flex;flex-direction:column;gap:5px;color:#888;font-size:11px;";
+            wrap.textContent = label;
+            const inp = document.createElement("input");
+            inp.type = "number";
+            inp.min = String(min);
+            inp.max = String(max);
+            inp.value = String(fallback);
+            inp.title = title;
+            inp.style.cssText =
+                "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;box-sizing:border-box;";
+            preventConflictLlm(inp);
+            wrap.appendChild(inp);
+            timeoutRow.appendChild(wrap);
+            return inp;
+        };
+        const connectTimeoutInp = createNumberInp("连接超时(秒)", 3, 120, 15, "DNS/TCP/TLS 建立连接的最长等待时间");
+        const readTimeoutInp = createNumberInp("读取超时(秒)", 30, 600, 180, "连接成功后等待模型生成响应的最长时间");
+        const maxRetriesInp = createNumberInp("重试次数", 0, 3, 1, "读取超时、临时 HTTP 错误或空响应时的最多重试次数");
+        content.appendChild(timeoutRow);
+        const requestHint = document.createElement("div");
+        requestHint.textContent = "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。";
+        requestHint.style.cssText = "color:#777;font-size:11px;line-height:1.5;margin-top:-4px;margin-bottom:10px;";
+        content.appendChild(requestHint);
+
         const modelDiv = document.createElement("div");
         modelDiv.style.marginBottom = "10px";
         modelDiv.innerHTML = `<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">Model Name</label>`;
@@ -185,7 +218,7 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
 
         mkBtn("➕ 新建配置", "#2196F3", () => {
             const newName = "New Profile " + (Object.keys(ma_config.llm).length + 1);
-            ma_config.llm[newName] = { base_url: "", api_key: "", model: "" };
+            ma_config.llm[newName] = { base_url: "", api_key: "", model: "", connect_timeout: 15, read_timeout: 180, max_retries: 1 };
             curLLMName = newName;
             void (async () => {
                 try {
@@ -211,6 +244,9 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
                         base_url: urlInp.value,
                         api_key: keyInp.value,
                         model: modelInp.value,
+                        connect_timeout: Math.max(3, Math.min(120, Number(connectTimeoutInp.value) || 15)),
+                        read_timeout: Math.max(30, Math.min(600, Number(readTimeoutInp.value) || 180)),
+                        max_retries: Math.max(0, Math.min(3, Number(maxRetriesInp.value) || 0)),
                     };
                     await saveMagicConfigPartial({ llm: ma_config.llm });
                     refreshList();
@@ -245,6 +281,9 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
                 urlInp.value = d.base_url || "";
                 keyInp.value = d.api_key || "";
                 modelInp.value = d.model || "";
+                connectTimeoutInp.value = d.connect_timeout ?? 15;
+                readTimeoutInp.value = d.read_timeout ?? 180;
+                maxRetriesInp.value = d.max_retries ?? 1;
             }
         };
         if (curLLMName) loadVals();
