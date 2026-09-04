@@ -7,6 +7,20 @@ import { api } from "../../scripts/api.js";
 
 export const MAGIC_PROMPT_REPLACE_TYPE = "MagicPromptReplace";
 
+export async function fetchLlmModels(rawUrl, apiKey, signal) {
+    const response = await api.fetchApi("/ma/llm_models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: rawUrl, api_key: apiKey }),
+        signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+    const models = Array.isArray(data?.models) ? data.models : [];
+    if (!models.length) throw new Error("已连接，但响应中没有可识别的模型列表");
+    return models;
+}
+
 export function preventConflictLlm(element) {
     element.addEventListener("pointerdown", (e) => e.stopPropagation());
     element.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -289,28 +303,16 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
         if (curLLMName) loadVals();
 
         searchBtn.onclick = async () => {
-            const url = urlInp.value.replace(/\/$/, "");
-            const key = keyInp.value;
+            const url = urlInp.value.trim(), key = keyInp.value.trim();
             if (!url || !key) return alert("请填写 Base URL 与 API Key");
-            searchBtn.textContent = "...";
+            searchBtn.textContent = "..."; searchBtn.disabled = true;
             try {
-                let ep = url;
-                if (!url.includes("/v1") && !url.includes("silicon") && !url.includes("deepseek")) ep += "/v1";
-                const res = await fetch(`${ep}/models`, { headers: { Authorization: `Bearer ${key}` } });
-                const data = await res.json();
+                const models = await fetchLlmModels(url, key);
                 dl.innerHTML = "";
-                if (data.data && Array.isArray(data.data)) {
-                    data.data.forEach((m) => {
-                        const o = document.createElement("option");
-                        o.value = m.id;
-                        dl.appendChild(o);
-                    });
-                    alert(`找到 ${data.data.length} 个模型`);
-                } else alert("已连接，但返回格式无法解析。");
-            } catch (e) {
-                alert("错误: " + e);
-            }
-            searchBtn.textContent = "🔍";
+                models.forEach((id) => { const o = document.createElement("option"); o.value = id; dl.appendChild(o); });
+                alert(`找到 ${models.length} 个模型`);
+            } catch (e) { alert("获取模型失败: " + (e?.message || e)); }
+            finally { searchBtn.disabled = false; searchBtn.textContent = "🔍"; }
         };
     };
 

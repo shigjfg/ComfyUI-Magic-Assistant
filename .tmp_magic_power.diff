@@ -1,0 +1,226 @@
+diff --git a/web/magic_power_lora.js b/web/magic_power_lora.js
+index a13f2c6..0540f5c 100644
+--- a/web/magic_power_lora.js
++++ b/web/magic_power_lora.js
+@@ -40,4 +40,112 @@ function mplDebugLog(...args) {
+ // 全局LoRA图片缓存（类似参考代码的loraImages）
+ let loraImagesCache = {};
++let loraNamesCache = null;
++let loraNamesOptionsCache = [];
++let loraNamesLoadPromise = null;
++
++function mplNormalizeLoraName(name) {
++    return String(name || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
++}
++
++function mplCollectConfiguredLoraNames(node) {
++    const names = [];
++    const collect = (items) => (items || []).forEach(item => {
++        if (item && item.enabled !== false && item.name) names.push(String(item.name));
++    });
++    collect(node?.loraData?.loras);
++    (node?.loraData?.folders || []).forEach(folder => collect(folder?.loras));
++
++    // Old workflows may not have lora_data_state yet; read the hidden widget
++    // as a compatibility fallback.
++    if (names.length === 0) {
++        try {
++            const raw = node?._stackWidget?.value ?? node?.widgets_values?.[2];
++            const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
++            collect(Array.isArray(parsed) ? parsed : parsed?.loras);
++        } catch (e) { /* ignore malformed legacy data */ }
++    }
++    return [...new Set(names.filter(Boolean))];
++}
++
++function mplUpdateMissingLoraState(node) {
++    if (!node || !loraNamesCache) return;
++    const missing = mplCollectConfiguredLoraNames(node)
++        .filter(name => !loraNamesCache.has(mplNormalizeLoraName(name)));
++    node._mplMissingLoras = missing;
++    node.setDirtyCanvas?.(true, true);
++}
++
++function mplSyncModelValidationWidgets(node) {
++    if (!node || node.type !== NODE_NAME) return;
++    const configured = mplCollectConfiguredLoraNames(node);
++    node._mplModelValidationWidgets ||= [];
++
++    configured.forEach((name, index) => {
++        const widgetName = "__mpl_lora_model_" + index;
++        let widget = node._mplModelValidationWidgets[index];
++        if (!widget) {
++            widget = node.addWidget("combo", widgetName, name, () => {}, {
++                values: loraNamesOptionsCache,
++                serialize: false,
++            });
++            widget.hidden = true;
++            widget.serialize = false;
++            widget.options.hidden = true;
++            widget.options.serialize = false;
++            widget.computeSize = () => [0, 0];
++            node._mplModelValidationWidgets[index] = widget;
++        }
++        widget.options.values = loraNamesOptionsCache;
++        widget.value = name;
++    });
++
++    // Disable stale validation widgets after a LoRA is deleted from the stack.
++    for (let index = configured.length; index < node._mplModelValidationWidgets.length; index++) {
++        const widget = node._mplModelValidationWidgets[index];
++        if (!widget) continue;
++        widget.options.values = [];
++        widget.value = "";
++    }
++}
++
++function mplRefreshOfficialMissingModels() {
++    if (!loraNamesCache) return;
++    if (typeof app?.refreshMissingModels !== "function") return;
++    void app.refreshMissingModels({ silent: false, reloadDefs: false }).catch(error => {
++        console.warn("[MagicPowerLora] 官方模型扫描失败:", error);
++    });
++}
++
++function mplRefreshMissingLoraStates() {
++    const nodes = app?.graph?._nodes || [];
++    nodes.forEach(node => {
++        if (node?.type === NODE_NAME || node?.constructor?.type === NODE_NAME) {
++            mplUpdateMissingLoraState(node);
++            mplSyncModelValidationWidgets(node);
++        }
++    });
++}
++
++async function loadLoraNameList() {
++    if (loraNamesLoadPromise) return loraNamesLoadPromise;
++    loraNamesLoadPromise = (async () => {
++        try {
++            const resp = await api.fetchApi("/ma/lora/list");
++            const data = await resp.json();
++            loraNamesOptionsCache = Array.isArray(data?.files) ? data.files : [];
++            loraNamesCache = new Set(loraNamesOptionsCache.map(mplNormalizeLoraName));
++            mplRefreshMissingLoraStates();
++            (app?.graph?._nodes || []).forEach(mplSyncModelValidationWidgets);
++            mplRefreshOfficialMissingModels();
++        } catch (e) {
++            // A failed scan must not mark every node missing.
++            loraNamesCache = null;
++            console.warn("[MagicPowerLora] LoRA文件列表检查失败:", e);
++        } finally {
++            loraNamesLoadPromise = null;
++        }
++    })();
++    return loraNamesLoadPromise;
++}
+ 
+ // 加载所有LoRA图片列表（类似参考代码的loadImageList）
+@@ -55,4 +163,6 @@ async function loadLoraImageList() {
+ // 初始化时加载图片列表
+ loadLoraImageList();
++// 同步加载工作流缺失检测所需的 LoRA 文件名列表
++loadLoraNameList();
+ 
+ // ---------------------------------------------------------------------------
+@@ -277,8 +387,18 @@ app.registerExtension({
+                         size[0] = Math.max(size[0], curMinW);
+                         size[1] = Math.max(size[1], MPL_MIN_H);
++                        // ComfyUI's DOM widget layout keeps an optional fixed
++                        // width. Clear the stale first-layout width so the
++                        // embedded UI always follows the actual node width.
++                        if (this._mplDomWidget) {
++                            this._mplDomWidget.width = size[0];
++                        }
+                     }
+                 };
+ 
+                 this.createDOMInterface();
++                // addDOMWidget registers its resize hook after this node's
++                // hook. Calling it once here keeps the DOM widget aligned
++                // when a saved workflow restores a different node size.
++                this._mplSyncDOMLayout?.();
+                 return r;
+             };
+@@ -360,5 +480,8 @@ app.registerExtension({
+ 
+                 // 使用 addDOMWidget 将 UI 添加到节点内部，自动跟随节点缩放
+-                this.addDOMWidget("mpl_ui", "div", this.embeddedDiv, { serialize: false });
++                this._mplDomWidget = this.addDOMWidget("mpl_ui", "div", this.embeddedDiv, {
++                    serialize: false,
++                    hideOnZoom: false,
++                });
+ 
+                 this.injectStyles();
+@@ -367,4 +490,22 @@ app.registerExtension({
+             };
+ 
++            nodeType.prototype._mplSyncDOMLayout = function() {
++                if (!this.embeddedDiv) return;
++                this.embeddedDiv.style.width = "100%";
++                this.embeddedDiv.style.maxWidth = "none";
++                this.embeddedDiv.style.boxSizing = "border-box";
++                if (this._mplDomWidget && this.size?.[0]) {
++                    this._mplDomWidget.width = this.size[0];
++                }
++                // The frontend positions DOM widgets from node.size during
++                // the resize callback; saved workflows do not always invoke
++                // that callback after configure().
++                if (this._mplDomWidget?.options?.afterResize) {
++                    this._mplDomWidget.options.afterResize.call(this._mplDomWidget, this);
++                }
++                this.onResize?.(this.size);
++                this.setDirtyCanvas?.(true, true);
++            };
++
+             // 🌟 2. 使用 addDOMWidget 后，不需要手动计算位置和大小，UI会自动跟随节点缩放
+ 
+@@ -569,4 +710,8 @@ app.registerExtension({
+                 this.adaptiveMode = adaptiveBool;
+                 this.properties["adaptive_mode"] = adaptiveBool;
++                // Re-run ComfyUI's official missing-model pipeline immediately
++                // after any LoRA list/widget change.
++                mplSyncModelValidationWidgets(this);
++                mplRefreshOfficialMissingModels();
+             };
+ 
+@@ -764,10 +909,21 @@ app.registerExtension({
+                 // 最后统一同步一次，确保 properties / 隐藏 widget 一致并写回工作流
+                 this.updateWidget?.();
++                this._mplSyncDOMLayout?.();
+                 
+-                setTimeout(() => { this.createDOMInterface(); this.renderEmbeddedList(); this._updateKleinBanner?.(); }, 100);
++                setTimeout(() => {
++                    this.createDOMInterface();
++                    this.renderEmbeddedList();
++                    this._updateKleinBanner?.();
++                    mplUpdateMissingLoraState(this);
++                    mplSyncModelValidationWidgets(this);
++                    this._mplSyncDOMLayout?.();
++                    void loadLoraNameList();
++                }, 100);
+                 return r;
+             };
+ 
++            const onNodeRemoved = nodeType.prototype.onRemoved;
+             nodeType.prototype.onRemoved = function() {
++                const r = onNodeRemoved ? onNodeRemoved.apply(this, arguments) : undefined;
+                 // 清理预览图和定时器
+                 if (this._previewTimeout) {
+@@ -779,7 +935,11 @@ app.registerExtension({
+                     this._previewDiv = null;
+                 }
++                // Removing a node can resolve its missing-LoRA error without
++                // touching any widget, so rescan the error record immediately.
++                setTimeout(() => mplRefreshOfficialMissingModels(), 0);
+                 // 额外清理所有预览图（防止遗漏）
+                 const previews = document.querySelectorAll('.mpl-lora-preview');
+                 previews.forEach(preview => preview.remove());
++                return r;
+             };
+ 
+@@ -5841,3 +6001,3 @@ app.registerExtension({
+         };
+     }
+-});
+\ No newline at end of file
++});

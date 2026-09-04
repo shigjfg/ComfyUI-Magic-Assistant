@@ -105,6 +105,49 @@ def _serialize_lora_chain(items):
 
 class MagicPowerLoraLoader:
     @classmethod
+    def VALIDATE_INPUTS(cls, lora_stack):
+        """Validate every enabled LoRA in the serialized stack before execution.
+
+        The visible LoRA picker is implemented by the frontend and stored in a
+        hidden JSON widget, so ComfyUI's normal combo-value validation cannot
+        detect files removed after a workflow was saved. Keep the validation at
+        the node boundary to avoid silently applying an empty LoRA.
+        """
+        try:
+            stack_data = json.loads(lora_stack) if isinstance(lora_stack, str) and lora_stack.strip() else []
+        except (TypeError, ValueError):
+            return "lora_stack contains invalid LoRA data"
+
+        if isinstance(stack_data, dict):
+            items = []
+            for folder in stack_data.get("folders", []):
+                if isinstance(folder, dict):
+                    items.extend(folder.get("loras") or [])
+            items.extend(stack_data.get("loras") or [])
+        elif isinstance(stack_data, list):
+            items = stack_data
+        else:
+            items = []
+
+        missing = []
+        for item in items:
+            if not isinstance(item, dict) or not item.get("enabled", True):
+                continue
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            path = folder_paths.get_full_path("loras", name)
+            if not path or not os.path.isfile(path):
+                missing.append(name)
+
+        if missing:
+            shown = ", ".join(missing[:8])
+            if len(missing) > 8:
+                shown += f", ... (+{len(missing) - 8})"
+            return f"Missing LoRA file(s): {shown}"
+        return True
+
+    @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {

@@ -11,6 +11,7 @@ import time
 import tempfile
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 from server import PromptServer
 from aiohttp import web
 
@@ -833,6 +834,64 @@ async def save_config(request):
     if "resolutions" in data: MagicUtils._save_user_data("resolutions.txt", data["resolutions"])
     if "logics" in data: MagicUtils._save_user_data("logic_rules.json", data["logics"])
     return web.json_response({"status": "success"})
+
+
+@PromptServer.instance.routes.post("/ma/llm_models")
+async def llm_models(request):
+    """通过 ComfyUI 后端探测 OpenAI 兼容服务，避免浏览器跨域/CORS 导致模型列表失败。"""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    raw_url = str(data.get("base_url") or "").strip().rstrip("/")
+    api_key = str(data.get("api_key") or "").strip()
+    if not raw_url or not api_key:
+        return web.json_response({"error": "Base URL 与 API Key 不能为空"}, status=400)
+    endpoint = raw_url
+    endpoint = re.sub(r"/(?:chat/completions|models)$", "", endpoint, flags=re.IGNORECASE).rstrip("/")
+    if not re.search(r"/v\d+(?:beta)?(?:/|$)", endpoint, flags=re.IGNORECASE):
+        endpoint += "/v1"
+    endpoint += "/models"
+
+    def _fetch():
+        response = requests.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
+            timeout=(15, 60),
+        )
+        body = response.text or ""
+        try:
+            payload = response.json() if body else {}
+        except ValueError:
+            payload = None
+        if response.status_code < 200 or response.status_code >= 300:
+            detail = re.sub(r"\s+", " ", body)[:240]
+            raise RuntimeError(f"HTTP {response.status_code}: {detail}" if detail else f"HTTP {response.status_code}")
+        raw_models = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(raw_models, list) and isinstance(payload, dict):
+            raw_models = payload.get("models")
+        if not isinstance(raw_models, list):
+            raise RuntimeError("响应中没有可识别的模型列表")
+        models = []
+        for item in raw_models:
+            if isinstance(item, str):
+                model_id = item
+            elif isinstance(item, dict):
+                model_id = item.get("id") or item.get("name") or item.get("model")
+            else:
+                model_id = None
+            if model_id and model_id not in models:
+                models.append(str(model_id))
+        if not models:
+            raise RuntimeError("响应中没有可识别的模型列表")
+        return models
+
+    try:
+        loop = asyncio.get_running_loop()
+        models = await loop.run_in_executor(None, _fetch)
+        return web.json_response({"models": models})
+    except Exception as exc:
+        return web.json_response({"error": str(exc)[:500]}, status=502)
 
 
 # --- 统一设置读写（存 userdata/settings.txt，可扩展） ---
@@ -2646,9 +2705,9 @@ async def check_update(request):
         
         if test_mode:
             # 测试模式：返回模拟的更新数据
-            current_version = "1.4.1"
+            current_version = "1.4.2"
             # 模拟一个更新的版本
-            latest_version = "1.4.1"
+            latest_version = "1.4.2"
             has_update = True
             
             # 读取本地 README 文件作为测试数据
@@ -2681,7 +2740,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.4.1"  # Current version / 当前版本号
+        current_version = "1.4.2"  # Current version / 当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:
@@ -2756,7 +2815,7 @@ async def check_update(request):
         })
     except Exception as e:
         return web.json_response({
-            "current_version": "1.4.1",
+            "current_version": "1.4.2",
             "latest_version": None,
             "has_update": False,
             "update_info": "",

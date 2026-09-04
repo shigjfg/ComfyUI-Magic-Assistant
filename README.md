@@ -16,7 +16,29 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-08-15**
+> Latest Update / 最新更新：**2026-09-04**
+
+> **V1.4.2 版本介绍 / Version Introduction** 2026-09-04
+>
+> 1. **🔍 新增**: Magic Power LoRA Loader - 工作流缺失 LoRA 检测
+>    * 打开工作流或刷新 LoRA 列表时，会检查节点中已启用的 LoRA 文件是否仍存在
+>    * 如果 LoRA 被移动或删除，ComfyUI 会明确标记缺失文件，运行前即可发现问题，避免工作流悄悄跳过 LoRA
+>    * 删除 LoRA、修改 LoRA 列表后会自动重新检查；旧工作流也能正常识别
+>    * **New**: Magic Power LoRA Loader now checks whether enabled LoRA files referenced by a workflow still exist
+>    * Moved or deleted LoRAs are clearly marked by ComfyUI before execution, preventing a workflow from silently skipping them
+>    * The check refreshes automatically after editing the LoRA list, deleting files, or opening an older workflow
+>
+> 2. **🔧 优化**: Magic Power LoRA Loader - 节点界面显示与恢复
+>    * 修复工作流重新打开后，内嵌 LoRA 管理界面宽度没有跟随节点的问题
+>    * 调整节点大小、使用滑条权重模式或恢复旧工作流时，控件现在会保持完整显示，不容易被裁切
+>    * **Improved**: Fixed the embedded LoRA manager width after reopening workflows
+>    * The controls now stay fully visible when resizing the node, using slider weights, or restoring an older workflow
+>
+> 3. **🔧 更新**: LLM 模型列表获取与运行中断体验
+>    * 「管理 LLM」中的模型搜索改由 ComfyUI 后端代为连接服务商，减少浏览器跨域导致的获取失败，并兼容更多 OpenAI 兼容接口的返回格式
+>    * Magic Multi-Function AI Prompt Replace 在等待网络响应或重试时，会显示进度，并可使用 ComfyUI 的停止按钮及时中断，不必一直等待超时
+>    * **Improved**: LLM model discovery now uses the ComfyUI backend, reducing browser CORS failures and supporting more OpenAI-compatible response formats
+>    * Magic Multi-Function AI Prompt Replace reports progress while waiting or retrying and can be stopped with ComfyUI's Stop button instead of waiting for the timeout
 
 > **V1.4.1 版本介绍 / Version Introduction** 2026-08-15
 >
@@ -71,6 +93,9 @@
 >    * **ComfyUI 0.29.0 or later**: Please update all node files to ensure the new API adaptations work correctly
 >    * **Earlier than ComfyUI 0.29.0**: Nodes migrated to the new APIs in this release are not supported; if you only need the new Magic Power LoRA Loader interface features, update `nodes/magic_power_lora.py` and `web/magic_power_lora.js` separately to avoid API incompatibilities in other nodes
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.3.9 版本介绍 / Version Introduction** 2026-07-04
 >
 > 1. **🔧 更新**: Magic Nunchaku FLUX.2 Klein Loader - 新增 klein4b 模型支持与下载链接 ⭐
@@ -98,9 +123,6 @@
 >    * Since ComfyUI officially supports LoRA application for INT8 models, INT8 models can now be used directly in the default mode
 >    * Simpler than the previous dedicated INT8 mode - no need to manually switch modes
 >    * Follows ComfyUI's official LoRA loading path (`comfy.sd.load_lora_for_models`), automatically adapting to INT8/FP8/INT4 quantized weights
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.8 版本介绍 / Version Introduction** 2026-06-25
 >
@@ -670,20 +692,21 @@
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **Input File Manager**: A visual gallery to manage **your uploaded images** and **saved history** in the `input` folder. No more digging through dropdown lists!
-* **Seamless Editing**: One-click to send any user image to Photopea for editing (Photoshop-like experience) and save it back instantly.
-* **Dual Path Support**: Automatically detects and manages files in both the root `input/` folder (uploads) and the `magic_photopea/` folder (edits).
-* **Batch Management**: Features **Multi-Select**, **Batch Delete**, and **Rename** to keep your input directory clean and organized.
 * **输入文件管理**: 一个可视化的文件管理器，专门用于管理**您自己上传的图片**以及**修图保存的历史记录**。彻底告别在下拉菜单里"盲找"文件的痛苦。
 * **无缝修图**: 一键将您导入的图片发送到 Photopea (类PS体验) 进行编辑，保存后自动同步，无需下载上传。
 * **双路径支持**: 智能识别并管理 `input/` 根目录（用户上传）和 `magic_photopea/` 目录（编辑存档）下的所有文件。
 * **批量管理**: 提供**多选删除**、**批量清理**和**重命名**功能，帮您把杂乱的 input 文件夹整理得井井有条。
-* **Fixed**: Compatibility with official Mask Editor (right-click -> Save to node now works perfectly).
-* **Improved**: Gallery now hides temporary `clipspace` files for a cleaner view.
-* **New**: Added "🧹 Clear Cache" button to remove temporary mask files.
 * **修复**: 完美兼容官方遮罩编辑器（右键绘画保存即生效）。
 * **优化**: 图库列表自动过滤 clipspace 临时文件，更加清爽。
 * **新增**: "🧹 清空缓存"按钮，一键清理遮罩临时文件。
+
+* **Input File Manager**: A visual gallery to manage **your uploaded images** and **saved history** in the `input` folder. No more digging through dropdown lists!
+* **Seamless Editing**: One-click to send any user image to Photopea for editing (Photoshop-like experience) and save it back instantly.
+* **Dual Path Support**: Automatically detects and manages files in both the root `input/` folder (uploads) and the `magic_photopea/` folder (edits).
+* **Batch Management**: Features **Multi-Select**, **Batch Delete**, and **Rename** to keep your input directory clean and organized.
+* **Fixed**: Compatibility with official Mask Editor (right-click -> Save to node now works perfectly).
+* **Improved**: Gallery now hides temporary `clipspace` files for a cleaner view.
+* **New**: Added "🧹 Clear Cache" button to remove temporary mask files.
 
 </details>
 
@@ -693,18 +716,23 @@
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **LLM Powered**: Seamlessly integrates with OpenAI-compatible APIs to rewrite or optimize your prompts.
-* **Role-Play & Rules**: Built-in system prompts allow the AI to act as a "Prompt Expert", "Translator", or any custom role you define.
-* **One-Click Presets**: Comes with handy rules (e.g., "Fix Grammar", "Convert to Tags") stored locally.
 * **AI 驱动**: 无缝对接 OpenAI 格式接口，智能润色或重写提示词。
 * **角色扮演**: 内置多种预设，让 AI 化身"提示词专家"或"翻译官"。
 * **本地预设**: 支持保存和一键调用常用规则。
 * **LLM 调用更稳（V1.4.1）**: 重写请求层，支持可配置超时与自动重试（退避策略）；网络抖动或服务商临时错误不再一失败就中断。
 * **报错更清晰安全**: 失败时返回带请求编号的错误，后台日志不再打印 API Key 与完整提示词。
 * **请求容错设置（V1.4.1）**: LLM 配置（及节点设置弹窗）新增连接超时、读取超时、重试次数三项，慢速模型可调大读取超时。
+* **模型列表获取更稳定**: 点击搜索模型时由 ComfyUI 后端连接 OpenAI 兼容服务，减少浏览器跨域失败，并自动识别常见的模型列表返回格式。
+* **可随时停止等待**: LLM 请求和重试等待期间会显示进度，点击 ComfyUI「停止」即可中断，不必等到网络超时。
+
+* **LLM Powered**: Seamlessly integrates with OpenAI-compatible APIs to rewrite or optimize your prompts.
+* **Role-Play & Rules**: Built-in system prompts allow the AI to act as a "Prompt Expert", "Translator", or any custom role you define.
+* **One-Click Presets**: Comes with handy rules (e.g., "Fix Grammar", "Convert to Tags") stored locally.
 * **More robust LLM calls (V1.4.1)**: Rewritten request layer with configurable timeouts and automatic retries (backoff); transient errors no longer abort the run.
 * **Clearer & safer errors**: Failures return an error with a request ID; backend logs no longer print API keys or full prompts.
 * **Request Resilience settings (V1.4.1)**: LLM config (and node settings modal) adds Connect Timeout, Read Timeout, and Max Retries; raise Read Timeout for slow models.
+* **More reliable model discovery**: Model search is routed through the ComfyUI backend to reduce browser CORS failures and recognize common OpenAI-compatible response formats.
+* **Interruptible waiting**: Progress is reported during LLM requests and retries, and ComfyUI's Stop button can cancel the wait immediately.
 
 </details>
 
@@ -714,12 +742,13 @@
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **Exclusive "Magic Script"**: Write pseudo-code directly in the node! (e.g., `IF w > 1024 RETURN 1024, h`).
-* **Auto Variables**: Automatically detects input image/latent width (`w`) and height (`h`).
-* **Complex Made Simple**: Handles math (`+ - * /`), comparisons (`> < =`), and logic (`AND/OR`) in **ONE** node.
 * **独家"魔法脚本"**: 直接在节点内编写伪代码！支持 `IF...RETURN` 逻辑。
 * **智能变量**: 自动识别输入图片或 Latent 的宽 (`w`) 高 (`h`)。
 * **化繁为简**: 一个节点搞定所有数学运算、大小比较和布尔逻辑。
+
+* **Exclusive "Magic Script"**: Write pseudo-code directly in the node! (e.g., `IF w > 1024 RETURN 1024, h`).
+* **Auto Variables**: Automatically detects input image/latent width (`w`) and height (`h`).
+* **Complex Made Simple**: Handles math (`+ - * /`), comparisons (`> < =`), and logic (`AND/OR`) in **ONE** node.
 
 </details>
 
@@ -729,12 +758,13 @@
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **Smart "Long Edge" Mode**: Set the target size (e.g., 1024), and it automatically calculates the other side to maintain the aspect ratio.
-* **Multiple Methods**: Supports all standard resizing methods (nearest, bilinear, bicubic, lanczos, etc.).
-* **Presets**: Built-in resolutions for SD1.5, SDXL, 2K, and 4K.
 * **长边机制**: 设定长边数值（如 1024），自动计算短边以保持比例。
 * **多种算法**: 支持所有主流缩放插值算法。
 * **常用预设**: 内置 SD1.5、SDXL 以及 2K/4K 等常用分辨率。
+
+* **Smart "Long Edge" Mode**: Set the target size (e.g., 1024), and it automatically calculates the other side to maintain the aspect ratio.
+* **Multiple Methods**: Supports all standard resizing methods (nearest, bilinear, bicubic, lanczos, etc.).
+* **Presets**: Built-in resolutions for SD1.5, SDXL, 2K, and 4K.
 
 </details>
 
@@ -744,16 +774,17 @@
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **Group Management**: Quickly enable/disable/bypass multiple groups of nodes.
-* **One-Click Toggle**: Switch entire workflows on or off with a single boolean input.
-* **Click-to-Refresh**: Update button changed to click-to-refresh functionality for better control.
-* **Real-time Updates**: Option to enable real-time node group updates in property panel.
-* **Auto-Save Pinning**: Node group pinning information is automatically saved and persists after reopening workflows.
 * **群组管理**: 快速启用、禁用或绕过指定节点组。
 * **一键开关**: 通过简单的布尔值输入，控制整条工作流的通断。
 * **点击刷新**: 更新按钮改为点击刷新功能，提供更好的控制体验。
 * **实时更新**: 在属性面板可以开启实时更新节点组功能。
 * **自动保存固定**: 节点组固定信息会自动保存，重开工作流后无需重新固定。
+
+* **Group Management**: Quickly enable/disable/bypass multiple groups of nodes.
+* **One-Click Toggle**: Switch entire workflows on or off with a single boolean input.
+* **Click-to-Refresh**: Update button changed to click-to-refresh functionality for better control.
+* **Real-time Updates**: Option to enable real-time node group updates in property panel.
+* **Auto-Save Pinning**: Node group pinning information is automatically saved and persists after reopening workflows.
 
 </details>
 
@@ -818,6 +849,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **格式化详细设置**: 对应 💫 格式化按钮，调用 `/ma/format_prompt`。清理逗号、修复括号始终执行；高级选项：下划线、权重语法、括号转义等可独立开启
 * **翻译功能**: 与「管理 LLM」「多功能AI提示词替换」共用 `userdata/llm_settings.txt`；支持正常/强制翻译模式
 * **LLM 请求容错（V1.4.1）**: 「管理 LLM」对话框新增连接超时、读取超时、重试次数三项，与多功能AI提示词替换共用同一配置，可统一管理 LLM 容错参数
+* **模型列表获取**: 「管理 LLM」的模型搜索通过 ComfyUI 后端连接服务商，减少浏览器跨域问题，并兼容常见模型列表格式
 * **补全与历史**: 补全列表条数上限、运行历史保留条数、LLM 翻译缓存条数
 
 * **Editor Display**: Toggle visibility of toolbar buttons; **enable/disable autocomplete popup** (closing it hides the dropdown while typing in the editor; tag search and Edit Tags autocomplete are unaffected)
@@ -825,6 +857,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Format Options**: Clean commas, fix brackets (always); advanced: underscores, weight syntax, bracket escaping
 * **Translation**: Shares `userdata/llm_settings.txt` with Manage LLM and AI Prompt Replace; normal/force translate modes
 * **LLM Request Resilience (V1.4.1)**: The "Manage LLM" dialog adds Connect Timeout, Read Timeout, and Max Retries, sharing the same config as AI Prompt Replace for centralized resilience control
+* **Model Discovery**: The "Manage LLM" model search uses the ComfyUI backend to reduce browser CORS issues and supports common model-list formats
 * **Completion & History**: Autocomplete limit, history max entries, LLM cache size
 
 #### 核心功能速览 / Feature Summary
@@ -850,22 +883,6 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **Visual Management**: Beautiful gallery interface to browse and manage all your LoRAs. No more scrolling through long dropdown lists!
-* **Folder Organization**: Organize LoRAs into custom folders for better categorization and management.
-* **Drag & Drop Sorting**: Intuitive drag-and-drop interface to reorder LoRAs and folders. Supports both upward and downward insertion based on mouse position.
-* **Preview Images**: Automatic preview image detection and display for each LoRA.
-* **Tag System**: Add custom tags to LoRAs for easy searching and filtering.
-* **Batch Operations**: Enable/disable multiple LoRAs at once, adjust weights, and manage your entire LoRA collection efficiently.
-* **Smart Preview Detection**: Automatically finds preview images in `magicloradate` subdirectory or same directory as LoRA files.
-* **Folder Toggle**: One-click toggle button to enable/disable all LoRAs in a folder.
-* **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
-* **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
-* **LoRA Detection**: New LoRA detection feature in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs.
-* **INT8 Mode Support (Removed in V1.3.9)**: Previously supported INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Since ComfyUI officially added native INT8 support in `model_patcher.py`, the dedicated INT8 mode has been removed; **the default mode (Standard LoRA) now automatically handles INT8/FP8/INT4 quantized models** without any manual mode switching. Supported the latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
-* **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器).
-* **Klein Model Support**: Added LoRA loading support for Klein models (Nunchaku FLUX.2 Klein). Switch to Klein mode in node settings to enable LoRA support for Klein models. Enable adaptive mode for automatic model type detection.
-* **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
-* **Customizable Weight Controls (New in V1.4.0)**: In Settings → Interface Settings, switch between the original compact arrow buttons and a horizontal slider for adjusting each LoRA's weight. Slider mode supports configurable step size, minimum/maximum values, and width; it can optionally show a directly editable current value and snap to zero within ±0.02. The node automatically expands its minimum width so the slider controls remain fully visible.
 * **可视化化管理**: 精美的图库界面，浏览和管理所有 LoRA，告别下拉菜单的繁琐操作。
 * **文件夹分类**: 将 LoRA 整理到自定义文件夹中，实现更好的分类管理。
 * **拖拽排序**: 直观的拖拽排序界面，支持根据鼠标位置向上或向下插入，轻松调整 LoRA 和文件夹的顺序。
@@ -877,12 +894,33 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
 * **LoRA 检测功能**: LoRA 添加窗口新增 LoRA 检测功能，可以根据路径选择全部 LoRA 进行 LoRA 的查重和检测更新。
+* **工作流缺失 LoRA 检测**: 打开工作流或刷新 LoRA 列表时，自动检查已启用的 LoRA 文件是否存在；缺失文件会被 ComfyUI 标记，避免运行时悄悄跳过 LoRA。编辑列表、删除文件或恢复旧工作流后会自动重新检查。
+* **界面尺寸恢复优化**: 重新打开工作流、调整节点大小或使用权重滑条时，内嵌 LoRA 管理界面会自动跟随节点宽度，控件保持完整显示。
 * **INT8 模式支持（V1.3.9 已移除）**: 之前支持 INT8 量化模型的 LoRA 加载，兼容 [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8)。由于 ComfyUI 官方已在 `model_patcher.py` 中原生支持 INT8 模型，**强力 LoRA 加载器的「默认模式（标准 LoRA）」现已可直接处理 INT8/FP8/INT4 等量化模型**，无需任何手动切换。曾支持的最新 Flux Klein 9B INT8 模型（如 [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)）现在使用默认模式即可正确加载。曾包含静态模式（Stochastic）和动态模式（Dynamic）两种加载方式，现已合并到默认模式。
 * **SDNQ 模型支持**: 新增对 SDNQ 量化模型的 LoRA 加载支持。在节点设置中切换为 SDNQ 模式即可与 [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器) 配合使用。
 * **Klein 模型支持**: 新增对 Klein 模型（Nunchaku FLUX.2 Klein）的 LoRA 加载支持。在节点设置中切换为 Klein 模式即可启用 Klein 模型的 LoRA 支持。开启自适应模式可自动检测模型类型。
 * **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
 * **自定义权重调节方式（V1.4.0 新增）**: 在“设置 → 界面设置”中，可为每个 LoRA 的权重调节切换原有的紧凑箭头按钮或水平滑条。滑条模式支持自定义步长、最小值、最大值及宽度，可选择显示并直接编辑当前数值，也可开启 ±0.02 范围内自动吸附到 0；节点会自动扩展最小宽度，保证滑条控件完整显示。
 * **Anima 2.9B 模式（V1.4.1 新增）**: 新增 Anima 2.9B（40 层）LoRA 模式。在节点设置中开启后，可在 Anima 2.9B（40 层）模型上加载旧版 28 层 Anima LoRA；重映射在内存中完成（28→40 层），不写盘、不改原文件、不生成副本。仅标准加载路径生效（Klein / SDNQ 模式走专用加载器，不受影响）；非 Anima 或已是 40 层的 LoRA 原样加载。
+
+* **Visual Management**: Beautiful gallery interface to browse and manage all your LoRAs. No more scrolling through long dropdown lists!
+* **Folder Organization**: Organize LoRAs into custom folders for better categorization and management.
+* **Drag & Drop Sorting**: Intuitive drag-and-drop interface to reorder LoRAs and folders. Supports both upward and downward insertion based on mouse position.
+* **Preview Images**: Automatic preview image detection and display for each LoRA.
+* **Tag System**: Add custom tags to LoRAs for easy searching and filtering.
+* **Batch Operations**: Enable/disable multiple LoRAs at once, adjust weights, and manage your entire LoRA collection efficiently.
+* **Smart Preview Detection**: Automatically finds preview images in `magicloradate` subdirectory or same directory as LoRA files.
+* **Folder Toggle**: One-click toggle button to enable/disable all LoRAs in a folder.
+* **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
+* **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
+* **LoRA Detection**: New LoRA detection feature in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs.
+* **Workflow missing-LoRA detection**: When a workflow is opened or the LoRA list is refreshed, enabled LoRA files are checked automatically. Missing files are marked by ComfyUI instead of being silently skipped, and the check refreshes after editing the list, deleting files, or restoring an older workflow.
+* **Improved UI size restoration**: After reopening a workflow, resizing the node, or using slider weight controls, the embedded LoRA manager follows the node width so controls remain fully visible.
+* **INT8 Mode Support (Removed in V1.3.9)**: Previously supported INT8 quantized model LoRA loading compatible with [ComfyUI-Flux2-INT8](https://github.com/BobJohnson24/ComfyUI-Flux2-INT8). Since ComfyUI officially added native INT8 support in `model_patcher.py`, the dedicated INT8 mode has been removed; **the default mode (Standard LoRA) now automatically handles INT8/FP8/INT4 quantized models** without any manual mode switching. Supported the latest Flux Klein 9B INT8 models (e.g., [FLUX.2-klein-9B-INT8-Comfy](https://huggingface.co/bertbobson/FLUX.2-klein-9B-INT8-Comfy)). Two loading modes: Static (Stochastic) and Dynamic. Static mode provides higher precision with stochastic rounding, suitable for single or few LoRAs. Dynamic mode enables runtime composition of multiple LoRAs, ideal for frequent switching scenarios.
+* **SDNQ Model Support**: Added LoRA loading support for SDNQ quantized models. Switch to SDNQ mode in node settings to use with SDNQ models from [Magic SDNQ Loader](#9-magic-sdnq-loader--magic-sdnq-k-sampler-sdnq-模型加载器与-k-采样器).
+* **Klein Model Support**: Added LoRA loading support for Klein models (Nunchaku FLUX.2 Klein). Switch to Klein mode in node settings to enable LoRA support for Klein models. Enable adaptive mode for automatic model type detection.
+* **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
+* **Customizable Weight Controls (New in V1.4.0)**: In Settings → Interface Settings, switch between the original compact arrow buttons and a horizontal slider for adjusting each LoRA's weight. Slider mode supports configurable step size, minimum/maximum values, and width; it can optionally show a directly editable current value and snap to zero within ±0.02. The node automatically expands its minimum width so the slider controls remain fully visible.
 * **Anima 2.9B Mode (New in V1.4.1)**: Added Anima 2.9B (40-layer) LoRA mode. Enable it in node settings to load legacy 28-layer Anima LoRAs on Anima 2.9B (40-layer) models; remapping happens in memory (28→40 layers) without writing to disk or modifying original files. Applies only to the standard loading path (Klein / SDNQ modes use dedicated loaders and are unaffected); non-Anima or already-40-layer LoRAs load unchanged.
 
 </details>
@@ -893,18 +931,19 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **Triple Output**: Outputs width (INT), height (INT), and latent (LATENT) simultaneously / 同时输出宽(INT)、高(INT)和潜在空间(LATENT)
-* **Preset System**: Dropdown menu with predefined resolutions, shares dimensions data with Magic Multi-Function Image Resize / 预设分辨率下拉菜单，与多功能图像缩放节点共享分辨率数据
-* **One-Click Swap**: Simple button to exchange width and height values instantly / 一键交换按钮，快速交换宽高值
-* **Batch Management**: Supports batch size control for latent output / 潜在空间输出支持批次管理
-* **Preset Management**: Custom preset management window to add/delete resolutions / 预设管理窗口，支持添加/删除自定义分辨率
-* **Simplified Logic**: Preset directly fills input fields, swap button exchanges values, output uses current input values / 简化逻辑：预设直接填充输入框，交换按钮交换值，输出使用当前输入值
 * **三重输出**: 同时输出宽(INT)、高(INT)和潜在空间(LATENT)
 * **预设系统**: 预设分辨率下拉菜单，与多功能图像缩放节点共享分辨率数据
 * **一键交换**: 简单的交换按钮，快速交换宽高值
 * **批次管理**: 潜在空间输出支持批次管理
 * **预设管理**: 自定义预设管理窗口，支持添加/删除分辨率
 * **简化逻辑**: 预设直接填充输入框，交换按钮交换值，输出使用当前输入值
+
+* **Triple Output**: Outputs width (INT), height (INT), and latent (LATENT) simultaneously
+* **Preset System**: Dropdown menu with predefined resolutions, shares dimensions data with Magic Multi-Function Image Resize
+* **One-Click Swap**: Simple button to exchange width and height values instantly
+* **Batch Management**: Supports batch size control for latent output
+* **Preset Management**: Custom preset management window to add/delete resolutions
+* **Simplified Logic**: Preset directly fills input fields, swap button exchanges values, output uses current input values
 
 </details>
 
@@ -914,16 +953,17 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 ><details>
 ><summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 >
->* **Three Optimization Modes**: Choose from TeaCache, FBCache, or Both modes to accelerate your image generation. Both mode combines both techniques for maximum speed.
->* **Easy Configuration**: Simple settings dialog to adjust cache parameters without diving into complex code.
->* **Wide Model Support**: Works with FLUX, SDXL, SD1.5, Anima, and many other popular models.
->* **Performance Boost**: Typically achieves 1.5x to 3x faster generation speed while maintaining image quality.
->* **Smart Caching**: Automatically skips redundant calculations by reusing cached results when appropriate.
 >* **三种优化模式**: 可选择 TeaCache、FBCache 或 Both 模式来加速图片生成。Both 模式同时使用两种技术，速度最快。
 >* **简单配置**: 通过设置弹窗轻松调整缓存参数，无需修改复杂代码。
 >* **广泛支持**: 支持 FLUX、SDXL、SD1.5、Anima 等多种主流模型。
 >* **性能提升**: 通常可实现 1.5 倍到 3 倍的生成加速，同时保持图片质量。
 >* **智能缓存**: 自动跳过重复计算，在合适的时候复用缓存结果，节省时间。
+>
+>* **Three Optimization Modes**: Choose from TeaCache, FBCache, or Both modes to accelerate your image generation. Both mode combines both techniques for maximum speed.
+>* **Easy Configuration**: Simple settings dialog to adjust cache parameters without diving into complex code.
+>* **Wide Model Support**: Works with FLUX, SDXL, SD1.5, Anima, and many other popular models.
+>* **Performance Boost**: Typically achieves 1.5x to 3x faster generation speed while maintaining image quality.
+>* **Smart Caching**: Automatically skips redundant calculations by reusing cached results when appropriate.
 >
 >#### 三种模式说明 / Three Modes Explained
 >
@@ -1124,7 +1164,9 @@ At 1024×1536 or below, single image editing or text-to-image can complete in ab
 
 Google Drive 下载地址 / Download: https://drive.google.com/file/d/10XsVq6m_HR5KjHcQP4jDt0h-GhqbacnN/view?usp=drive_link
 
-可直接下载图片导入 ComfyUI 使用。You can download the image and import into ComfyUI.
+可直接下载图片导入 ComfyUI 使用。
+
+You can download the image and import into ComfyUI.
 
 <img width="5998" height="2825" alt="SDNQ Inpainting + Text-to-Image Switch Workflow" src="https://github.com/user-attachments/assets/4e0b8b34-8deb-4b30-b965-254daf01c904" />
 
@@ -1139,12 +1181,13 @@ Google Drive 下载地址 / Download: https://drive.google.com/file/d/10XsVq6m_H
 #### ⚠️ 注意事项 / Notes
 
 * **✅ 懒加载机制 / Lazy Loading**: SDNQ 相关节点采用真正的懒加载模式，仅在需要时导入依赖。未安装 SDNQ 时插件可正常加载，其他所有功能不受影响。
-* **Lazy Loading**: SDNQ nodes use true lazy loading - dependencies are only imported when needed. When SDNQ is not installed, the plugin loads normally without errors.
 * **✅ 局部重绘 / Inpainting**：SDNQ K 采样器已适配局部重绘，支持所有 SDNQ 模型（含 Flux2Klein）。使用 ComfyUI 的 **InpaintModelConditioning** + **SetLatentNoiseMask** 准备数据即可；4D latent 模型采用 latent 空间混合，3D packed 模型（如 Flux/Flux2）采用像素空间 composite。下方附有局部重绘示例工作流。
-* **Inpainting supported**: Use **InpaintModelConditioning** + **SetLatentNoiseMask**; 4D models use latent blending, 3D packed models use pixel-space composite. Example workflow below.
 * **🎲 采样模式切换 / Sampler mode**: 可选「仅 SDNQ」或「SDNQ + KSampler」。在「SDNQ + KSampler」模式下，根据接入模型自动选择采样方式（SDNQ 模型走 SDNQ 逻辑，其他模型走官方 KSampler），可当作通用 K 采样器使用。
-* **Sampler mode**: "SDNQ" (SDNQ only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler).
 * **当前仅支持图像**：因配置限制，暂未适配视频模型，仅支持图像生成和图像编辑模型。视频模型适配将在后续版本考虑。
+
+* **Lazy Loading**: SDNQ nodes use true lazy loading - dependencies are only imported when needed. When SDNQ is not installed, the plugin loads normally without errors.
+* **Inpainting supported**: Use **InpaintModelConditioning** + **SetLatentNoiseMask**; 4D models use latent blending, 3D packed models use pixel-space composite. Example workflow below.
+* **Sampler mode**: "SDNQ" (SDNQ only) or "SDNQ + KSampler" (auto-detect; non-SDNQ models use official KSampler).
 * **Image models only**: Video model support is not yet implemented; currently supports image generation and image editing models only.
 
 > **⚠️ 注意 / Note**: 原本的简易文生图和图片编辑工作流图片已无法下载，请使用上方更新的工作流图片。旧的工作流图片已移除。

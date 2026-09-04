@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import threading
 import time
 import uuid
 from urllib.parse import urlsplit
@@ -51,6 +52,7 @@ class MagicPromptReplace:
             },
             "hidden": {
                 "prompt_config_json": ("STRING", {"default": ""}),
+                "unique_id": "UNIQUE_ID",
             },
         }
 
@@ -199,7 +201,37 @@ class MagicPromptReplace:
     def _backoff_seconds(retry_number):
         return min(1.5 * (2 ** max(0, retry_number - 1)), 6.0)
 
-    def process_llm(self, original_prompt, replace_tag, rule_name, llm_profile, original_prompt_in=None, prompt_config_json=None):
+    @staticmethod
+    def _check_interrupted():
+        """让 ComfyUI 的停止按钮能打断长时间的 LLM 网络等待。"""
+        try:
+            import comfy.model_management as model_management
+            model_management.throw_exception_if_processing_interrupted()
+        except ImportError:
+            return
+
+    def _post_with_interrupt(self, endpoint, headers, payload, timeout, request_id, progress_bar=None):
+        """在守护线程执行 HTTP，请求主执行线程持续轮询 ComfyUI 中断标志。"""
+        result = {}
+        done = threading.Event()
+
+        def worker():
+            try:
+                result["response"] = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
+            except BaseException as exc:
+                result["error"] = exc
+            finally:
+                done.set()
+
+        threading.Thread(target=worker, name=f"magic-llm-{request_id}", daemon=True).start()
+        while not done.wait(0.1):
+            self._check_interrupted()
+        self._check_interrupted()
+        if "error" in result:
+            raise result["error"]
+        return result.get("response")
+
+    def process_llm(self, original_prompt, replace_tag, rule_name, llm_profile, original_prompt_in=None, prompt_config_json=None, unique_id=None):
         start_time = time.monotonic()
         request_id = self._request_id(prompt_config_json)
         original_prompt = self._effective_original_prompt(original_prompt, original_prompt_in)
@@ -282,6 +314,22 @@ class MagicPromptReplace:
         last_error = "未知错误"
         fallback_level = 0
         total_attempts = max_retries + 1
+        progress_bar = None
+        try:
+            import comfy.utils
+            progress_bar = comfy.utils.ProgressBar(4 * total_attempts, node_id=unique_id)
+        except Exception:
+            pass
+
+        def progress(step=1):
+            if progress_bar is not None:
+                try:
+                    progress_bar.update(step)
+                except Exception:
+                    pass
+            self._check_interrupted()
+
+        progress()
 
         for attempt_index in range(total_attempts):
             attempt = attempt_index + 1
@@ -300,12 +348,10 @@ class MagicPromptReplace:
             attempt_started = time.monotonic()
 
             try:
-                response = requests.post(
-                    endpoint,
-                    headers=headers,
-                    json=payload,
-                    timeout=(connect_timeout, read_timeout),
+                response = self._post_with_interrupt(
+                    endpoint, headers, payload, (connect_timeout, read_timeout), request_id, progress_bar
                 )
+                progress()
                 request_elapsed = time.monotonic() - attempt_started
                 body_size = len(response.content or b"")
                 upstream_id = self._response_request_id(response)
@@ -352,6 +398,7 @@ class MagicPromptReplace:
                             break
                     else:
                         content, empty_reason = self._extract_content(result)
+                        progress()
                         summary = self._response_summary(result)
                         if content:
                             usage = result.get("usage") or {}
@@ -436,7 +483,10 @@ class MagicPromptReplace:
             if attempt < total_attempts:
                 delay = self._backoff_seconds(attempt)
                 self.log(f"将在 {delay:.1f}s 后重试", "warning", request_id)
-                time.sleep(delay)
+                end = time.monotonic() + delay
+                while time.monotonic() < end:
+                    self._check_interrupted()
+                    time.sleep(min(0.1, end - time.monotonic()))
 
         duration = time.monotonic() - start_time
         self.log(

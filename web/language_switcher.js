@@ -251,7 +251,15 @@ const loraLoaderTranslations = {
     "连接成功后等待模型生成响应的最长时间": { zh: "连接成功后等待模型生成响应的最长时间", en: "Max wait time for the model to generate a response after connection" },
     "重试次数": { zh: "重试次数", en: "Max Retries" },
     "读取超时、临时 HTTP 错误或空响应时的最多重试次数": { zh: "读取超时、临时 HTTP 错误或空响应时的最多重试次数", en: "Max retries on read timeout, transient HTTP errors, or empty responses" },
-    "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。": { zh: "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。", en: "Tip: set read timeout to 180–300s for slow models; retries increase max wait time and possible billing." }
+    "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。": { zh: "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。", en: "Tip: set read timeout to 180–300s for slow models; retries increase max wait time and possible billing." },
+    "获取模型失败: ": { zh: "获取模型失败: ", en: "Model discovery failed: " },
+    "Model discovery failed: ": { zh: "获取模型失败: ", en: "Model discovery failed: " },
+    "已连接，但响应中没有可识别的模型列表": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
+    "Connected, but response contains no recognizable model list": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
+    "Missing LoRA file(s): ": { zh: "缺少 LoRA 文件：", en: "Missing LoRA file(s): " },
+    "缺少 LoRA 文件：": { zh: "缺少 LoRA 文件：", en: "Missing LoRA file(s): " },
+    "lora_stack contains invalid LoRA data": { zh: "LoRA 列表数据无效", en: "lora_stack contains invalid LoRA data" },
+    "LoRA 列表数据无效": { zh: "LoRA 列表数据无效", en: "lora_stack contains invalid LoRA data" }
 };
 
 // 节点翻译映射表 - Magic SDNQ Loader & Sampler
@@ -570,6 +578,10 @@ const promptReplaceTranslations = {
     "已连接，但格式未知。": { zh: "已连接，但格式未知。", en: "Connected, but format unknown." },
     "Error: ": { zh: "错误: ", en: "Error: " },
     "错误: ": { zh: "错误: ", en: "Error: " },
+    "获取模型失败: ": { zh: "获取模型失败: ", en: "Model discovery failed: " },
+    "Model discovery failed: ": { zh: "获取模型失败: ", en: "Model discovery failed: " },
+    "已连接，但响应中没有可识别的模型列表": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
+    "Connected, but response contains no recognizable model list": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
     "保存失败 / Save Failed: ": { zh: "保存失败 / Save Failed: ", en: "Save Failed: " },
     
     // 输入框placeholder（来自Python）
@@ -695,6 +707,10 @@ const magicPromptBoxTranslations = {
     "✒️ 编辑": { zh: "✒️ 编辑", en: "✒️ Edit" },
     "📜 历史": { zh: "📜 历史", en: "📜 History" },
     "⚙️ 设置": { zh: "⚙️ 设置", en: "⚙️ Settings" },
+    "获取模型失败: ": { zh: "获取模型失败: ", en: "Model discovery failed: " },
+    "Model discovery failed: ": { zh: "获取模型失败: ", en: "Model discovery failed: " },
+    "已连接，但响应中没有可识别的模型列表": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
+    "Connected, but response contains no recognizable model list": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
 
     // 编辑工具栏按钮
     "💫 格式化": { zh: "💫 格式化", en: "💫 Format" },
@@ -1456,6 +1472,16 @@ function translateText(text, lang, nodeType = null) {
         const count = foundModelsMatch[1];
         if (lang === "zh") {
             return `找到 ${count} 个模型！`;
+        }
+        return text;
+    }
+
+    // 处理共享 LLM 弹窗的动态文本：`找到 ${count} 个模型`（无感叹号）
+    const foundModelsZhMatch = text.match(/^找到\s+(\d+)\s*个模型[！!]?$/);
+    if (foundModelsZhMatch) {
+        const count = foundModelsZhMatch[1];
+        if (lang === "en") {
+            return `Found ${count} models!`;
         }
         return text;
     }

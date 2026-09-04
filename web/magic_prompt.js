@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { refreshMagicPromptReplaceNodes } from "./magic_llm_shared.js";
+import { refreshMagicPromptReplaceNodes, fetchLlmModels } from "./magic_llm_shared.js";
 
 // 必须与 __init__.py 和 nodes.py 中的类名完全一致
 const NODE_NAME = "MagicPromptReplace";
@@ -465,20 +465,16 @@ function showSettingsModal(node) {
         if(curLLMName) loadVals();
 
         searchBtn.onclick = async () => {
-            const url = urlInp.value.replace(/\/$/, ""); const key = keyInp.value;
-            if(!url||!key) return alert("Fill URL & Key");
-            searchBtn.textContent="...";
-            try{
-                let ep = url; if(!url.includes("/v1")&&!url.includes("silicon")&&!url.includes("deepseek")) ep+="/v1";
-                const res = await fetch(`${ep}/models`, {headers:{"Authorization":`Bearer ${key}`}});
-                const data = await res.json();
-                dl.innerHTML="";
-                if(data.data && Array.isArray(data.data)){
-                    data.data.forEach(m=>{ const o=document.createElement("option"); o.value=m.id; dl.appendChild(o); });
-                    alert(`Found ${data.data.length} models!`);
-                } else alert("Connected, but format unknown.");
-            }catch(e){ alert("Error: "+e); }
-            searchBtn.textContent="🔍";
+            const url = urlInp.value.trim(), key = keyInp.value.trim();
+            if (!url || !key) return alert("Fill URL & Key");
+            searchBtn.textContent = "..."; searchBtn.disabled = true;
+            try {
+                const models = await fetchLlmModels(url, key);
+                dl.innerHTML = "";
+                models.forEach((id) => { const o = document.createElement("option"); o.value = id; dl.appendChild(o); });
+                alert(`Found ${models.length} models!`);
+            } catch (e) { alert("Model discovery failed: " + (e?.message || e)); }
+            finally { searchBtn.disabled = false; searchBtn.textContent = "🔍"; }
         };
     };
 
