@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1050" viewBox="0 0 1800 1050">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#ff3030"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1800" height="1050" fill="#202326"/>
+  <text x="70" y="70" fill="#ffffff" font-size="34" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">Magic Mask Edit 两节点接线图</text>
+  <text x="70" y="110" fill="#bfc5cc" font-size="22" font-family="Arial, Microsoft YaHei, sans-serif">红色箭头 = 需要连接的线；虚线框 = 采样器内部或外部已有节点</text>
+
+  <!-- source nodes -->
+  <g filter="url(#shadow)">
+    <rect x="70" y="210" width="250" height="130" rx="10" fill="#34383d" stroke="#69727c" stroke-width="2"/>
+    <text x="95" y="255" fill="#fff" font-size="25" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">原图 IMAGE</text>
+    <text x="95" y="295" fill="#aeb7c1" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">Load Image / Photopea</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="70" y="430" width="250" height="130" rx="10" fill="#34383d" stroke="#69727c" stroke-width="2"/>
+    <text x="95" y="475" fill="#fff" font-size="25" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">遮罩 MASK</text>
+    <text x="95" y="515" fill="#aeb7c1" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">Mask Editor / Photopea</text>
+  </g>
+
+  <!-- crop node -->
+  <g filter="url(#shadow)">
+    <rect x="420" y="180" width="450" height="390" rx="12" fill="#363636" stroke="#94a0aa" stroke-width="2"/>
+    <rect x="420" y="180" width="450" height="58" rx="12" fill="#2a2d30"/>
+    <text x="445" y="218" fill="#fff" font-size="23" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">✂ 遮罩裁切并放大</text>
+    <text x="445" y="270" fill="#8fd3ff" font-size="20" font-family="Arial, Microsoft YaHei, sans-serif">image</text>
+    <circle cx="430" cy="263" r="8" fill="#58aef0"/>
+    <text x="445" y="315" fill="#8ce09b" font-size="20" font-family="Arial, Microsoft YaHei, sans-serif">mask（可选）</text>
+    <circle cx="430" cy="308" r="8" fill="#74cf82"/>
+    <text x="445" y="370" fill="#fff" font-size="18" font-family="Arial, Microsoft YaHei, sans-serif">target_width / target_height</text>
+    <text x="445" y="410" fill="#fff" font-size="18" font-family="Arial, Microsoft YaHei, sans-serif">padding / threshold / method</text>
+    <line x1="780" y1="300" x2="860" y2="300" stroke="#8fd3ff" stroke-width="5"/>
+    <text x="700" y="292" fill="#8fd3ff" font-size="18" font-family="Arial, Microsoft YaHei, sans-serif" text-anchor="end">cropped_image</text>
+    <circle cx="870" cy="300" r="8" fill="#58aef0"/>
+    <line x1="780" y1="365" x2="860" y2="365" stroke="#8ce09b" stroke-width="5"/>
+    <text x="700" y="357" fill="#8ce09b" font-size="18" font-family="Arial, Microsoft YaHei, sans-serif" text-anchor="end">cropped_mask</text>
+    <circle cx="870" cy="365" r="8" fill="#74cf82"/>
+    <line x1="780" y1="430" x2="860" y2="430" stroke="#b9a7ff" stroke-width="5"/>
+    <text x="700" y="422" fill="#b9a7ff" font-size="18" font-family="Arial, Microsoft YaHei, sans-serif" text-anchor="end">crop_info</text>
+    <circle cx="870" cy="430" r="8" fill="#a999ff"/>
+    <line x1="780" y1="495" x2="860" y2="495" stroke="#d0d0d0" stroke-width="5"/>
+    <text x="700" y="487" fill="#d0d0d0" font-size="18" font-family="Arial, Microsoft YaHei, sans-serif" text-anchor="end">mask_empty</text>
+    <circle cx="870" cy="495" r="8" fill="#d0d0d0"/>
+  </g>
+
+  <!-- sampler -->
+  <g filter="url(#shadow)">
+    <rect x="1010" y="160" width="360" height="300" rx="12" fill="#303942" stroke="#6d879b" stroke-width="2" stroke-dasharray="10 7"/>
+    <text x="1040" y="205" fill="#fff" font-size="24" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">采样器 / 编辑模型</text>
+    <text x="1040" y="258" fill="#8fd3ff" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">输入图像：cropped_image</text>
+    <text x="1040" y="300" fill="#8ce09b" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">局部遮罩：cropped_mask</text>
+    <text x="1040" y="342" fill="#c8c8c8" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">正面提示词 / 模型 / VAE</text>
+    <text x="1040" y="410" fill="#ffb0b0" font-size="20" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">采样结果 IMAGE</text>
+    <circle cx="1378" cy="402" r="8" fill="#58aef0"/>
+  </g>
+
+  <!-- merge node -->
+  <g filter="url(#shadow)">
+    <rect x="1430" y="180" width="320" height="390" rx="12" fill="#363636" stroke="#94a0aa" stroke-width="2"/>
+    <rect x="1430" y="180" width="320" height="58" rx="12" fill="#2a2d30"/>
+    <text x="1452" y="218" fill="#fff" font-size="21" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">🧩 裁切缩回并合并</text>
+    <text x="1455" y="285" fill="#8fd3ff" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">original_image</text>
+    <circle cx="1438" cy="278" r="8" fill="#58aef0"/>
+    <text x="1455" y="345" fill="#8fd3ff" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">processed_image</text>
+    <circle cx="1438" cy="338" r="8" fill="#58aef0"/>
+    <text x="1455" y="405" fill="#b9a7ff" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">crop_info</text>
+    <circle cx="1438" cy="398" r="8" fill="#a999ff"/>
+    <text x="1455" y="465" fill="#8ce09b" font-size="19" font-family="Arial, Microsoft YaHei, sans-serif">cropped_mask（可选）</text>
+    <circle cx="1438" cy="458" r="8" fill="#74cf82"/>
+    <text x="1455" y="525" fill="#ffb0b0" font-size="20" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">输出最终 IMAGE</text>
+    <circle cx="1758" cy="518" r="8" fill="#58aef0"/>
+  </g>
+
+  <!-- red wiring -->
+  <g fill="none" stroke="#ff3030" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)">
+    <path d="M320 260 C360 260 370 263 430 263"/>
+    <path d="M320 480 C365 480 370 308 430 308"/>
+    <path d="M870 300 C925 300 945 260 1018 260"/>
+    <path d="M870 365 C930 365 950 300 1018 300"/>
+    <path d="M1378 402 C1410 402 1405 338 1446 338"/>
+    <path d="M320 260 C900 80 1260 80 1446 278"/>
+    <path d="M870 430 C1090 430 1200 398 1446 398"/>
+    <path d="M870 365 C1110 560 1270 500 1446 458"/>
+  </g>
+
+  <!-- labels -->
+  <g font-family="Arial, Microsoft YaHei, sans-serif" font-size="19" font-weight="700" fill="#ff6b6b">
+    <text x="348" y="246">① 原图 → image</text>
+    <text x="350" y="455">② 遮罩 → mask</text>
+    <text x="890" y="245">③ cropped_image → 采样器</text>
+    <text x="890" y="350">④ cropped_mask → 采样器</text>
+    <text x="1060" y="92">⑤ 采样结果 → processed_image</text>
+    <text x="1010" y="535">⑥ 原图分线 → original_image</text>
+    <text x="1050" y="585">⑦ crop_info → 自动定位回贴</text>
+    <text x="1060" y="635">⑧ cropped_mask → 软融合遮罩</text>
+  </g>
+
+  <rect x="70" y="760" width="1680" height="205" rx="12" fill="#292d31" stroke="#555d65" stroke-width="2"/>
+  <text x="105" y="810" fill="#fff" font-size="25" font-family="Arial, Microsoft YaHei, sans-serif" font-weight="700">最简单的实际连接顺序</text>
+  <text x="105" y="858" fill="#ff7070" font-size="22" font-family="Arial, Microsoft YaHei, sans-serif">原图 → 裁切节点 image；遮罩 → 裁切节点 mask；裁切图 → 采样器；采样结果 → 合并节点 processed_image</text>
+  <text x="105" y="902" fill="#ff7070" font-size="22" font-family="Arial, Microsoft YaHei, sans-serif">原图再分一根线 → 合并节点 original_image；crop_info → 合并节点 crop_info；cropped_mask → 合并节点 cropped_mask</text>
+  <text x="105" y="945" fill="#bfc5cc" font-size="20" font-family="Arial, Microsoft YaHei, sans-serif">没有遮罩时：裁切节点自动判空，合并节点直接输出按目标尺寸处理后的整图。</text>
+</svg>

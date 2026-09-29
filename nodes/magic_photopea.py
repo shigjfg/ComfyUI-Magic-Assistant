@@ -24,9 +24,6 @@ class MagicPhotopeaNode:
         if os.path.exists(input_dir):
             files = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f))]
             files = folder_paths.filter_files_content_types(files, ["image"])
-            # 杩囨护 mask editor 缂撳瓨鏂囦欢 (clipspace-painted-*.png / clipspace-mask-*.png / clipspace-paint-*.png)
-            # 杩欎簺鏄疌omfyUI 闅旂紪杈戝櫒鐨勪腑闂寸紦瀛橈紝涓嶆槸鐢ㄦ埛鐨勫師鍥撅紝娓呯悊缂撳瓨鎸夐挳浼氫竴閿娓呴櫎
-            files = [f for f in files if not f.lower().startswith("clipspace-")]
         
         # 按修改时间排序（最新的在最前）
         files.sort(key=lambda x: os.path.getmtime(os.path.join(input_dir, x)), reverse=True)

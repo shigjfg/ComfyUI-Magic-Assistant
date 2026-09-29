@@ -14,6 +14,7 @@ from .nodes.magic_power_lora import MagicPowerLoraLoader
 from .nodes.magic_resolution import MagicResolution
 from .nodes.magic_cache import MagicCache
 from .nodes.magic_klein_loader import MagicKleinLoader
+from .nodes.magic_mask_edit import MagicMaskCropResize, MagicMaskResizeMerge
 
 # --- SDNQ nodes: loaded lazily so that missing sdnq/diffusers does NOT block the plugin ---
 _SDNQ_LOADER_NODE = None
@@ -51,6 +52,8 @@ NODE_CLASS_MAPPINGS = {
     "MagicResolution": MagicResolution,
     "MagicCache": MagicCache,
     "MagicKleinLoader": MagicKleinLoader,
+    "MagicMaskCropResize": MagicMaskCropResize,
+    "MagicMaskResizeMerge": MagicMaskResizeMerge,
 }
 
 # --- 节点显示名称 ---
@@ -65,6 +68,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MagicResolution": "📐 分辨率输出器 Magic Resolution Output",
     "MagicCache": "⚡ Magic Cache 缓存加速 (TeaCache + FBCache)",
     "MagicKleinLoader": "🔮 Magic Nunchaku FLUX.2 Klein Loader",
+    "MagicMaskCropResize": "✂️ 遮罩裁切并放大 Magic Mask Crop & Resize",
+    "MagicMaskResizeMerge": "🧩 裁切缩回并合并 Magic Resize & Merge",
 }
 
 # --- SDNQ 节点：仅在包可用时注册 ---
@@ -84,7 +89,7 @@ if _SDNQ_SAMPLER_NODE is not None:
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.4.2)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.4.3)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")
 

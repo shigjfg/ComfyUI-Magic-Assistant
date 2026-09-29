@@ -108,6 +108,13 @@ function mplSyncModelValidationWidgets(node) {
     }
 }
 
+function mplSetLoraNameList(files) {
+    loraNamesOptionsCache = Array.isArray(files) ? files : [];
+    loraNamesCache = new Set(loraNamesOptionsCache.map(mplNormalizeLoraName));
+    mplRefreshMissingLoraStates();
+    mplRefreshOfficialMissingModels();
+}
+
 function mplRefreshOfficialMissingModels() {
     if (!loraNamesCache) return;
     if (typeof app?.refreshMissingModels !== "function") return;
@@ -132,11 +139,7 @@ async function loadLoraNameList() {
         try {
             const resp = await api.fetchApi("/ma/lora/list");
             const data = await resp.json();
-            loraNamesOptionsCache = Array.isArray(data?.files) ? data.files : [];
-            loraNamesCache = new Set(loraNamesOptionsCache.map(mplNormalizeLoraName));
-            mplRefreshMissingLoraStates();
-            (app?.graph?._nodes || []).forEach(mplSyncModelValidationWidgets);
-            mplRefreshOfficialMissingModels();
+            mplSetLoraNameList(data?.files);
         } catch (e) {
             // A failed scan must not mark every node missing.
             loraNamesCache = null;
@@ -711,6 +714,7 @@ app.registerExtension({
                 this.properties["adaptive_mode"] = adaptiveBool;
                 // Re-run ComfyUI's official missing-model pipeline immediately
                 // after any LoRA list/widget change.
+                mplUpdateMissingLoraState(this);
                 mplSyncModelValidationWidgets(this);
                 mplRefreshOfficialMissingModels();
             };
@@ -3677,6 +3681,7 @@ app.registerExtension({
                     const resp = await api.fetchApi("/ma/lora/list");
                     const data = await resp.json();
                     const allFiles = data.files || [];
+                    mplSetLoraNameList(allFiles);
                     
                     // 构建文件夹树结构
                     const folderTree = {};
@@ -4250,6 +4255,7 @@ app.registerExtension({
                             const resp = await api.fetchApi("/ma/lora/list");
                             const data = await resp.json();
                             const newAllFiles = data.files || [];
+                            mplSetLoraNameList(newAllFiles);
                             
                             // 重新构建文件夹树结构
                             const newFolderTree = {};
