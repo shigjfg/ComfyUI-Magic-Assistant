@@ -16,8 +16,30 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-09-29**
+> Latest Update / 最新更新：**2026-09-30**
 >
+> **V1.4.4 版本介绍 / Version Introduction** 2026-09-30
+>
+> 1. **✨ 新增**: Magic Multi-Function AI Prompt Replace - 图像参考与本地提示词优化
+>    * 新增可选 `image` 输入：不接图时保持原有纯文本调用，接入图像后可发送给支持视觉的模型，适合图像反推、编辑指令优化等场景
+>    * 新增「本地」改写模式，可使用 ComfyUI 本地文本编码器运行提示词优化，不必每次都调用远程 LLM
+>    * 配置中心新增「本地模型」分页，可保存多个本地模型配置，并选择 ComfyUI 文本编码器或可选的 `llama.cpp` 后端
+>    * 可选后端文件不存在时会自动回退到官方文本编码器路径，不影响节点继续使用
+>    * **New**: Magic Multi-Function AI Prompt Replace now supports an optional `image` input. Text-only requests behave as before; connected images can be sent to vision-capable models for image captioning and edit-instruction workflows
+>    * Added a **Local** rewrite mode that can optimize prompts with a local ComfyUI text encoder without calling a remote LLM for every request
+>    * Added a **Local Models** tab for saving multiple profiles and choosing between ComfyUI text encoders and the optional `llama.cpp` backend
+>    * If the optional backend is unavailable, the node automatically falls back to the official text-encoder path so it remains usable
+>
+> 2. **🔧 优化**: Magic Multi-Function Prompt Box - 补全速度与 Danbooru 使用体验
+>    * Danbooru 模式下的编辑区内联补全现在直接使用本地 `danbooru预设库.txt` 与用户自建标签组，不再等待远端连接成功
+>    * 远端 Danbooru 连接主要用于「编辑标签」中的在线搜索；即使远端暂时不可用，内联补全仍然可以正常使用
+>    * 缓存用户标签组数据，减少重复读取；补全列表按「用户自定义标签 → Danbooru 本地预设」分区显示
+>    * 优化补全定位、长文本滚动、设置折叠、数字输入框和标签工具条交互，编辑体验更稳定
+>    * **Improved**: Danbooru inline autocomplete now uses the local `danbooru` preset file and user-created tag groups directly, without waiting for a remote connection
+>    * Remote Danbooru is mainly used for online search in **Edit Tags**; inline autocomplete keeps working when the remote service is temporarily unavailable
+>    * User tag groups are cached to avoid repeated loading, and suggestions are shown in separate **Custom Tags → Danbooru Local Presets** sections
+>    * Improved autocomplete positioning, long-text scrolling, settings collapsing, number inputs, and tag-toolbar interactions for a more stable editing experience
+
 > **V1.4.3 版本介绍 / Version Introduction** 2026-09-29
 >
 > 1. **🐛 修复**: Magic Photopea - 官方 Mask Editor 文件读取
@@ -65,6 +87,9 @@
 >    * Magic Multi-Function AI Prompt Replace 在等待网络响应或重试时，会显示进度，并可使用 ComfyUI 的停止按钮及时中断，不必一直等待超时
 >    * **Improved**: LLM model discovery now uses the ComfyUI backend, reducing browser CORS failures and supporting more OpenAI-compatible response formats
 >    * Magic Multi-Function AI Prompt Replace reports progress while waiting or retrying and can be stopped with ComfyUI's Stop button instead of waiting for the timeout
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.4.1 版本介绍 / Version Introduction** 2026-08-15
 >
@@ -118,9 +143,6 @@
 >    * **ComfyUI 0.29.0 以下用户**: 无法使用本次迁移到新版接口的节点；如仅需强力 LoRA 加载器的新界面功能，可单独更新 `nodes/magic_power_lora.py` 与 `web/magic_power_lora.js`，避免其他节点产生接口不兼容
 >    * **ComfyUI 0.29.0 or later**: Please update all node files to ensure the new API adaptations work correctly
 >    * **Earlier than ComfyUI 0.29.0**: Nodes migrated to the new APIs in this release are not supported; if you only need the new Magic Power LoRA Loader interface features, update `nodes/magic_power_lora.py` and `web/magic_power_lora.js` separately to avoid API incompatibilities in other nodes
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.3.9 版本介绍 / Version Introduction** 2026-07-04
 >
@@ -750,6 +772,9 @@
 * **请求容错设置（V1.4.1）**: LLM 配置（及节点设置弹窗）新增连接超时、读取超时、重试次数三项，慢速模型可调大读取超时。
 * **模型列表获取更稳定**: 点击搜索模型时由 ComfyUI 后端连接 OpenAI 兼容服务，减少浏览器跨域失败，并自动识别常见的模型列表返回格式。
 * **可随时停止等待**: LLM 请求和重试等待期间会显示进度，点击 ComfyUI「停止」即可中断，不必等到网络超时。
+* **可选图像参考（V1.4.4）**: 新增 `image` 接口；不接图时保持纯文本调用，接图时会等比压缩并作为视觉消息发送给支持看图的模型，适合图像反推、编辑指令优化等自定义规则。
+* **本地提示词优化后端（V1.4.4）**: 配置中心新增「本地模型」分页，可选择 ComfyUI 官方 TextGenerate 同款文本编码器，或可选的 `backends/llama_cpp` 后端。后端文件不存在时会自动回退到官方文本编码器路径，不影响节点使用。
+* **本地模型配置**: 支持保存多个本地模型配置，可调整后端、模型路径、上下文长度、GPU 层数、生成档位和采样选项。
 
 * **LLM Powered**: Seamlessly integrates with OpenAI-compatible APIs to rewrite or optimize your prompts.
 * **Role-Play & Rules**: Built-in system prompts allow the AI to act as a "Prompt Expert", "Translator", or any custom role you define.
@@ -759,6 +784,9 @@
 * **Request Resilience settings (V1.4.1)**: LLM config (and node settings modal) adds Connect Timeout, Read Timeout, and Max Retries; raise Read Timeout for slow models.
 * **More reliable model discovery**: Model search is routed through the ComfyUI backend to reduce browser CORS failures and recognize common OpenAI-compatible response formats.
 * **Interruptible waiting**: Progress is reported during LLM requests and retries, and ComfyUI's Stop button can cancel the wait immediately.
+* **Optional image reference (V1.4.4)**: The new `image` input keeps text-only calls unchanged when disconnected. When connected, it is resized proportionally and sent as a vision message to compatible models, supporting custom image-captioning and edit-instruction rules.
+* **Local prompt backends (V1.4.4)**: The new Local Models tab can use ComfyUI's TextGenerate-compatible text encoders or the optional `backends/llama_cpp` server. If the optional backend is absent, the node automatically falls back to the official text-encoder path.
+* **Local model profiles**: Save multiple local-model profiles and adjust the backend, model path, context length, GPU layers, generation preset, and sampling options.
 
 </details>
 
@@ -850,13 +878,13 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 
 * **标签搜索**: 中英文双向搜索（不区分大小写），支持**收藏标签组搜索**和**自建标签组搜索**；自建标签组优先显示；支持一键添加 tag 到当前提示词
 * **数据源**: 预设库（22 万+ 条 `中文,英文tag`）+ 用户自建标签组 + 收藏标签组
-* **Danbooru 数据搜索**: 切换 Danbooru 模式后，搜索结果实时连接 Danbooru 远端，返回英文 tag / 中文释义 / 分类 / 热度；本地 danbooru预设库 提供毫秒级本地搜索兜底，自带中英文对照；支持分类过滤与分页加载
+* **Danbooru 数据搜索**: 「编辑标签」中的远端搜索可实时返回英文 tag / 中文释义 / 分类 / 热度；编辑区内联补全直接使用本地 `danbooru预设库.txt` 与用户自建标签组，支持分类过滤与分页加载
 
 * **Tag Group Management**: Organized into **3 independent tabs** — Favorite Tags, Custom Tags, and Preset Tags
 * **Preset Tags Tab**: Browse 220k+ built-in tags with **default category filtering** (General, Artist, Copyright, Character, etc.) for faster searching
 * **Tag Search**: Bilingual search (case-insensitive); supports **favorite tag group search** and **custom tag group search**; custom groups prioritized; one-click add to prompt
 * **Data Sources**: Preset library (220k+ entries) + user-created tag groups + favorite tag groups
-* **Danbooru Data Search**: After switching to Danbooru mode, search connects to Danbooru remote in real-time, returning EN tag / CN description / category / popularity; local danbooru预设库 provides millisecond-level local search fallback with built-in Chinese/English mapping; supports category filtering and pagination
+* **Danbooru Data Search**: Remote search in **Edit Tags** returns EN tags, CN descriptions, categories, and popularity in real time; inline editor autocomplete uses the local `danbooru` preset file and user-created tag groups directly, with category filtering and pagination
 
 #### 历史 Tab / History Tab
 
@@ -871,7 +899,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 #### 设置 Tab / Settings Tab
 
 * **编辑界面显示**: 可勾选隐藏工具栏中的各项按钮，精简界面；可**关闭/开启补全弹窗**（关闭后编辑框输入时不弹出补全列表，词库搜索、标签编辑等独立功能不受影响）
-* **Danbooru 数据模式**: 切换补全与标签搜索的数据来源为「本地标签库」或「Danbooru 远端」；切换 Danbooru 模式后每次打开编辑界面会实时检测连接状态，连接成功才替换补全功能，否则自动回退并保存为本地模式
+* **Danbooru 数据模式**: 可在「本地标签库」与「Danbooru 标签模式」之间切换；Danbooru 模式下编辑区内联补全直接使用本地预设，远端连接只影响「编辑标签」在线搜索，不会阻塞补全
 * **格式化详细设置**: 对应 💫 格式化按钮，调用 `/ma/format_prompt`。清理逗号、修复括号始终执行；高级选项：下划线、权重语法、括号转义等可独立开启
 * **翻译功能**: 与「管理 LLM」「多功能AI提示词替换」共用 `userdata/llm_settings.txt`；支持正常/强制翻译模式
 * **LLM 请求容错（V1.4.1）**: 「管理 LLM」对话框新增连接超时、读取超时、重试次数三项，与多功能AI提示词替换共用同一配置，可统一管理 LLM 容错参数
@@ -879,7 +907,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **补全与历史**: 补全列表条数上限、运行历史保留条数、LLM 翻译缓存条数
 
 * **Editor Display**: Toggle visibility of toolbar buttons; **enable/disable autocomplete popup** (closing it hides the dropdown while typing in the editor; tag search and Edit Tags autocomplete are unaffected)
-* **Danbooru Data Mode**: Switch data source for autocomplete and tag search between "Local Tag Library" and "Danbooru Remote"; switching to Danbooru mode checks connection on every open; only replaces functions if connected, otherwise falls back and saves as local mode
+* **Danbooru Data Mode**: Switch between "Local Tag Library" and "Danbooru Tag Mode"; in Danbooru mode, inline autocomplete uses local presets directly, while remote connectivity only affects online search in **Edit Tags** and does not block autocomplete
 * **Format Options**: Clean commas, fix brackets (always); advanced: underscores, weight syntax, bracket escaping
 * **Translation**: Shares `userdata/llm_settings.txt` with Manage LLM and AI Prompt Replace; normal/force translate modes
 * **LLM Request Resilience (V1.4.1)**: The "Manage LLM" dialog adds Connect Timeout, Read Timeout, and Max Retries, sharing the same config as AI Prompt Replace for centralized resilience control
@@ -898,7 +926,7 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 | **LLM 翻译** | 一键翻译所有 Tag，或单行翻译输入；共享 LLM 配置 |
 | **运行历史** | 工作流成功后自动保存，支持收藏与复用 |
 | **屏蔽机制** | 以 `*` 开头的段不参与输出，便于临时禁用 |
-| **Danbooru 模式** | 切换为 Danbooru 远端数据，补全显示分类与热度，实时连接检测 |
+| **Danbooru 模式** | 使用本地 Danbooru 预设补全；「编辑标签」可查询远端分类与热度 |
 | **补全开关** | 可在设置中关闭/开启编辑区补全弹窗 |
 
 </details>

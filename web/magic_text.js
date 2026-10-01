@@ -177,10 +177,15 @@ async function magicPostPromptHistory(body) {
 // ============================================================
 
 function preventConflict(element, { skipClick = false } = {}) {
-    element.addEventListener("pointerdown", (e) => e.stopPropagation());
-    element.addEventListener("mousedown", (e) => e.stopPropagation());
-    if (!skipClick) element.addEventListener("click", (e) => e.stopPropagation());
-    element.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+    // 用 pointerdown 覆盖鼠标、触控与笔输入，并避免每次重绘时重复注册事件。
+    if (element._magicConflictHandlers) return;
+    const stopPointer = (e) => e.stopPropagation();
+    const stopClick = (e) => e.stopPropagation();
+    const stopWheel = (e) => e.stopPropagation();
+    element._magicConflictHandlers = { stopPointer, stopClick, stopWheel };
+    element.addEventListener("pointerdown", stopPointer);
+    if (!skipClick) element.addEventListener("click", stopClick);
+    element.addEventListener("wheel", stopWheel, { passive: true });
 }
 
 function makeDialogDraggable(dialog, titleBar) {
@@ -1369,10 +1374,13 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
                     editTagsCatSelect = document.createElement("select");
                     editTagsCatSelect.title = magicT("按分类筛选");
                     editTagsCatSelect.style.cssText = `flex:0 1 auto;width:auto;max-width:54px;min-width:0;height:17px;line-height:15px;padding:0 1px 0 2px;margin:0;font-size:9px;font-weight:600;font-family:inherit;background:${THEME.bg3};color:${THEME.text};border:1px solid ${THEME.border};border-radius:3px;outline:none;cursor:pointer;box-sizing:border-box;`;
+                    editTagsCatSelect.style.colorScheme = "dark";
                     DANBOORU_CAT_FILTER_OPTIONS.forEach((opt) => {
                         const op = document.createElement("option");
                         op.value = opt.value === null ? "" : String(opt.value);
                         op.textContent = opt.label;
+                        op.style.backgroundColor = THEME.bg3;
+                        op.style.color = THEME.text;
                         editTagsCatSelect.appendChild(op);
                     });
                     preventConflict(editTagsCatSelect);
@@ -3663,13 +3671,18 @@ function getTextareaCaretViewportRect(textarea, position) {
     mirror.appendChild(span);
 
     const spanRect = span.getBoundingClientRect();
+    // mirror 从 textarea 顶部重放完整文本；textarea 自己滚动后，
+    // mirror 的 caret 坐标也要扣除同样的滚动偏移，否则长提示词会把补全框
+    // 算到文本框底部，再被窗口边界强行夹到左下角。
+    const scrollLeft = textarea.scrollLeft || 0;
+    const scrollTop = textarea.scrollTop || 0;
     const height = spanRect.height || parseFloat(computed.lineHeight) || 16;
     document.body.removeChild(mirror);
 
     return {
-        left: spanRect.left,
-        top: spanRect.top,
-        bottom: spanRect.top + height,
+        left: spanRect.left - scrollLeft,
+        top: spanRect.top - scrollTop,
+        bottom: spanRect.top - scrollTop + height,
         height,
     };
 }
@@ -3770,10 +3783,13 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             outline:none; cursor:pointer; box-sizing:border-box;
             vertical-align:middle;
         `;
+        danbooruCatSelect.style.colorScheme = "dark";
         DANBOORU_CAT_FILTER_OPTIONS.forEach((opt) => {
             const op = document.createElement("option");
             op.value = opt.value === null ? "" : String(opt.value);
             op.textContent = opt.label;
+            op.style.backgroundColor = THEME.bg3;
+            op.style.color = THEME.text;
             danbooruCatSelect.appendChild(op);
         });
         preventConflict(danbooruCatSelect);
@@ -3840,6 +3856,26 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
     let sel = 0;
     let visible = false;
     let acAbort = null;
+    const loadAutocompleteTagSets = () => {
+        const cached = panelMount._magicTagSetsData;
+        if (cached && Array.isArray(cached.new)) return Promise.resolve(cached);
+        if (panelMount._magicTagSetsPromise) return panelMount._magicTagSetsPromise;
+        panelMount._magicTagSetsPromise = fetch(api.apiURL("/ma/tag_sets"), {
+            credentials: "same-origin",
+        })
+            .then((res) => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then((data) => {
+                panelMount._magicTagSetsData = data;
+                return data;
+            })
+            .finally(() => {
+                panelMount._magicTagSetsPromise = null;
+            });
+        return panelMount._magicTagSetsPromise;
+    };
     /** 供 keydown 使用（与 renderList 内 shown 同步） */
     let lastShownForKeys = [];
 
@@ -3880,6 +3916,14 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
 
     const acSignal = new AbortController();
     const sig = acSignal.signal;
+    window.addEventListener(
+        MAGIC_TAG_SETS_CHANGED,
+        () => {
+            panelMount._magicTagSetsData = null;
+            panelMount._magicTagSetsPromise = null;
+        },
+        { signal: sig },
+    );
     window.addEventListener("resize", repositionIfVisible, { signal: sig });
     scrollRoots.forEach((el) => {
         if (el && el.addEventListener) {
@@ -3956,7 +4000,14 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             }
 
             // 应用分类过滤（仅 Danbooru 模式有效）
-            const shown = danbooruCatFilter == null ? items : items.filter(it => it.category === danbooruCatFilter);
+            const shown =
+                danbooruCatFilter == null
+                    ? items
+                    : items.filter(
+                          (it) =>
+                              it._magicAcSection === "custom" ||
+                              it.category === danbooruCatFilter,
+                      );
             if (sel >= shown.length) sel = Math.max(0, shown.length - 1);
 
             if (!shown.length) {
@@ -4012,8 +4063,28 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             };
 
             shown.forEach((it, idx) => {
+                if (
+                    idx > 0 &&
+                    it._magicAcSection === "danbooru" &&
+                    shown[idx - 1]._magicAcSection !== "danbooru"
+                ) {
+                    const divider = document.createElement("div");
+                    divider.textContent = magicT("Danbooru 本地标签");
+                    divider.style.cssText = `
+                        padding:5px 8px 4px;
+                        color:${THEME.text2};
+                        font-size:10px;
+                        font-weight:600;
+                        border-top:1px solid ${THEME.border};
+                        background:rgba(255,255,255,0.025);
+                    `;
+                    listRoot.appendChild(divider);
+                }
+                const isDanbooruRow =
+                    danbooruMode && it._magicAcSection !== "custom";
                 const row = document.createElement("div");
-                row.style.cssText = danbooruMode
+                row.dataset.magicAcRow = "1";
+                row.style.cssText = isDanbooruRow
                     ? `
                     display:grid;
                     grid-template-columns: ${DANBOORU_AC_GRID};
@@ -4036,7 +4107,7 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                     row.style.background = "rgba(24, 144, 255, 0.22)";
                 }
 
-                if (danbooruMode) {
+                if (isDanbooruRow) {
                     // Danbooru 模式：英文 / 中文 / 分类 / 热度（与表头同 grid 列宽）
                     const enEl = document.createElement("span");
                     const enFull = it.en || "";
@@ -4114,7 +4185,7 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                 listRoot.appendChild(row);
             });
 
-        const active = listRoot.children[sel];
+        const active = listRoot.querySelectorAll("[data-magic-ac-row]")[sel];
         if (active) active.scrollIntoView({ block: "nearest" });
         updatePanelPosition();
         requestAnimationFrame(() => updatePanelPosition());
@@ -4145,10 +4216,43 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
             renderList();
 
             try {
-                const results = await magicDanbooruSearch(query, acLimit, 1, acAbort.signal, "preset");
+                // Danbooru 模式只需要用户自建标签组 + danbooru 本地预设。
+                // 旧实现还会并发读取整套 tag预设库，首次请求会重复构建大型索引，
+                // 导致 Danbooru 补全明显慢于本地模式；这里改用轻量 tag_sets 接口。
+                const [tagSetsRes, danbooruRes] = await Promise.all([
+                    loadAutocompleteTagSets(),
+                    magicDanbooruSearch(query, acLimit, 1, acAbort.signal, "preset"),
+                ]);
                 if (reqId !== danbooruAcReqId || acAbort.signal.aborted) return;
 
-                const danbooItems = results.items || [];
+                // /ma/tag_sets 返回全部自定义标签组；这里要沿用本地补全的匹配规则，
+                // 按标签组名称（中文）或整段英文内容过滤，不能把所有用户标签直接展示。
+                const customQuery = magicStripAutocompleteQueryEdges(query);
+                const customQueryLower = customQuery.toLowerCase();
+                const customQueryNorm = magicNormEnHint(customQuery);
+                const customItems = (Array.isArray(tagSetsRes.new) ? tagSetsRes.new : [])
+                    .map((it) => ({
+                        cn: String(it?.name || magicT("标签组")),
+                        en: String(it?.content || ""),
+                        source: "custom",
+                        kind: "tagset",
+                        setName: String(it?.name || ""),
+                        _magicAcSection: "custom",
+                    }))
+                    .filter((it) => {
+                        if (!it.en) return false;
+                        const cn = it.cn.toLowerCase();
+                        const en = it.en.toLowerCase();
+                        if (customQuery && (cn.includes(customQuery) || en.includes(customQueryLower))) {
+                            return true;
+                        }
+                        const enNorm = magicNormEnHint(it.en);
+                        return Boolean(customQueryNorm && enNorm.includes(customQueryNorm));
+                    });
+                const danbooItems = (danbooruRes.items || []).map((it) => ({
+                    ...it,
+                    _magicAcSection: "danbooru",
+                }));
                 const qCn = magicStripAutocompleteQueryEdges(query);
                 const danbooItemsCnFiltered =
                     magicDanbooruQueryIsChinese(qCn)
@@ -4158,17 +4262,19 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                         : danbooItems;
 
                 // 仅使用 savedata/danbooru预设库.txt，绝不回退到 tag预设库（避免两套词库混用）
-                if (danbooItems.length === 0) {
+                if (danbooItems.length === 0 && customItems.length === 0) {
                     items = [];
                     acHintRow.textContent = magicT(
-                        "danbooru预设库中无匹配，请扩充 savedata/danbooru预设库.txt，或使用「编辑标签」搜索远端",
+                        "没有找到用户自定义标签或 Danbooru 预设标签",
                     );
                 } else {
-                    items = danbooItemsCnFiltered;
+                    items = customItems.concat(danbooItemsCnFiltered);
                     acHintRow.textContent =
-                        items.length
-                            ? magicT("本地预设库 · 毫秒级加载 · 分类+热度来自 danbooru预设库")
-                            : magicT("预设库无匹配，尝试更长关键词");
+                        customItems.length && danbooItemsCnFiltered.length
+                            ? magicT("上方为用户自定义标签，下方为 Danbooru 本地预设库")
+                            : customItems.length
+                              ? magicT("用户自定义标签")
+                              : magicT("Danbooru 本地预设库 · 分类+热度来自 danbooru预设库");
                 }
                 sel = 0;
             } catch (e) {
@@ -4699,7 +4805,6 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         shell._magicChipSelAnchor = null;
         shell._magicDragIndices = null;
         content.innerHTML = "";
-        preventConflict(content);
         if (!tabContentFns[activeTab]) activeTab = "edit";
         const fn = tabContentFns[activeTab];
         if (fn) fn();
@@ -4826,19 +4931,30 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             { signal: caretSaveAc.signal },
         );
 
-        (async () => {
-            try {
-                const r = await fetch(api.apiURL("/ma/tag_sets"), { credentials: "same-origin" });
-                const d = await r.json();
+        shell._magicTagSetsPromise = fetch(api.apiURL("/ma/tag_sets"), {
+            credentials: "same-origin",
+        })
+            .then((r) => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
+            .then((d) => {
+                shell._magicTagSetsData = d;
                 shell._magicFavoritesList = Array.isArray(d.favorites) ? d.favorites : [];
                 shell._magicFavoriteEnKeys = new Set(
                     shell._magicFavoritesList.map((x) => magicTagEnKey(x.content)),
                 );
-            } catch (_) {
+                return d;
+            })
+            .catch(() => {
+                shell._magicTagSetsData = { new: [], favorites: [] };
                 shell._magicFavoritesList = [];
                 shell._magicFavoriteEnKeys = new Set();
-            }
-        })();
+                return shell._magicTagSetsData;
+            })
+            .finally(() => {
+                shell._magicTagSetsPromise = null;
+            });
 
         const stat = document.createElement("div");
         stat.style.cssText = `margin-top: 8px; font-size: 12px; color: ${THEME.text2}; text-align: right;`;
@@ -4942,9 +5058,20 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         floatBar.style.pointerEvents = "auto";
         floatBar.style.boxShadow = "0 10px 28px rgba(0,0,0,0.52)";
         preventConflict(floatBar);
-        // 阻止 pointerdown/mousedown，避免用户在浮动条上拖拽时误选中文本
-        floatBar.addEventListener("pointerdown", (e) => e.preventDefault());
-        floatBar.addEventListener("mousedown", (e) => e.preventDefault());
+        // 工具条本身不应参与拖拽；表单控件必须保留默认 pointer/mousedown，
+        // 否则 number 输入框无法获得焦点、键盘输入和 stepper 都会失效。
+        const isFloatBarInteractiveTarget = (target) =>
+            !!(
+                target &&
+                target.closest &&
+                target.closest("input, select, textarea, button")
+            );
+        floatBar.addEventListener("pointerdown", (e) => {
+            if (!isFloatBarInteractiveTarget(e.target)) e.preventDefault();
+        });
+        floatBar.addEventListener("mousedown", (e) => {
+            if (!isFloatBarInteractiveTarget(e.target)) e.preventDefault();
+        });
         shell.appendChild(floatBar);
         shell._magicTagFloatBar = floatBar;
         // 首次定位前在 positionTagFloatBar 内测量并缓存（须先 display:flex，display:none 时宽高为 0）
@@ -6460,23 +6587,23 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             danbooruConnBar.textContent = magicT("补全来源：本地标签库");
             applyEditorAutocomplete(false);
         } else {
+            // 内联 Danbooru 补全使用本地 danbooru 预设库，不应被远端连通性检测阻塞。
+            // 远端检测只用于「编辑标签」里的在线搜索状态提示。
+            danbooruConnBar.textContent = magicT("补全来源：Danbooru 本地预设库");
+            applyEditorAutocomplete(true);
             if (shell._magicDanbooruConnChecked) {
                 const cached = shell._magicDanbooruConnResult;
                 if (cached && cached.ok) {
                     danbooruConnBar.style.color = THEME.success;
                     danbooruConnBar.style.borderColor = "rgba(76, 175, 80, 0.35)";
-                    danbooruConnBar.textContent = magicT("✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据");
-                    applyEditorAutocomplete(true);
+                    danbooruConnBar.textContent = magicT("✅ Danbooru 已连接；内联补全使用本地预设库");
                 } else {
-                    danbooruConnBar.style.color = THEME.danger;
-                    danbooruConnBar.style.borderColor = "rgba(244, 67, 54, 0.35)";
-                    danbooruConnBar.textContent =
-                        magicT("补全来源：本地标签库");
-                    applyEditorAutocomplete(false);
+                    danbooruConnBar.style.color = THEME.text2;
+                    danbooruConnBar.style.borderColor = THEME.border;
+                    danbooruConnBar.textContent = magicT("⚠️ Danbooru 远端不可用；内联补全仍使用本地预设库");
                 }
             } else {
-                danbooruConnBar.textContent = magicT("正在检测 Danbooru 连接…");
-                applyEditorAutocomplete(false);
+                danbooruConnBar.textContent = magicT("补全来源：Danbooru 本地预设库 · 正在后台检测远端标签搜索…");
                 void (async () => {
                     const result = await magicDanbooruCheckConnection();
                     shell._magicDanbooruConnChecked = true;
@@ -6485,17 +6612,14 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                     if (result.ok) {
                         danbooruConnBar.style.color = THEME.success;
                         danbooruConnBar.style.borderColor = "rgba(76, 175, 80, 0.35)";
-                        danbooruConnBar.textContent = magicT("✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据");
-                        applyEditorAutocomplete(true);
+                        danbooruConnBar.textContent = magicT("✅ Danbooru 已连接；内联补全使用本地预设库");
                     } else {
-                        danbooruConnBar.style.color = THEME.danger;
-                        danbooruConnBar.style.borderColor = "rgba(244, 67, 54, 0.35)";
+                        danbooruConnBar.style.color = THEME.text2;
+                        danbooruConnBar.style.borderColor = THEME.border;
                         danbooruConnBar.textContent =
-                            magicT("❌ Danbooru 不可用：") +
+                            magicT("⚠️ Danbooru 远端不可用：") +
                             (result.message || "?") +
-                            magicT(" · 已切换为本地补全（设置已保存为本地）");
-                        await magicPersistDanbooruModeOnly("local");
-                        applyEditorAutocomplete(false);
+                            magicT(" · 内联补全仍使用本地预设库");
                     }
                 })();
             }
@@ -6769,6 +6893,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
     // ---- 设置 Tab ----
     function renderSettingsTab() {
         content.style.alignItems = "stretch";
+        preventConflict(content);
 
         const intro = document.createElement("div");
         intro.style.cssText = `font-size: 12px; color: ${THEME.text2}; margin-bottom: 14px; line-height: 1.5;`;
@@ -6808,15 +6933,25 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             head.appendChild(headLeft);
             head.appendChild(chev);
             const panel = document.createElement("div");
+            const panelId = `magic-settings-panel-${Math.random().toString(36).slice(2)}`;
+            panel.id = panelId;
             panel.style.cssText = `
                 padding: 14px; display: ${expanded ? "block" : "none"};
                 background: ${THEME.bg}; border-top: 1px solid ${THEME.border};
             `;
-            head.addEventListener("click", () => {
+            head.setAttribute("aria-expanded", expanded ? "true" : "false");
+            head.setAttribute("aria-controls", panelId);
+            const togglePanel = (e) => {
+                // 设置弹窗浮在 ComfyUI 画布之上，捕获阶段先处理折叠，
+                // 避免画布全局 click/focus 逻辑抢走这次交互。
+                e.preventDefault();
+                e.stopPropagation();
                 expanded = !expanded;
                 panel.style.display = expanded ? "block" : "none";
                 chev.textContent = expanded ? "▼" : "▶";
-            });
+                head.setAttribute("aria-expanded", expanded ? "true" : "false");
+            };
+            head.addEventListener("click", togglePanel, { capture: true });
             preventConflict(head);
             wrap.appendChild(head);
             wrap.appendChild(panel);
@@ -6959,6 +7094,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 border: 1px solid ${THEME.border}; color: ${THEME.text}; border-radius: 6px;
                 font-size: 13px; box-sizing: border-box;
             `;
+            selectEl.style.colorScheme = "dark";
             preventConflict(selectEl);
             wrap.appendChild(lbl);
             wrap.appendChild(d);
@@ -7246,7 +7382,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         /* —— 5 · 标签和补全功能设置 —— */
         const panel5 = mkCollapsible(
             magicT("5 · 标签和补全功能设置"),
-            magicT("选择补全数据来源：本地标签数据库使用预设库+用户标签组；远端 Danbooru 则实时从官方 API 获取（自带分类与热度）。"),
+            magicT("选择补全数据来源：本地标签数据库使用预设库+用户标签组；Danbooru 模式使用本地 danbooru 预设库，分类与热度来自本地记录。"),
             false,
         );
 
@@ -7258,7 +7394,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         `;
         const p5modeTitle = document.createElement("div");
         p5modeTitle.style.cssText = `font-size: 12px; color: ${THEME.text2}; margin-bottom: 10px; font-weight: 600;`;
-        p5modeTitle.textContent = magicT("数据来源(🚨使用danbooru数据时，请当编辑界面下方显示连接成功再编辑tag，否则补全可能会显示bug。)");
+        p5modeTitle.textContent = magicT("数据来源（Danbooru 模式的内联补全使用本地预设；远端连接只影响「编辑标签」的在线搜索。）");
         p5modeRow.appendChild(p5modeTitle);
         preventConflict(p5modeRow);
 
@@ -7293,8 +7429,8 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         );
         const danbooRadio = mkRadio5(
             "danbooru",
-            magicT("🌐 远端 Danbooru Tag 数据"),
-            magicT("实时从 danbooru.donmai.us 获取 Tag，带分类（general/artist/copyright/character/meta）与热度排序；中文释义使用本地词库匹配。"),
+            magicT("🌐 Danbooru 标签模式"),
+            magicT("使用本地 danbooru预设库.txt 补全；分类与热度来自本地记录。打开「编辑标签」时才会查询远端 Danbooru。"),
         );
         p5modeRow.appendChild(localRadio.wrap);
         p5modeRow.appendChild(danbooRadio.wrap);
@@ -7314,30 +7450,25 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         `;
         p5modeRow.appendChild(danbooStatusEl);
 
-        // 切换到 danbooru：先落盘偏好并检测连接；失败则切回本地并保存（与下方 persist 监听器合并，避免重复 change）
+        // 切换到 Danbooru 标签模式：内联补全立即使用本地预设，远端检测仅更新在线搜索提示。
         danbooRadio.rb.addEventListener("change", async () => {
             if (!danbooRadio.rb.checked) return;
             danbooStatusEl.style.display = "block";
             danbooStatusEl.style.color = THEME.text2;
-            danbooStatusEl.textContent = magicT("正在检测连接…");
+            danbooStatusEl.textContent = magicT("内联补全使用本地预设；正在后台检测远端标签搜索…");
             persistEditorSettingsAuto();
             const result = await magicDanbooruCheckConnection();
             if (!danbooRadio.rb.checked) return;
             if (!result.ok) {
-                danbooStatusEl.style.color = THEME.danger;
+                danbooStatusEl.style.color = THEME.text2;
                 danbooStatusEl.textContent =
-                    magicT("❌ 连接失败：") +
+                    magicT("⚠️ 远端标签搜索不可用：") +
                     (result.message || "?") +
-                    " " +
-                    magicT("（将自动切回本地模式）");
-                setTimeout(() => {
-                    localRadio.rb.checked = true;
-                    persistEditorSettingsAuto();
-                    danbooStatusEl.style.display = "none";
-                }, 2200);
+                    magicT("；内联补全仍使用本地 Danbooru 预设。");
+                setTimeout(() => { danbooStatusEl.style.display = "none"; }, 3200);
             } else {
                 danbooStatusEl.style.color = THEME.success;
-                danbooStatusEl.textContent = magicT("✅ 连接成功！已启用 Danbooru 远端补全。");
+                danbooStatusEl.textContent = magicT("✅ 远端标签搜索已连接；内联补全使用本地 Danbooru 预设。");
                 setTimeout(() => {
                     danbooStatusEl.style.display = "none";
                 }, 2000);

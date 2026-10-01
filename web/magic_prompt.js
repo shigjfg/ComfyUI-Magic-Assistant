@@ -9,41 +9,9 @@ app.registerExtension({
     name: "Magic.Assistant", // 插件注册名
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === NODE_NAME) {
-            const reorderOriginalPromptInput = function (node) {
-                const list = node.inputs;
-                if (!list || !list.length) return;
-                const ix = list.findIndex((i) => i.name === "original_prompt_in");
-                if (ix <= 0) return;
-                const [inp] = list.splice(ix, 1);
-                list.unshift(inp);
-                // 显示名与 Python 侧语义一致：外接点表示「原始提示词」
-                if (inp) {
-                    if (Object.prototype.hasOwnProperty.call(inp, "localized_name")) {
-                        inp.localized_name = "original_prompt";
-                    }
-                    if (Object.prototype.hasOwnProperty.call(inp, "label")) {
-                        inp.label = "original_prompt";
-                    }
-                }
-            };
-
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
-
-                // 将 optional 的 original_prompt_in 插槽移到最上方（默认会在所有 required 之后）
-                const scheduleReorder = () => {
-                    queueMicrotask(() => reorderOriginalPromptInput(this));
-                    setTimeout(() => reorderOriginalPromptInput(this), 0);
-                };
-                scheduleReorder();
-
-                const onConfigure = this.onConfigure;
-                this.onConfigure = function (info) {
-                    const cr = onConfigure ? onConfigure.apply(this, arguments) : undefined;
-                    scheduleReorder.call(this);
-                    return cr;
-                };
 
                 // 添加设置按钮
                 this.addWidget("button", "⚙️ 配置中心 / Settings", null, () => {
@@ -51,7 +19,7 @@ app.registerExtension({
                 });
 
                 // 初始化配置对象 (改名为 ma_config)
-                this.ma_config = { rules: {}, llm: {} };
+                this.ma_config = { rules: {}, llm: {}, local_models: {} };
                 updateNodeDropdowns(this);
                 return r;
             };
@@ -67,6 +35,7 @@ async function updateNodeDropdowns(node) {
         const data = await response.json();
         node.ma_config.rules = data.rules;
         node.ma_config.llm = data.llm;
+        node.ma_config.local_models = data.local_models || {};
 
         // 1. 更新 Rule 下拉
         const ruleNames = Object.values(data.rules).map(r => r.name);
@@ -83,6 +52,13 @@ async function updateNodeDropdowns(node) {
         if (llmWidget) {
             llmWidget.options.values = llmNames.length ? llmNames : ["No Profiles"];
             if (!llmNames.includes(llmWidget.value)) llmWidget.value = llmNames[0] || "";
+        }
+
+        const localNames = Object.keys(data.local_models || {});
+        const localWidget = node.widgets.find(w => w.name === "local_profile");
+        if (localWidget) {
+            localWidget.options.values = localNames.length ? localNames : ["No Local Models"];
+            if (!localNames.includes(localWidget.value)) localWidget.value = localNames[0] || "";
         }
 
         node.setDirtyCanvas(true, true); 
@@ -261,9 +237,15 @@ function showSettingsModal(node) {
     
     const tabRule = document.createElement("button"); tabRule.textContent="📋 规则编辑器"; tabRule.style.cssText=activeStyle;
     const tabLLM = document.createElement("button"); tabLLM.textContent="🤖 LLM服务"; tabLLM.style.cssText=btnStyle;
-    preventConflict(tabRule); preventConflict(tabLLM);
-    sidebar.appendChild(tabRule); sidebar.appendChild(tabLLM); body.appendChild(sidebar);
+    const tabLocal = document.createElement("button"); tabLocal.textContent="🧠 本地模型"; tabLocal.style.cssText=btnStyle;
+    preventConflict(tabRule); preventConflict(tabLLM); preventConflict(tabLocal);
+    sidebar.appendChild(tabRule); sidebar.appendChild(tabLLM); sidebar.appendChild(tabLocal); body.appendChild(sidebar);
 
+    const activateTab = (activeTab) => {
+        [tabRule, tabLLM, tabLocal].forEach((tab) => {
+            tab.style.cssText = tab === activeTab ? activeStyle : btnStyle;
+        });
+    };
     const content = document.createElement("div"); content.style.cssText="flex:1;padding:20px;overflow-y:auto;background:#222;";
     preventConflict(content); body.appendChild(content);
 
@@ -478,8 +460,168 @@ function showSettingsModal(node) {
         };
     };
 
-    tabRule.onclick = () => { tabRule.style.cssText = activeStyle; tabLLM.style.cssText = btnStyle; renderRuleTab(); };
-    tabLLM.onclick = () => { tabLLM.style.cssText = activeStyle; tabRule.style.cssText = btnStyle; renderLLMTab(); };
+    // --- TAB 3: Local prompt models ---
+    let curLocalName = Object.keys(node.ma_config.local_models || {})[0] || "";
+    const renderLocalTab = () => {
+        content.innerHTML = "";
+        node.ma_config.local_models = node.ma_config.local_models || {};
+        const keys = Object.keys(node.ma_config.local_models);
+        if (!keys.length) {
+            node.ma_config.local_models["Default Local"] = {
+                name: "Default Local", backend: "comfy_clip", model_name: "", clip_type: "qwen_image",
+                model_path: "", mmproj_path: "", server_path: "", context: 8192, gpu_layers: 99,
+                startup_timeout: 180, read_timeout: 600, generation_mode: "fast", sampling_mode: "off", max_length: 160, temperature: 0.1,
+                top_k: 20, top_p: 0.85, min_p: 0.0, repetition_penalty: 1.0,
+                presence_penalty: 0, seed: 0, thinking: false, use_default_template: true, mtp: "auto", do_sample: false, keep_loaded: true
+            };
+            curLocalName = "Default Local";
+        }
+        if (!curLocalName || !node.ma_config.local_models[curLocalName]) curLocalName = Object.keys(node.ma_config.local_models)[0];
+
+        const label = (text) => {
+            const el = document.createElement("label");
+            el.textContent = text;
+            el.style.cssText = "display:block;color:#888;font-size:12px;margin-bottom:5px;";
+            return el;
+        };
+        const input = (text, type = "text") => {
+            const wrap = document.createElement("div"); wrap.style.marginBottom = "9px";
+            wrap.appendChild(label(text));
+            const el = document.createElement("input"); el.type = type;
+            el.style.cssText = "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;box-sizing:border-box;";
+            preventConflict(el); wrap.appendChild(el); content.appendChild(wrap); return el;
+        };
+        const number = (text, min, max, step = "1") => {
+            const el = input(text, "number"); el.min = String(min); el.max = String(max); el.step = step; return el;
+        };
+        const select = (text, values) => {
+            const wrap = document.createElement("div"); wrap.style.marginBottom = "9px";
+            wrap.appendChild(label(text));
+            const el = document.createElement("select");
+            el.style.cssText = "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+            values.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; el.appendChild(o); });
+            preventConflict(el); wrap.appendChild(el); content.appendChild(wrap); return el;
+        };
+        const profileSelect = select("本地配置 (Profile)", Object.keys(node.ma_config.local_models));
+        profileSelect.value = curLocalName;
+        profileSelect.onchange = e => { curLocalName = e.target.value; loadVals(); };
+        const nameInp = input("配置名称");
+        const backendInp = select("后端", ["comfy_clip", "llama_cpp"]);
+        const modelNameInp = input("ComfyUI 文本编码器文件名 (models/text_encoders)");
+        const modelDatalist = document.createElement("datalist");
+        modelDatalist.id = "ma_local_text_encoders";
+        modelNameInp.setAttribute("list", modelDatalist.id);
+        modelNameInp.parentElement.appendChild(modelDatalist);
+        void api.fetchApi("/ma/local_text_encoders").then(r => r.json()).then(data => {
+            modelDatalist.innerHTML = "";
+            (Array.isArray(data.models) ? data.models : []).forEach(name => {
+                const option = document.createElement("option"); option.value = name; modelDatalist.appendChild(option);
+            });
+        }).catch(() => {});
+        const clipTypeInp = select("CLIP 类型", ["qwen_image", "flux", "stable_diffusion", "hunyuan_image", "omnigen2", "gemma", "lumina2", "wan", "yue2"]);
+        const modelPathInp = input("llama.cpp GGUF 模型路径");
+        const mmprojInp = input("llama.cpp mmproj 路径（可选）");
+        const serverPathInp = input("llama-server.exe 路径");
+        const contextInp = number("上下文长度", 1024, 131072);
+        const gpuInp = number("GPU layers", -1, 999, "1");
+        const modeInp = select("生成档位", ["fast", "balanced", "quality"]);
+        const samplingModeInp = select("采样模式", ["off", "on"]);
+        const maxLenInp = number("最大生成长度", 1, 32768);
+        const tempInp = number("Temperature", 0.01, 2, "0.01");
+        const topKInp = number("Top K", 0, 1000);
+        const topPInp = number("Top P", 0, 1, "0.01");
+        const minPInp = number("Min P", 0, 1, "0.01");
+        const repetitionInp = number("重复惩罚", 0, 5, "0.01");
+        const presenceInp = number("Presence penalty", 0, 5, "0.01");
+        const seedInp = number("Seed", 0, 0x7fffffff);
+        const thinkingInp = document.createElement("label"); thinkingInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#bbb;font-size:12px;margin:10px 0;";
+        const thinkingCheck = document.createElement("input"); thinkingCheck.type = "checkbox"; thinkingInp.appendChild(thinkingCheck); thinkingInp.append("思考模式 / Thinking"); content.appendChild(thinkingInp);
+        const templateInp = document.createElement("label"); templateInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#bbb;font-size:12px;margin:10px 0;";
+        const templateCheck = document.createElement("input"); templateCheck.type = "checkbox"; templateCheck.checked = true; templateInp.appendChild(templateCheck); templateInp.append("使用模型默认聊天模板 / Model default template"); content.appendChild(templateInp);
+        const mtpInp = select("MTP", ["auto", "off", "2", "3", "4", "5"]);
+        const keepInp = document.createElement("label"); keepInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#bbb;font-size:12px;margin:10px 0;";
+        const keepCheck = document.createElement("input"); keepCheck.type = "checkbox"; keepInp.appendChild(keepCheck); keepInp.append("保持模型常驻显存 / Keep loaded"); content.appendChild(keepInp);
+        const hint = document.createElement("div");
+        hint.textContent = "fast 关闭思考并限制输出长度，适合提示词改写；balanced/quality 提升生成上限。comfy_clip 复用 ComfyUI TextGenerate 的 CLIP.generate；llama_cpp 复用本地 llama-server。";
+        hint.style.cssText = "color:#777;font-size:11px;line-height:1.5;margin:2px 0 12px;";
+        content.appendChild(hint);
+
+        const toggleBackend = () => {
+            const isClip = backendInp.value === "comfy_clip";
+            const show = (element, visible) => { element.style.display = visible ? "" : "none"; };
+            modelNameInp.parentElement.style.display = isClip ? "" : "none";
+            clipTypeInp.parentElement.style.display = isClip ? "" : "none";
+            modelPathInp.parentElement.style.display = isClip ? "none" : "";
+            mmprojInp.parentElement.style.display = isClip ? "none" : "";
+            serverPathInp.parentElement.style.display = isClip ? "none" : "";
+            show(contextInp.parentElement, !isClip);
+            show(gpuInp.parentElement, !isClip);
+            show(samplingModeInp.parentElement, isClip);
+            show(thinkingInp, isClip);
+            show(templateInp, isClip);
+            show(mtpInp, isClip);
+        };
+        backendInp.onchange = toggleBackend;
+        const loadVals = () => {
+            const d = node.ma_config.local_models[curLocalName] || {};
+            nameInp.value = curLocalName;
+            backendInp.value = d.backend || "comfy_clip";
+            modelNameInp.value = d.model_name || "";
+            clipTypeInp.value = d.clip_type || "qwen_image";
+            modelPathInp.value = d.model_path || "";
+            mmprojInp.value = d.mmproj_path || "";
+            serverPathInp.value = d.server_path || "";
+            contextInp.value = d.context ?? 8192; gpuInp.value = d.gpu_layers ?? 99;
+            modeInp.value = d.generation_mode || "fast";
+            samplingModeInp.value = d.sampling_mode || "off";
+            maxLenInp.value = d.max_length ?? 160;
+            tempInp.value = d.temperature ?? 0.1; topPInp.value = d.top_p ?? 0.85;
+            topKInp.value = d.top_k ?? 20; minPInp.value = d.min_p ?? 0.0;
+            repetitionInp.value = d.repetition_penalty ?? 1.0; presenceInp.value = d.presence_penalty ?? 0;
+            seedInp.value = d.seed ?? 0; thinkingCheck.checked = d.thinking === true;
+            templateCheck.checked = d.use_default_template !== false; mtpInp.value = d.mtp ?? "auto";
+            keepCheck.checked = d.keep_loaded !== false;
+            toggleBackend();
+        };
+        const btnDiv = document.createElement("div"); btnDiv.style.cssText = "display:flex;gap:10px;margin-top:16px;";
+        const mkBtn = (txt, col, cb) => { const b = document.createElement("button"); b.textContent = txt; b.style.cssText = `flex:1;padding:10px;background:${col};color:white;border:none;border-radius:4px;cursor:pointer;`; preventConflict(b); b.onclick = cb; btnDiv.appendChild(b); };
+        mkBtn("➕ 新建", "#2196F3", () => { const n = `Local Profile ${Object.keys(node.ma_config.local_models).length + 1}`; node.ma_config.local_models[n] = { backend: "comfy_clip", model_name: "", clip_type: "qwen_image", keep_loaded: true }; curLocalName = n; void saveConfigToServer({ local_models: node.ma_config.local_models }); renderLocalTab(); });
+        mkBtn("💾 保存", "#4CAF50", () => {
+            const newName = nameInp.value.trim() || "Untitled Local";
+            if (newName !== curLocalName) delete node.ma_config.local_models[curLocalName];
+            curLocalName = newName;
+            node.ma_config.local_models[newName] = {
+                name: newName, backend: backendInp.value, model_name: modelNameInp.value.trim(), clip_type: clipTypeInp.value,
+                model_path: modelPathInp.value.trim(), mmproj_path: mmprojInp.value.trim(), server_path: serverPathInp.value.trim(),
+                context: Math.max(1024, Math.min(131072, Number(contextInp.value) || 8192)),
+                gpu_layers: Number(gpuInp.value) || 99, generation_mode: modeInp.value, sampling_mode: samplingModeInp.value,
+                max_length: Math.max(1, Math.min(32768, Number(maxLenInp.value) || 160)),
+                temperature: Math.max(0.01, Math.min(2, Number(tempInp.value) || 0.1)),
+                top_k: Math.max(0, Math.min(1000, Number(topKInp.value) || 20)),
+                top_p: Math.max(0, Math.min(1, Number(topPInp.value) || 0.85)),
+                min_p: Math.max(0, Math.min(1, Number(minPInp.value) || 0)),
+                repetition_penalty: Math.max(0, Math.min(5, Number(repetitionInp.value) || 1)),
+                presence_penalty: Math.max(0, Math.min(5, Number(presenceInp.value) || 0)),
+                seed: Math.max(0, Math.min(0x7fffffff, Number(seedInp.value) || 0)),
+                thinking: thinkingCheck.checked, use_default_template: templateCheck.checked, mtp: mtpInp.value,
+                keep_loaded: keepCheck.checked
+            };
+            void saveConfigToServer({ local_models: node.ma_config.local_models }).then(() => { refreshList(); alert("本地模型配置已保存"); });
+        });
+        mkBtn("🗑️ 删除", "#f44336", () => {
+            if (Object.keys(node.ma_config.local_models).length <= 1) return alert("至少保留一个本地配置！");
+            if (!confirm(`删除本地配置「${curLocalName}」？`)) return;
+            delete node.ma_config.local_models[curLocalName]; curLocalName = Object.keys(node.ma_config.local_models)[0];
+            void saveConfigToServer({ local_models: node.ma_config.local_models }).then(renderLocalTab);
+        });
+        content.appendChild(btnDiv);
+        const refreshList = () => { profileSelect.innerHTML = ""; Object.keys(node.ma_config.local_models).forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = k; o.selected = k === curLocalName; profileSelect.appendChild(o); }); };
+        loadVals();
+    };
+
+    tabRule.onclick = () => { activateTab(tabRule); renderRuleTab(); };
+    tabLLM.onclick = () => { activateTab(tabLLM); renderLLMTab(); };
+    tabLocal.onclick = () => { activateTab(tabLocal); renderLocalTab(); };
 
     document.body.appendChild(dialog);
     renderRuleTab();

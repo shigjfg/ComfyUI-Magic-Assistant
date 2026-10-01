@@ -37,9 +37,10 @@ export async function refreshMagicPromptReplaceNodes() {
         const data = await response.json();
         const allNodes = app.graph.findNodesByType(MAGIC_PROMPT_REPLACE_TYPE);
         for (const node of allNodes) {
-            if (!node.ma_config) node.ma_config = { rules: {}, llm: {} };
+            if (!node.ma_config) node.ma_config = { rules: {}, llm: {}, local_models: {} };
             node.ma_config.rules = data.rules;
             node.ma_config.llm = data.llm;
+            node.ma_config.local_models = data.local_models || {};
 
             const ruleNames = Object.values(data.rules || {}).map((r) => r.name);
             const ruleWidget = node.widgets?.find((w) => w.name === "rule_name");
@@ -53,6 +54,12 @@ export async function refreshMagicPromptReplaceNodes() {
             if (llmWidget) {
                 llmWidget.options.values = llmNames.length ? llmNames : ["No Profiles"];
                 if (!llmNames.includes(llmWidget.value)) llmWidget.value = llmNames[0] || "";
+            }
+            const localNames = Object.keys(data.local_models || {});
+            const localWidget = node.widgets?.find((w) => w.name === "local_profile");
+            if (localWidget) {
+                localWidget.options.values = localNames.length ? localNames : ["No Local Models"];
+                if (!localNames.includes(localWidget.value)) localWidget.value = localNames[0] || "";
             }
             node.setDirtyCanvas?.(true, true);
         }

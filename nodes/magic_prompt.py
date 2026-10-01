@@ -4,6 +4,8 @@ import sys
 import threading
 import time
 import uuid
+import base64
+from io import BytesIO
 from urllib.parse import urlsplit
 
 import requests
@@ -24,20 +26,29 @@ except ImportError:
     # 如果还是失败，尝试相对导入 (虽然在动态加载中不稳定，但作为备选)
     from ..utils import MagicUtils
 
+try:
+    from core.local_prompt import generate_local_prompt, llama_cpp_backend_available, unload_local_prompt_models
+except ImportError:
+    from ..core.local_prompt import generate_local_prompt, llama_cpp_backend_available, unload_local_prompt_models
+
 
 class MagicPromptReplace:
     DEFAULT_CONNECT_TIMEOUT = 15
     DEFAULT_READ_TIMEOUT = 180
     DEFAULT_MAX_RETRIES = 1
     MAX_ERROR_BODY = 1200
+    MAX_IMAGE_SIDE = 1536
+    IMAGE_JPEG_QUALITY = 90
 
     @classmethod
     def INPUT_TYPES(s):
         rules_data = MagicUtils.get_rules_config()
         llm_data = MagicUtils.get_llm_config()
+        local_model_data = MagicUtils.get_local_model_config()
 
         rules_list = [r.get("name") for r in rules_data.values()] or ["Loading..."]
         llm_list = list(llm_data.keys()) or ["Loading..."]
+        local_model_list = list(local_model_data.keys()) or ["No Local Models"]
 
         return {
             "required": {
@@ -45,10 +56,16 @@ class MagicPromptReplace:
                 "replace_tag": ("STRING", {"multiline": True, "dynamicPrompts": False, "placeholder": "新内容 (New Content)"}),
                 "llm_profile": (llm_list,),
                 "rule_name": (rules_list,),
+                # Append new controls after the original four inputs so old
+                # workflows keep their widgets_values positional alignment.
+                "rewrite_backend": (["llm", "local"], {"default": "llm", "tooltip": "llm 使用远程 OpenAI 兼容服务；local 使用配置中心的 ComfyUI 文本编码器或 llama.cpp。"}),
+                "local_profile": (local_model_list,),
             },
             "optional": {
                 # 外接 STRING：有连线时使用连线内容；未连线时为 None，回退到上面的 original_prompt 编辑框
                 "original_prompt_in": ("STRING", {"forceInput": True}),
+                # 可选图像：仅在接入时以 OpenAI 兼容的视觉消息发送给模型。
+                "image": ("IMAGE", {"tooltip": "Optional reference image. Connected images are sent to vision-capable OpenAI-compatible models."}),
             },
             "hidden": {
                 "prompt_config_json": ("STRING", {"default": ""}),
@@ -95,6 +112,81 @@ class MagicPromptReplace:
                 return linked_prompt
             return str(linked_prompt)
         return widget_prompt
+
+    @staticmethod
+    def _build_rewrite_prompt(original_prompt, replace_tag, target_features):
+        return f"""
+请根据以下指令修改提示词：
+[原始提示词]: {original_prompt}
+[新替换提示词]: {replace_tag}
+[替换的指南]: {target_features}
+
+任务要求：
+1. 根据“替换的指南”，将“新替换提示词”自然融入到“原始提示词”中。
+2. 根据“替换的指南”和当前扮演的角色，删除或替换“原始提示词”中不再适用或冲突的tag。
+3. 直接输出修改后的最终tag字符串，用英文逗号分隔。不要输出任何解释性文字。
+""".strip()
+
+    @classmethod
+    def _image_to_data_url(cls, image):
+        """将 ComfyUI IMAGE 的首帧等比压缩为 JPEG data URL。"""
+        try:
+            import numpy as np
+            from PIL import Image
+        except ImportError as exc:
+            raise RuntimeError("图像输入需要 NumPy 和 Pillow 支持") from exc
+
+        if hasattr(image, "detach"):
+            image = image.detach()
+        if hasattr(image, "cpu"):
+            image = image.cpu()
+        if hasattr(image, "numpy"):
+            image = image.numpy()
+
+        image_array = np.asarray(image)
+        batch_size = image_array.shape[0] if image_array.ndim == 4 else 1
+        if image_array.ndim == 4:
+            image_array = image_array[0]
+        if image_array.ndim != 3 or image_array.shape[-1] not in (1, 3, 4):
+            raise ValueError("IMAGE 必须是 [H, W, C] 或 [B, H, W, C]，且通道数为 1、3 或 4")
+
+        image_array = np.clip(image_array, 0.0, 1.0)
+        image_array = np.rint(image_array * 255.0).astype(np.uint8)
+        if image_array.shape[-1] == 1:
+            image_array = np.repeat(image_array, 3, axis=-1)
+
+        pil_image = Image.fromarray(image_array)
+        if pil_image.mode == "RGBA":
+            background = Image.new("RGB", pil_image.size, "white")
+            background.paste(pil_image, mask=pil_image.getchannel("A"))
+            pil_image = background
+        elif pil_image.mode != "RGB":
+            pil_image = pil_image.convert("RGB")
+
+        source_size = pil_image.size
+        resampling = getattr(Image, "Resampling", Image).LANCZOS
+        pil_image.thumbnail((cls.MAX_IMAGE_SIDE, cls.MAX_IMAGE_SIDE), resampling)
+
+        buffer = BytesIO()
+        pil_image.save(buffer, format="JPEG", quality=cls.IMAGE_JPEG_QUALITY, optimize=True)
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        metadata = {
+            "batch_size": batch_size,
+            "source_size": source_size,
+            "sent_size": pil_image.size,
+            "encoded_bytes": buffer.tell(),
+        }
+        return f"data:image/jpeg;base64,{encoded}", metadata
+
+    @staticmethod
+    def _user_message_content(text, image_data_url=None):
+        """未接图时保留纯文本协议；接图时构建 OpenAI 视觉 content 数组。"""
+        if not image_data_url:
+            return text
+        return [
+            {"type": "text", "text": text},
+            {"type": "image_url", "image_url": {"url": image_data_url}},
+        ]
 
     @staticmethod
     def _safe_int(profile, key, default, minimum, maximum):
@@ -231,7 +323,19 @@ class MagicPromptReplace:
             raise result["error"]
         return result.get("response")
 
-    def process_llm(self, original_prompt, replace_tag, rule_name, llm_profile, original_prompt_in=None, prompt_config_json=None, unique_id=None):
+    def process_llm(
+        self,
+        original_prompt,
+        replace_tag,
+        rule_name,
+        llm_profile,
+        rewrite_backend="llm",
+        local_profile=None,
+        original_prompt_in=None,
+        image=None,
+        prompt_config_json=None,
+        unique_id=None,
+    ):
         start_time = time.monotonic()
         request_id = self._request_id(prompt_config_json)
         original_prompt = self._effective_original_prompt(original_prompt, original_prompt_in)
@@ -262,11 +366,45 @@ class MagicPromptReplace:
                 self.log("没有可用的替换规则", "error", request_id)
                 return (f"Error [{request_id}]: No rules found.",)
 
+        system_prompt = active_rule.get("system", "")
+        target_features = active_rule.get("guide", "")
+        user_message = self._build_rewrite_prompt(original_prompt, replace_tag, target_features)
+
+        if str(rewrite_backend or "llm").lower() == "local":
+            local_data = MagicUtils.get_local_model_config()
+            active_local = local_data.get(local_profile) if local_profile else None
+            if not active_local and local_data:
+                local_profile, active_local = next(iter(local_data.items()))
+                self.log(f"本地配置不存在，已使用首个配置 | 当前配置:{local_profile}", "warning", request_id)
+            if not active_local:
+                self.log("没有可用的本地模型配置", "error", request_id)
+                return (f"Error [{request_id}]: No local model profiles.",)
+            started = time.monotonic()
+            self.log(
+                f"后端:local | 配置:{local_profile} | 类型:{active_local.get('backend', 'comfy_clip')} | "
+                f"原文:{len(original_prompt or '')}字符 | 替换:{len(replace_tag or '')}字符",
+                "start",
+                request_id,
+            )
+            if str(active_local.get("backend") or "comfy_clip").lower() == "llama_cpp" and not llama_cpp_backend_available(active_local):
+                self.log("未检测到 llama.cpp 可选后端，将自动回退到官方 ComfyUI 文本编码器", "warning", request_id)
+            try:
+                content = generate_local_prompt(active_local, user_message, system_prompt, image=image)
+                if not bool(active_local.get("keep_loaded", True)):
+                    unload_local_prompt_models()
+            except Exception as exc:
+                self.log(f"本地模型失败 | 异常:{type(exc).__name__} | 详情:{exc}", "error", request_id)
+                return (f"Error [{request_id}]: Local model failed: {exc}",)
+            self.log(
+                f"本地模型完成 | 输出:{len(content)}字符 | 总耗时:{time.monotonic() - started:.1f}s",
+                "success",
+                request_id,
+            )
+            return (content,)
+
         base_url = active_llm.get("base_url", "").rstrip("/")
         api_key = active_llm.get("api_key", "")
         model = active_llm.get("model", "")
-        system_prompt = active_rule.get("system", "")
-        target_features = active_rule.get("guide", "")
 
         if not base_url or not api_key:
             self.log(f"配置缺少 Base URL 或 API Key | 服务:{llm_profile}", "error", request_id)
@@ -281,31 +419,40 @@ class MagicPromptReplace:
         endpoint = self._endpoint(base_url)
         safe_endpoint = self._safe_endpoint_for_log(endpoint)
 
-        user_message = f"""
-请根据以下指令修改提示词：
-[原始提示词]: {original_prompt}
-[新替换提示词]: {replace_tag}
-[替换的指南]: {target_features}
+        image_data_url = None
+        image_metadata = None
+        if image is not None:
+            try:
+                image_data_url, image_metadata = self._image_to_data_url(image)
+            except Exception as exc:
+                self.log(f"图像编码失败 | 异常:{type(exc).__name__} | 详情:{exc}", "error", request_id)
+                return (f"Error [{request_id}]: Image encoding failed: {exc}",)
 
-任务要求：
-1. 根据“替换的指南”，将“新替换提示词”自然融入到“原始提示词”中。
-2. 根据“替换的指南”和当前扮演的角色，删除或替换“原始提示词”中不再适用或冲突的tag。
-3. 直接输出修改后的最终tag字符串，用英文逗号分隔。不要输出任何解释性文字。
-"""
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         base_payload = {
             "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
+                {"role": "user", "content": self._user_message_content(user_message, image_data_url)},
             ],
             "temperature": 0.7,
         }
 
+        image_log = "图像:未接入"
+        if image_metadata:
+            source_w, source_h = image_metadata["source_size"]
+            sent_w, sent_h = image_metadata["sent_size"]
+            image_log = (
+                f"图像:{source_w}x{source_h}→{sent_w}x{sent_h} | "
+                f"JPEG:{image_metadata['encoded_bytes'] / 1024:.1f}KB"
+            )
+            if image_metadata["batch_size"] > 1:
+                image_log += f" | 批次:{image_metadata['batch_size']}（使用首张）"
+
         self.log(
             f"服务:{llm_profile} | 模型:{model} | 规则:{rule_name} | "
             f"原文:{len(original_prompt or '')}字符 | 替换:{len(replace_tag or '')}字符 | "
-            f"连接/读取超时:{connect_timeout}/{read_timeout}s | 最多重试:{max_retries}次",
+            f"{image_log} | 连接/读取超时:{connect_timeout}/{read_timeout}s | 最多重试:{max_retries}次",
             "start",
             request_id,
         )

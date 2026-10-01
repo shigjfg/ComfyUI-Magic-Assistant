@@ -380,6 +380,36 @@ class MagicUtils:
             "model": "gpt-3.5-turbo"
         }
     }
+    DEFAULT_LOCAL_MODELS = {
+        "Default Local": {
+            "name": "Default Local",
+            "backend": "comfy_clip",
+            "model_name": "",
+            "clip_type": "qwen_image",
+            "model_path": "",
+            "mmproj_path": "",
+            "server_path": "",
+            "context": 8192,
+            "gpu_layers": 99,
+            "startup_timeout": 180,
+            "read_timeout": 600,
+            "generation_mode": "fast",
+            "sampling_mode": "off",
+            "max_length": 160,
+            "temperature": 0.1,
+            "top_k": 20,
+            "top_p": 0.85,
+            "min_p": 0.0,
+            "repetition_penalty": 1.0,
+            "presence_penalty": 0.0,
+            "seed": 0,
+            "thinking": False,
+            "use_default_template": True,
+            "mtp": "auto",
+            "do_sample": False,
+            "keep_loaded": True,
+        }
+    }
     DEFAULT_LOGICS = {}
     DEFAULT_RESOLUTIONS = {
         "presets": [512, 768, 832, 960, 1024, 1152, 1280, 1536, 2048],
@@ -499,6 +529,8 @@ class MagicUtils:
     @classmethod
     def get_llm_config(cls): return cls._load_dual_data("llm_settings.txt", cls.DEFAULT_LLM)
     @classmethod
+    def get_local_model_config(cls): return cls._load_dual_data("local_text_models.txt", cls.DEFAULT_LOCAL_MODELS)
+    @classmethod
     def get_rules_config(cls): return cls._load_dual_data("replace_rules.txt", {}) 
     @classmethod
     def get_resolutions_config(cls): return cls._load_dual_data("resolutions.txt", cls.DEFAULT_RESOLUTIONS)
@@ -507,6 +539,7 @@ class MagicUtils:
 
 # --- Danbooru 远端 API 配置 ---
 DANBOORU_API_BASE = "https://danbooru.donmai.us"
+DANBOORU_API_RELAY = "https://r.jina.ai/"
 # 本地中文词库路径（与预设补全库共用目录，文件名固定）
 DANBOORU_CN_DICT_PATH = os.path.join(PRESET_DIR, "tag预设库.txt")
 # Danbooru tag 分类（与参考代码一致）
@@ -821,6 +854,7 @@ def ma_invalidate_preset_tags_cache():
 async def get_config(request):
     return web.json_response({
         "llm": MagicUtils.get_llm_config(), 
+        "local_models": MagicUtils.get_local_model_config(),
         "rules": MagicUtils.get_rules_config(), 
         "resolutions": MagicUtils.get_resolutions_config(),
         "logics": MagicUtils.get_logic_config()
@@ -830,6 +864,7 @@ async def get_config(request):
 async def save_config(request):
     data = await request.json()
     if "llm" in data: MagicUtils._save_user_data("llm_settings.txt", data["llm"])
+    if "local_models" in data: MagicUtils._save_user_data("local_text_models.txt", data["local_models"])
     if "rules" in data: MagicUtils._save_user_data("replace_rules.txt", data["rules"])
     if "resolutions" in data: MagicUtils._save_user_data("resolutions.txt", data["resolutions"])
     if "logics" in data: MagicUtils._save_user_data("logic_rules.json", data["logics"])
@@ -892,6 +927,20 @@ async def llm_models(request):
         return web.json_response({"models": models})
     except Exception as exc:
         return web.json_response({"error": str(exc)[:500]}, status=502)
+
+
+@PromptServer.instance.routes.get("/ma/local_text_encoders")
+async def local_text_encoders(request):
+    """列出可用于官方 TextGenerate 路径的本地文本编码器。"""
+    try:
+        from .core.local_prompt import local_text_encoder_names, llama_cpp_backend_available
+
+        return web.json_response({
+            "models": local_text_encoder_names(),
+            "llama_cpp_available": llama_cpp_backend_available({}),
+        })
+    except Exception as exc:
+        return web.json_response({"models": [], "llama_cpp_available": False, "error": str(exc)})
 
 
 # --- 统一设置读写（存 userdata/settings.txt，可扩展） ---
@@ -2441,6 +2490,27 @@ def _ma_danbooru_row_has_local_cn(row: dict) -> bool:
     return bool(cn and cn != "—")
 
 
+def _ma_danbooru_get_json(_requests, url: str, params: dict, timeout: int = 12):
+    """请求 Danbooru；Cloudflare 403 时改用只读文本中转，解析其中的 JSON。"""
+    resp = _requests.get(url, params=params, timeout=timeout)
+    if resp.status_code == 403 and url.startswith(DANBOORU_API_BASE):
+        relay_url = f"{DANBOORU_API_RELAY}{resp.url}"
+        resp = _requests.get(relay_url, timeout=max(timeout, 20))
+    if resp.status_code != 200:
+        return resp, None
+    try:
+        return resp, resp.json()
+    except ValueError:
+        marker = "Markdown Content:"
+        text = resp.text or ""
+        if marker not in text:
+            return resp, None
+        try:
+            return resp, json.loads(text.split(marker, 1)[1].strip())
+        except (TypeError, ValueError):
+            return resp, None
+
+
 def _ma_danbooru_collect_tag_json_pages(
     _requests,
     url: str,
@@ -2455,11 +2525,10 @@ def _ma_danbooru_collect_tag_json_pages(
     def fetch_one(p: int) -> tuple[int, list, bool]:
         params = {**base_params, "limit": lim, "page": p}
         try:
-            resp = _requests.get(url, params=params, timeout=12)
-            if resp.status_code != 200:
+            resp, data = _ma_danbooru_get_json(_requests, url, params)
+            if resp.status_code != 200 or not isinstance(data, list):
                 return p, [], False
-            data = resp.json()
-            if not isinstance(data, list) or not data:
+            if not data:
                 return p, [], False
             full = len(data) >= lim
             return p, data, full
@@ -2684,8 +2753,15 @@ async def ma_danbooru_check_connection(request):
     url = f"{DANBOORU_API_BASE}/tags.json"
     params = {"search[name_matches]": "solo", "limit": 1}
     try:
-        resp = _requests.get(url, params=params, timeout=8)
-        if resp.status_code == 200:
+        loop = asyncio.get_running_loop()
+        # 连接检测通常发生在编辑器第一次打开时；同时预热本地 Danbooru
+        # 预设索引，避免用户第一次输入 tag 时才阻塞解析 6MB+ 词库。
+        resp, data = await loop.run_in_executor(
+            None,
+            lambda: _ma_danbooru_get_json(_requests, url, params, timeout=8),
+        )
+        if resp.status_code == 200 and isinstance(data, list):
+            await loop.run_in_executor(None, _ma_load_danbooru_preset_cache_sync)
             return web.json_response({"ok": True, "message": "连接成功"})
         return web.json_response({"ok": False, "message": f"HTTP {resp.status_code}"})
     except Exception as e:
@@ -2705,9 +2781,9 @@ async def check_update(request):
         
         if test_mode:
             # 测试模式：返回模拟的更新数据
-            current_version = "1.4.2"
+            current_version = "1.4.4"
             # 模拟一个更新的版本
-            latest_version = "1.4.2"
+            latest_version = "1.4.4"
             has_update = True
             
             # 读取本地 README 文件作为测试数据
@@ -2740,7 +2816,7 @@ async def check_update(request):
             })
         
         # 正常模式：从 GitHub 获取
-        current_version = "1.4.2"  # Current version / 当前版本号
+        current_version = "1.4.4"  # Current version / 当前版本号
         repo_url = "https://api.github.com/repos/shigjfg/ComfyUI-Magic-Assistant"
         
         async with aiohttp.ClientSession() as session:
@@ -2815,7 +2891,7 @@ async def check_update(request):
         })
     except Exception as e:
         return web.json_response({
-            "current_version": "1.4.2",
+            "current_version": "1.4.4",
             "latest_version": None,
             "has_update": False,
             "update_info": "",

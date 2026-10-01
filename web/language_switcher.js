@@ -551,6 +551,7 @@ const promptReplaceTranslations = {
     // Tab标签
     "📋 规则编辑器": { zh: "📋 规则编辑器", en: "📋 Rule Editor" },
     "🤖 LLM服务": { zh: "🤖 LLM服务", en: "🤖 LLM Service" },
+    "🧠 本地模型": { zh: "🧠 本地模型", en: "🧠 Local Models" },
     
     // 规则编辑器
     "编辑规则 (Edit Rule):": { zh: "编辑规则 (Edit Rule):", en: "Edit Rule:" },
@@ -583,6 +584,60 @@ const promptReplaceTranslations = {
     "已连接，但响应中没有可识别的模型列表": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
     "Connected, but response contains no recognizable model list": { zh: "已连接，但响应中没有可识别的模型列表", en: "Connected, but response contains no recognizable model list" },
     "保存失败 / Save Failed: ": { zh: "保存失败 / Save Failed: ", en: "Save Failed: " },
+
+    // 本地提示词模型
+    "本地配置 (Profile)": { zh: "本地配置 (Profile)", en: "Local Profile" },
+    "配置名称": { zh: "配置名称", en: "Profile Name" },
+    "后端": { zh: "后端", en: "Backend" },
+    "ComfyUI 文本编码器文件名 (models/text_encoders)": {
+        zh: "ComfyUI 文本编码器文件名 (models/text_encoders)",
+        en: "ComfyUI text encoder filename (models/text_encoders)",
+    },
+    "CLIP 类型": { zh: "CLIP 类型", en: "CLIP Type" },
+    "llama.cpp GGUF 模型路径": { zh: "llama.cpp GGUF 模型路径", en: "llama.cpp GGUF model path" },
+    "llama.cpp mmproj 路径（可选）": {
+        zh: "llama.cpp mmproj 路径（可选）",
+        en: "llama.cpp mmproj path (optional)",
+    },
+    "llama-server.exe 路径": { zh: "llama-server.exe 路径", en: "llama-server.exe path" },
+    "上下文长度": { zh: "上下文长度", en: "Context Length" },
+    "GPU layers": { zh: "GPU 层数", en: "GPU Layers" },
+    "生成档位": { zh: "生成档位", en: "Generation Preset" },
+    "采样模式": { zh: "采样模式", en: "Sampling Mode" },
+    "最大生成长度": { zh: "最大生成长度", en: "Max Generation Length" },
+    "Temperature": { zh: "温度", en: "Temperature" },
+    "Top K": { zh: "Top K", en: "Top K" },
+    "Top P": { zh: "Top P", en: "Top P" },
+    "Min P": { zh: "Min P", en: "Min P" },
+    "重复惩罚": { zh: "重复惩罚", en: "Repetition Penalty" },
+    "Presence penalty": { zh: "存在惩罚", en: "Presence Penalty" },
+    "Seed": { zh: "随机种子", en: "Seed" },
+    "MTP": { zh: "多令牌预测 (MTP)", en: "MTP" },
+    "思考模式 / Thinking": { zh: "思考模式 / Thinking", en: "Thinking Mode" },
+    "使用模型默认聊天模板 / Model default template": {
+        zh: "使用模型默认聊天模板 / Model default template",
+        en: "Use model default chat template",
+    },
+    "保持模型常驻显存 / Keep loaded": {
+        zh: "保持模型常驻显存 / Keep loaded",
+        en: "Keep model loaded",
+    },
+    "fast 关闭思考并限制输出长度，适合提示词改写；balanced/quality 提升生成上限。comfy_clip 复用 ComfyUI TextGenerate 的 CLIP.generate；llama_cpp 复用本地 llama-server。": {
+        zh: "fast 关闭思考并限制输出长度，适合提示词改写；balanced/quality 提升生成上限。comfy_clip 复用 ComfyUI TextGenerate 的 CLIP.generate；llama_cpp 复用本地 llama-server。",
+        en: "Fast disables thinking and limits output for prompt rewriting; balanced/quality raise the generation limit. comfy_clip reuses ComfyUI TextGenerate's CLIP.generate; llama_cpp uses a local llama-server.",
+    },
+    "本地模型配置已保存": { zh: "本地模型配置已保存", en: "Local model configuration saved" },
+    "至少保留一个本地配置！": { zh: "至少保留一个本地配置！", en: "Keep at least one local profile!" },
+    "删除本地配置「": { zh: "删除本地配置「", en: "Delete local profile \"" },
+    "No Local Models": { zh: "没有本地模型", en: "No Local Models" },
+    "llm 使用远程 OpenAI 兼容服务；local 使用配置中心的 ComfyUI 文本编码器或 llama.cpp。": {
+        zh: "llm 使用远程 OpenAI 兼容服务；local 使用配置中心的 ComfyUI 文本编码器或 llama.cpp。",
+        en: "llm uses a remote OpenAI-compatible service; local uses the ComfyUI text encoder or llama.cpp configured above.",
+    },
+    "Optional reference image. Connected images are sent to vision-capable OpenAI-compatible models.": {
+        zh: "可选参考图像。连接图像后，会发送给支持视觉的 OpenAI 兼容模型。",
+        en: "Optional reference image. Connected images are sent to vision-capable OpenAI-compatible models.",
+    },
     
     // 输入框placeholder（来自Python）
     "原始提示词 (Original)": { zh: "原始提示词 (Original)", en: "Original Prompt" },
@@ -1079,6 +1134,74 @@ const magicPromptBoxTranslations = {
 
     // Danbooru 连接状态条（编辑区底部）
     "补全来源：本地标签库": { zh: "补全来源：本地标签库", en: "Source: Local Tag Library" },
+    "Danbooru 本地标签": { zh: "Danbooru 本地标签", en: "Danbooru Local Tags" },
+    "标签组": { zh: "标签组", en: "Tag Group" },
+    "没有找到用户自定义标签或 Danbooru 预设标签": {
+        zh: "没有找到用户自定义标签或 Danbooru 预设标签",
+        en: "No custom tags or Danbooru preset tags found",
+    },
+    "上方为用户自定义标签，下方为 Danbooru 本地预设库": {
+        zh: "上方为用户自定义标签，下方为 Danbooru 本地预设库",
+        en: "Custom tags are shown above; Danbooru local presets are shown below",
+    },
+    "用户自定义标签": { zh: "用户自定义标签", en: "Custom User Tags" },
+    "Danbooru 本地预设库 · 分类+热度来自 danbooru预设库": {
+        zh: "Danbooru 本地预设库 · 分类+热度来自 danbooru预设库",
+        en: "Danbooru local presets · category and popularity from the local preset file",
+    },
+    "补全来源：Danbooru 本地预设库": {
+        zh: "补全来源：Danbooru 本地预设库",
+        en: "Source: Danbooru Local Presets",
+    },
+    "✅ Danbooru 已连接；内联补全使用本地预设库": {
+        zh: "✅ Danbooru 已连接；内联补全使用本地预设库",
+        en: "✅ Danbooru connected; inline autocomplete uses local presets",
+    },
+    "⚠️ Danbooru 远端不可用；内联补全仍使用本地预设库": {
+        zh: "⚠️ Danbooru 远端不可用；内联补全仍使用本地预设库",
+        en: "⚠️ Remote Danbooru unavailable; inline autocomplete still uses local presets",
+    },
+    "补全来源：Danbooru 本地预设库 · 正在后台检测远端标签搜索…": {
+        zh: "补全来源：Danbooru 本地预设库 · 正在后台检测远端标签搜索…",
+        en: "Source: Danbooru local presets · checking remote tag search in the background…",
+    },
+    "⚠️ Danbooru 远端不可用：": {
+        zh: "⚠️ Danbooru 远端不可用：",
+        en: "⚠️ Remote Danbooru unavailable: ",
+    },
+    " · 内联补全仍使用本地预设库": {
+        zh: " · 内联补全仍使用本地预设库",
+        en: " · inline autocomplete still uses local presets",
+    },
+    "选择补全数据来源：本地标签数据库使用预设库+用户标签组；Danbooru 模式使用本地 danbooru 预设库，分类与热度来自本地记录。": {
+        zh: "选择补全数据来源：本地标签数据库使用预设库+用户标签组；Danbooru 模式使用本地 danbooru 预设库，分类与热度来自本地记录。",
+        en: "Choose the autocomplete source: local mode uses preset libraries and user tag groups; Danbooru mode uses the local Danbooru preset file with category and popularity recorded locally.",
+    },
+    "数据来源（Danbooru 模式的内联补全使用本地预设；远端连接只影响「编辑标签」的在线搜索。）": {
+        zh: "数据来源（Danbooru 模式的内联补全使用本地预设；远端连接只影响「编辑标签」的在线搜索。）",
+        en: "Data source (Danbooru inline autocomplete uses local presets; remote connectivity only affects online search in Edit Tags.)",
+    },
+    "🌐 Danbooru 标签模式": { zh: "🌐 Danbooru 标签模式", en: "🌐 Danbooru Tag Mode" },
+    "使用本地 danbooru预设库.txt 补全；分类与热度来自本地记录。打开「编辑标签」时才会查询远端 Danbooru。": {
+        zh: "使用本地 danbooru预设库.txt 补全；分类与热度来自本地记录。打开「编辑标签」时才会查询远端 Danbooru。",
+        en: "Uses danbooru preset file for autocomplete; category and popularity come from local records. Remote Danbooru is queried only from Edit Tags.",
+    },
+    "内联补全使用本地预设；正在后台检测远端标签搜索…": {
+        zh: "内联补全使用本地预设；正在后台检测远端标签搜索…",
+        en: "Inline autocomplete uses local presets; checking remote tag search in the background…",
+    },
+    "⚠️ 远端标签搜索不可用：": {
+        zh: "⚠️ 远端标签搜索不可用：",
+        en: "⚠️ Remote tag search unavailable: ",
+    },
+    "；内联补全仍使用本地 Danbooru 预设。": {
+        zh: "；内联补全仍使用本地 Danbooru 预设。",
+        en: "; inline autocomplete still uses local Danbooru presets.",
+    },
+    "✅ 远端标签搜索已连接；内联补全使用本地 Danbooru 预设。": {
+        zh: "✅ 远端标签搜索已连接；内联补全使用本地 Danbooru 预设。",
+        en: "✅ Remote tag search connected; inline autocomplete uses local Danbooru presets.",
+    },
     "✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据": {
         zh: "✅ Danbooru 已连接，补全与标签搜索使用Danbooru数据",
         en: "✅ Danbooru connected; autocomplete & tag search use Danbooru data",
