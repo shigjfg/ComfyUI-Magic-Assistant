@@ -35,6 +35,23 @@ app.registerExtension({
 
             // 查找主文本框 widget
             let textWidget = this.widgets ? this.widgets.find(w => w.name === "text") : null;
+            if (textWidget && typeof textWidget.value === "string" && textWidget.value.includes("*")) {
+                const parsed = parseMagicPromptTags(textWidget.value);
+                if (parsed.some((item) => !item.isNewline && item.disabled)) {
+                    const visibleText = serializeMagicPromptTags(
+                        parsed.filter((item) => item.isNewline || !item.disabled),
+                    );
+                    const tagState = parsed.map((item) =>
+                        item.isNewline
+                            ? { isNewline: true }
+                            : { isNewline: false, text: item.text, disabled: item.disabled === true },
+                    );
+                    if (!this.properties || typeof this.properties !== "object") this.properties = {};
+                    this.properties[MAGIC_PROMPT_TAG_STATE_KEY] = tagState;
+                    this.properties[MAGIC_PROMPT_TAG_STATE_TEXT_KEY] = visibleText;
+                    syncMagicPromptTextWidget(this, textWidget, visibleText);
+                }
+            }
 
             // 添加编辑提示词按钮
             if (!this.widgets) this.widgets = [];
@@ -2947,10 +2964,21 @@ function readMagicTextareaHeightPx(ta, fallback) {
 
 function persistMagicDialogSize(dialog, dlgCfg) {
     if (!dialog) return;
-    const w = dialog.offsetWidth;
-    const h = dialog.offsetHeight;
+    // 异步打开弹窗时，关闭/重开可能发生在首次布局完成前。
+    // 此时 offsetWidth/offsetHeight 会短暂返回 1x1，绝不能把这个瞬时值写入 settings.txt。
+    const rect = typeof dialog.getBoundingClientRect === "function"
+        ? dialog.getBoundingClientRect()
+        : null;
+    const measuredW = Math.round(rect?.width || dialog.offsetWidth || 0);
+    const measuredH = Math.round(rect?.height || dialog.offsetHeight || 0);
+    const previousW = Number(dlgCfg?.width);
+    const previousH = Number(dlgCfg?.height);
+    const w = measuredW >= 100 ? measuredW : (Number.isFinite(previousW) && previousW >= 100 ? Math.round(previousW) : 720);
+    const h = measuredH >= 100 ? measuredH : (Number.isFinite(previousH) && previousH >= 100 ? Math.round(previousH) : 400);
     const ta = dialog.querySelector("[data-magic-ta]");
     const taH = readMagicTextareaHeightPx(ta, dlgCfg.textareaMinHeight ?? 160);
+    dlgCfg.width = w;
+    dlgCfg.height = h;
     dlgCfg.textareaMinHeight = taH;
     fetch("/ma/settings", {
         method: "POST",
@@ -2970,8 +2998,70 @@ function magicPromptHasVisibleContent(raw) {
 /** 屏蔽 tag 的前缀字符（! → *，避免与 !? 等表情/tag 混合用法冲突） */
 const DISABLE_PREFIX = "*";
 const DISABLE_REG = /^\*/;
+const MAGIC_PROMPT_TAG_STATE_KEY = "magic_prompt_tag_state";
+const MAGIC_PROMPT_TAG_STATE_TEXT_KEY = "magic_prompt_tag_state_text";
 function isDisabledTag(t) {
     return DISABLE_REG.test(t);
+}
+
+/**
+ * 节点级持久化的完整 Tag 模型。
+ * 芯片区需要保留 disabled Tag，textarea/节点 text 则只保存启用 Tag；
+ * 因此不能把这份状态只放在弹窗 shell 的内存里。
+ */
+function readMagicPromptTagState(node) {
+    if (!node || !node.properties) return null;
+    // 旧版本只保存了数组，没有记录它对应的启用文本；其中可能已经包含历史幽灵 Tag。
+    // 让这类状态走当前 widget 文本重建，避免把旧模型误当成可信快照。
+    if (typeof node.properties[MAGIC_PROMPT_TAG_STATE_TEXT_KEY] !== "string") return null;
+    let raw = node.properties[MAGIC_PROMPT_TAG_STATE_KEY];
+    if (typeof raw === "string") {
+        try {
+            raw = JSON.parse(raw);
+        } catch (_) {
+            return null;
+        }
+    }
+    if (!Array.isArray(raw)) return null;
+    const out = [];
+    for (const item of raw) {
+        if (item && item.isNewline) {
+            out.push({ isNewline: true });
+            continue;
+        }
+        const text = item && typeof item.text === "string" ? item.text.trim() : "";
+        if (!text) continue;
+        out.push({ isNewline: false, text, disabled: item.disabled === true });
+    }
+    return out;
+}
+
+function persistMagicPromptTagState(node, tags) {
+    if (!node) return;
+    const next = (Array.isArray(tags) ? tags : [])
+        .map((item) => {
+            if (item && item.isNewline) return { isNewline: true };
+            const text = item && typeof item.text === "string" ? item.text.trim() : "";
+            if (!text) return null;
+            return { isNewline: false, text, disabled: item.disabled === true };
+        })
+        .filter(Boolean);
+    if (!node.properties || typeof node.properties !== "object") node.properties = {};
+    const prev = node.properties[MAGIC_PROMPT_TAG_STATE_KEY];
+    const enabledText = serializeMagicPromptTags(next.filter((item) => item.isNewline || !item.disabled));
+    const prevText = node.properties[MAGIC_PROMPT_TAG_STATE_TEXT_KEY];
+    if (JSON.stringify(prev) === JSON.stringify(next) && prevText === enabledText) return;
+    node.properties[MAGIC_PROMPT_TAG_STATE_KEY] = next;
+    node.properties[MAGIC_PROMPT_TAG_STATE_TEXT_KEY] = enabledText;
+    try {
+        if (typeof node.setDirtyCanvas === "function") {
+            node.setDirtyCanvas(true, true);
+        } else if (app.graph && typeof app.graph.setDirtyCanvas === "function") {
+            app.graph.setDirtyCanvas(true, true);
+        }
+    } catch (_) {
+        /* ignore */
+    }
 }
 
 /**
@@ -2992,40 +3082,40 @@ function magicIsEmoticonOpenParen(buf, ch) {
 function parseMagicPromptTags(raw) {
     const s = raw || "";
     const result = [];
-    let buf = "";
-    let depth = 0;
     const openB = "([{";
     const closeB = ")]}";
 
-    const flushTag = () => {
-        const t = buf.trim();
-        buf = "";
-        if (!t) return;
-        const dis = isDisabledTag(t);
-        result.push({
-            isNewline: false,
-            text: dis ? (t.slice(1).trim() || DISABLE_PREFIX) : t,
-            disabled: dis,
-        });
-    };
+    s.split("\n").forEach((line, lineIndex, lines) => {
+        let buf = "";
+        let depth = 0;
+        const flushTag = () => {
+            const t = buf.trim();
+            buf = "";
+            if (!t) return;
+            const dis = isDisabledTag(t);
+            result.push({
+                isNewline: false,
+                text: dis ? (t.slice(1).trim() || DISABLE_PREFIX) : t,
+                disabled: dis,
+            });
+        };
 
-    for (let i = 0; i < s.length; i++) {
-        const c = s[i];
-        if (c === "\n" && depth === 0) {
-            flushTag();
-            result.push({ isNewline: true });
-            continue;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === "," && depth === 0) {
+                flushTag();
+                continue;
+            }
+            if (openB.includes(c)) {
+                if (!magicIsEmoticonOpenParen(buf, c)) depth++;
+            } else if (closeB.includes(c)) {
+                depth = Math.max(0, depth - 1);
+            }
+            buf += c;
         }
-        if (c === "," && depth === 0) {
-            flushTag();
-            continue;
-        }
-        if (openB.includes(c)) {
-            if (!magicIsEmoticonOpenParen(buf, c)) depth++;
-        } else if (closeB.includes(c)) depth = Math.max(0, depth - 1);
-        buf += c;
-    }
-    flushTag();
+        flushTag();
+        if (lineIndex < lines.length - 1) result.push({ isNewline: true });
+    });
     return result;
 }
 
@@ -3044,6 +3134,24 @@ function magicEnsureTrailingCommaPerLine(s) {
             return `${te},`;
         })
         .join("\n");
+}
+
+/**
+ * 关闭编辑弹窗时，移除最后一个非空行末尾由编辑器自动补上的逗号。
+ * 末尾空行仍保留，避免改变用户的换行结构。
+ */
+function magicRemoveTrailingCommaFromLastNonEmptyLine(s) {
+    if (s == null || s === "") return s;
+    const lines = s.split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const te = lines[i].replace(/[ \t\u3000]+$/g, "");
+        if (!te) continue;
+        if (te.endsWith(",")) {
+            lines[i] = lines[i].slice(0, te.length - 1) + lines[i].slice(te.length);
+        }
+        break;
+    }
+    return lines.join("\n");
 }
 
 /**
@@ -3073,31 +3181,21 @@ function magicMapCursorAfterEnsureTrailingComma(oldText, oldPos) {
 }
 
 function serializeMagicPromptTags(tags) {
-    const chunks = [];
-    for (const t of tags) {
-        if (t.isNewline) {
-            chunks.push({ k: "n" });
+    const lines = [""];
+    let hasTag = false;
+    for (const t of Array.isArray(tags) ? tags : []) {
+        if (t && t.isNewline) {
+            lines.push("");
             continue;
         }
-        const x = (t.text || "").trim();
+        const x = (t && t.text || "").trim();
         if (!x) continue;
-        chunks.push({ k: "t", s: t.disabled ? `${DISABLE_PREFIX}${x}` : x });
+        if (lines[lines.length - 1]) lines[lines.length - 1] += ", ";
+        lines[lines.length - 1] += t.disabled ? `${DISABLE_PREFIX}${x}` : x;
+        hasTag = true;
     }
-    if (chunks.length === 0) return "";
-    let out = "";
-    for (let i = 0; i < chunks.length; i++) {
-        const c = chunks[i];
-        if (c.k === "n") {
-            out += "\n";
-            continue;
-        }
-        const prev = chunks[i - 1];
-        if (i > 0 && prev && prev.k === "t" && !out.endsWith("\n")) {
-            out += ", ";
-        }
-        out += c.s;
-    }
-    return magicEnsureTrailingCommaPerLine(out);
+    if (!hasTag) return "";
+    return magicEnsureTrailingCommaPerLine(lines.join("\n"));
 }
 
 /** 将指定下标的 tag 片段按顺序序列化为文本（多选复制） */
@@ -3965,18 +4063,23 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
         const v = textarea.value;
         const caret = textarea.selectionStart;
         const { segStart, segEnd } = getSegmentAtCaret(v, caret);
-        // 选完后默认加 ", "；仅当片段后面已经是逗号或换行时不重复加（末尾 segEnd===length 也要加逗号）
+        // 选完后默认加 ", "；仅当片段后面已经是逗号或换行时不重复加。
         const after = v[segEnd];
         const trailing = magicIsPromptSegmentDelimiter(after) ? "" : ", ";
         const tail = v.slice(segEnd).replace(/^[ ]+/, ""); // 只去前导空格，保留逗号/换行
-        const newV = v.slice(0, segStart) + it.en + trailing + tail;
+        const leading = (v.slice(segStart, segEnd).match(/^[ \t\u3000]*/) || [""])[0];
+        const newV = v.slice(0, segStart) + leading + it.en + trailing + tail;
         const norm = magicEnsureTrailingCommaPerLine(newV);
         textarea.value = norm;
-        const np = magicMapCursorAfterEnsureTrailingComma(newV, segStart + it.en.length + trailing.length);
+        const np = magicMapCursorAfterEnsureTrailingComma(
+            newV,
+            segStart + leading.length + it.en.length + trailing.length,
+        );
         textarea.setSelectionRange(np, np);
-        onInput();
+        onInput({ inputType: "insertReplacementText", data: it.en });
         hide();
         textarea.focus();
+        textarea.setSelectionRange(np, np);
     };
 
     const renderList = () => {
@@ -4310,8 +4413,14 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
     const scheduleFetch = debounce(fetchSuggestions, AUTOCOMPLETE_DEBOUNCE_MS);
 
     // 仅在「实际打字」时触发补全；鼠标点击/方向键移动光标不触发（仿 WeiLin 逻辑）
-    textarea.addEventListener("input", () => {
-        onInput();
+    textarea.addEventListener("input", (e) => {
+        onInput(e);
+        if (textarea._magicComposing) return;
+        scheduleFetch();
+    });
+    textarea.addEventListener("compositionend", () => {
+        // 某些输入法把最终 input 事件放在 compositionend 前，组合阶段会被上面的监听跳过；
+        // 组合结束后主动刷新一次，确保中文查询（如“男孩”）能弹出补全。
         scheduleFetch();
     });
 
@@ -4461,6 +4570,32 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
     }
 
     const closeEditorOverlay = () => {
+        let finalText = null;
+        try {
+            const ta = shell.querySelector("[data-magic-ta]");
+            const rawText = ta ? ta.value : editorText;
+            if (typeof rawText === "string") {
+                finalText = magicRemoveTrailingCommaFromLastNonEmptyLine(rawText);
+                if (ta && ta.value !== finalText) ta.value = finalText;
+                editorText = finalText;
+                if (textWidget && node) {
+                    syncMagicPromptTextWidget(node, textWidget, finalText);
+                }
+            }
+            if (Array.isArray(shell._magicTagModel)) {
+                persistMagicPromptTagState(node, shell._magicTagModel);
+                if (
+                    finalText != null &&
+                    node &&
+                    node.properties &&
+                    typeof node.properties === "object"
+                ) {
+                    node.properties[MAGIC_PROMPT_TAG_STATE_TEXT_KEY] = finalText;
+                }
+            }
+        } catch (_) {
+            /* ignore */
+        }
         persistMagicDialogSize(dialog, dlgCfg);
         if (shell._magicTagUiTimer) {
             clearTimeout(shell._magicTagUiTimer);
@@ -4633,7 +4768,542 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
     // =====================================================
     // 内容渲染
     // =====================================================
-    let editorText = magicEnsureTrailingCommaPerLine(currentText);  // 本地编辑副本（与 WeiLin 一致：每行尾逗号）
+    const serializeMagicEnabledTags = (tags) =>
+        serializeMagicPromptTags((Array.isArray(tags) ? tags : []).filter((t) => t.isNewline || !t.disabled));
+    const savedTagState = readMagicPromptTagState(node);
+    const parsedCurrentText = parseMagicPromptTags(currentText);
+    const hasLegacyStarText = parsedCurrentText.some((item) => !item.isNewline && item.disabled);
+    let editorTags = savedTagState !== null ? savedTagState : parsedCurrentText;
+    let editorText = serializeMagicEnabledTags(editorTags);  // 文本框只保留启用内容，完整顺序在 editorTags 中维护
+    shell._magicTagModel = editorTags;
+    shell._magicLastEditorText = magicEnsureTrailingCommaPerLine(editorText);
+    shell._magicLastRawEditorText = editorText;
+
+    const getEditorTags = () =>
+        Array.isArray(shell._magicTagModel) ? shell._magicTagModel : [];
+
+    /**
+     * 将文本框中的启用内容合并回完整 Tag 序列。
+     * 旧的禁用 Tag 不参与文本匹配，而是锚定到它后方仍存在的旧 Tag；
+     * 这样新增文本只会进入对应可见间隙，不会把禁用 Tag 重排到错误位置。
+     */
+    const reconcileEditorTags = (raw, forceReparse = false, inputEvent = null) => {
+        const old = getEditorTags();
+        // textarea 的启用文本没有变化时，直接保留完整模型。
+        // 这对“全部 Tag 都被屏蔽”以及“禁用 Tag + 换行”尤其重要：
+        // 仅靠重新解析可见文本无法推断它们原本位于哪些间隙。
+        const oldEnabledText = serializeMagicEnabledTags(old);
+        if (!forceReparse && (
+            magicEnsureTrailingCommaPerLine(raw || "") ===
+            magicEnsureTrailingCommaPerLine(oldEnabledText)
+        )) {
+            return old;
+        }
+        const parsed = parseMagicPromptTags(raw || "");
+        const previousRaw = shell._magicLastRawEditorText;
+        const caretLine =
+            Number.isFinite(shell._magicInputLineIndex) && shell._magicInputLineIndex >= 0
+                ? shell._magicInputLineIndex
+                : 0;
+        const inputType = inputEvent && typeof inputEvent.inputType === "string"
+            ? inputEvent.inputType
+            : "";
+        const isInsertionEvent = inputType.startsWith("insert");
+        const previousNewlines = (String(previousRaw || "").match(/\n/g) || []).length;
+        const currentNewlines = (String(raw || "").match(/\n/g) || []).length;
+        if (
+            previousNewlines !== currentNewlines &&
+            (inputType === "insertLineBreak" ||
+                inputType === "insertParagraph" ||
+                inputType === "deleteContentBackward" ||
+                inputType === "deleteContentForward") &&
+            !parsed.some((item) => !item.isNewline && item.disabled)
+        ) {
+            const oldVisible = old.filter((item) => !item.isNewline && !item.disabled);
+            const nextVisible = parsed.filter((item) => !item.isNewline && !item.disabled);
+            if (
+                oldVisible.length === nextVisible.length &&
+                oldVisible.every((item, index) => item.text === nextVisible[index].text)
+            ) {
+                const disabledBefore = new Map();
+                let visibleIndex = 0;
+                for (const item of old) {
+                    if (item.isNewline) continue;
+                    if (item.disabled) {
+                        const list = disabledBefore.get(visibleIndex) || [];
+                        list.push(item);
+                        disabledBefore.set(visibleIndex, list);
+                    } else {
+                        visibleIndex += 1;
+                    }
+                }
+                const merged = [];
+                visibleIndex = 0;
+                for (const item of parsed) {
+                    if (item.isNewline) {
+                        merged.push(item);
+                        continue;
+                    }
+                    if (disabledBefore.has(visibleIndex)) {
+                        merged.push(...disabledBefore.get(visibleIndex));
+                    }
+                    merged.push(item);
+                    visibleIndex += 1;
+                }
+                if (disabledBefore.has(visibleIndex)) {
+                    merged.push(...disabledBefore.get(visibleIndex));
+                }
+                return merged;
+            }
+        }
+        if (inputType && typeof previousRaw === "string") {
+            const oldLines = previousRaw.split("\n");
+            const newLines = String(raw || "").split("\n");
+            const line = Math.max(0, Math.min(caretLine, newLines.length - 1));
+            if (oldLines.length === newLines.length) {
+                const oldLineText = oldLines[line];
+                const newLineText = newLines[line];
+                const oldLineTags = parseMagicPromptTags(oldLineText).filter((t) => !t.isNewline);
+                const newLineTags = parseMagicPromptTags(newLineText).filter((t) => !t.isNewline);
+                let tokenPrefix = 0;
+                while (
+                    tokenPrefix < oldLineTags.length &&
+                    tokenPrefix < newLineTags.length &&
+                    oldLineTags[tokenPrefix].text === newLineTags[tokenPrefix].text
+                ) tokenPrefix++;
+                let tokenOldSuffix = oldLineTags.length;
+                let tokenNewSuffix = newLineTags.length;
+                while (
+                    tokenOldSuffix > tokenPrefix &&
+                    tokenNewSuffix > tokenPrefix &&
+                    oldLineTags[tokenOldSuffix - 1].text === newLineTags[tokenNewSuffix - 1].text
+                ) {
+                    tokenOldSuffix--;
+                    tokenNewSuffix--;
+                }
+                const oldChangedCount = tokenOldSuffix - tokenPrefix;
+                const newChangedCount = tokenNewSuffix - tokenPrefix;
+                if (oldChangedCount <= 1 && (newChangedCount > 0 || oldChangedCount > 0)) {
+                    const merged = old.slice();
+                    const visibleIndices = [];
+                    let currentLine = 0;
+                    let newlineIndex = merged.length;
+                    for (let i = 0; i < merged.length; i++) {
+                        const item = merged[i];
+                        if (item.isNewline) {
+                            if (currentLine === line) {
+                                newlineIndex = i;
+                                break;
+                            }
+                            currentLine++;
+                            continue;
+                        }
+                        if (currentLine === line && !item.disabled) visibleIndices.push(i);
+                    }
+                    if (oldChangedCount === 1 && newChangedCount === 1) {
+                        const targetIndex = visibleIndices[tokenPrefix];
+                        if (targetIndex != null) {
+                            merged[targetIndex] = {
+                                ...merged[targetIndex],
+                                text: newLineTags[tokenPrefix].text,
+                                disabled: false,
+                            };
+                            return merged;
+                        }
+                    } else if (oldChangedCount === 1 && newChangedCount > 1) {
+                        const targetIndex = visibleIndices[tokenPrefix];
+                        if (targetIndex != null) {
+                            merged.splice(
+                                targetIndex,
+                                1,
+                                ...newLineTags.slice(tokenPrefix, tokenNewSuffix),
+                            );
+                            return merged;
+                        }
+                    } else if (oldChangedCount === 1 && newChangedCount === 0) {
+                        const targetIndex = visibleIndices[tokenPrefix];
+                        if (targetIndex != null) {
+                            merged.splice(targetIndex, 1);
+                            return merged;
+                        }
+                    } else if (oldChangedCount === 0 && newChangedCount > 0) {
+                        const insertAt = visibleIndices[tokenPrefix] != null
+                            ? visibleIndices[tokenPrefix]
+                            : newlineIndex;
+                        merged.splice(insertAt, 0, ...newLineTags.slice(tokenPrefix, tokenNewSuffix));
+                        return merged;
+                    }
+                }
+                let charPrefix = 0;
+                while (
+                    charPrefix < oldLineText.length &&
+                    charPrefix < newLineText.length &&
+                    oldLineText[charPrefix] === newLineText[charPrefix]
+                ) {
+                    charPrefix++;
+                }
+                let charOldTail = oldLineText.length;
+                let charNewTail = newLineText.length;
+                while (
+                    charOldTail > charPrefix &&
+                    charNewTail > charPrefix &&
+                    oldLineText[charOldTail - 1] === newLineText[charNewTail - 1]
+                ) {
+                    charOldTail--;
+                    charNewTail--;
+                }
+                const oldLineTagsForSuffix = parseMagicPromptTags(oldLineText).filter((t) => !t.isNewline);
+                const newLineTagsForSuffix = parseMagicPromptTags(newLineText).filter((t) => !t.isNewline);
+                let commonPrefix = 0;
+                while (
+                    commonPrefix < oldLineTagsForSuffix.length &&
+                    commonPrefix < newLineTagsForSuffix.length &&
+                    oldLineTagsForSuffix[commonPrefix].text === newLineTagsForSuffix[commonPrefix].text
+                ) {
+                    commonPrefix++;
+                }
+                let commonOldSuffix = oldLineTagsForSuffix.length;
+                let commonNewSuffix = newLineTagsForSuffix.length;
+                while (
+                    commonOldSuffix > commonPrefix &&
+                    commonNewSuffix > commonPrefix &&
+                    oldLineTagsForSuffix[commonOldSuffix - 1].text === newLineTagsForSuffix[commonNewSuffix - 1].text
+                ) {
+                    commonOldSuffix--;
+                    commonNewSuffix--;
+                }
+                if (
+                    commonPrefix === oldLineTagsForSuffix.length &&
+                    commonNewSuffix > commonPrefix &&
+                    commonNewSuffix - commonPrefix <= 1
+                ) {
+                    const merged = old.slice();
+                    let currentLine = 0;
+                    let insertAt = merged.length;
+                    for (let i = 0; i < merged.length; i++) {
+                        if (merged[i].isNewline) {
+                            if (currentLine === line) {
+                                insertAt = i;
+                                break;
+                            }
+                            currentLine++;
+                        }
+                        if (currentLine === line) insertAt = i + 1;
+                    }
+                    merged.splice(insertAt, 0, ...newLineTagsForSuffix.slice(commonPrefix, commonNewSuffix));
+                    return merged;
+                }
+            }
+        }
+        // 手打追加时，textarea 只有启用 Tag，隐藏 Tag 不会出现在 raw。
+        // 若能确认只是某一行的尾部新增，直接把新增片段插入完整模型的同一行，
+        // 不让下一行的隐藏 Tag 被错误吸到上一行。
+        if (
+            !isInsertionEvent &&
+            typeof previousRaw === "string" &&
+            raw.length > previousRaw.length
+        ) {
+            let prefixLength = 0;
+            while (
+                prefixLength < previousRaw.length &&
+                prefixLength < raw.length &&
+                previousRaw[prefixLength] === raw[prefixLength]
+            ) {
+                prefixLength += 1;
+            }
+            const addedRaw = raw.slice(prefixLength);
+            const added = parseMagicPromptTags(addedRaw);
+            const previousLineStart =
+                previousRaw.lastIndexOf("\n", Math.max(0, prefixLength - 1)) + 1;
+            const nextLineStart = raw.indexOf("\n", prefixLength);
+            const changedLinePrefix = previousRaw
+                .slice(previousLineStart, prefixLength)
+                .replace(/,\s*$/, "")
+                .trim();
+            const changedLineSuffix = (
+                nextLineStart >= 0
+                    ? raw.slice(prefixLength, nextLineStart)
+                    : raw.slice(prefixLength)
+            )
+                .replace(/,\s*$/, "")
+                .trim();
+            const isLineStartInsertion =
+                changedLinePrefix.length === 0 &&
+                changedLineSuffix.length > 0 &&
+                !changedLineSuffix.includes(",");
+            const isSingleTagInsertion =
+                added.length === 1 &&
+                !added[0].isNewline &&
+                !added[0].disabled &&
+                (changedLinePrefix.length > 0 || isLineStartInsertion);
+            const isSingleTagReplacement =
+                !added.some((item) => item.isNewline) &&
+                parseMagicPromptTags(addedRaw).length === 1 &&
+                !parseMagicPromptTags(addedRaw)[0].disabled;
+            const isInsertEvent = inputType.startsWith("insert");
+            const isSingleTagInput =
+                isInsertEvent &&
+                added.length === 1 &&
+                !added[0].isNewline &&
+                !added[0].disabled;
+            const isLineTailBeforeNextVisibleTag =
+                isSingleTagInput &&
+                changedLinePrefix.length > 0 &&
+                changedLineSuffix.length > 0 &&
+                !changedLineSuffix.includes(",");
+            if (
+                (isSingleTagInsertion || isSingleTagReplacement) ||
+                isLineTailBeforeNextVisibleTag
+            ) {
+                const out = old.slice();
+                let insertAt = out.length;
+                let line = 0;
+                for (let i = 0; i < out.length; i++) {
+                    if (out[i].isNewline) {
+                        if (line >= caretLine) {
+                            insertAt = i;
+                            break;
+                        }
+                        line += 1;
+                    }
+                    if (line === caretLine) insertAt = i + 1;
+                }
+                if (isLineStartInsertion) {
+                    line = 0;
+                    for (let i = 0; i < out.length; i++) {
+                        if (!out[i].isNewline) continue;
+                        if (line === caretLine) {
+                            insertAt = i + 1;
+                            break;
+                        }
+                        line += 1;
+                    }
+                }
+                let inserted = added;
+                if (isLineTailBeforeNextVisibleTag && added[0].text.includes(" ")) {
+                    const parts = added[0].text.split(/\s+/).filter(Boolean);
+                    inserted = parts.map((text) => ({ isNewline: false, text, disabled: false }));
+                }
+                out.splice(insertAt, 0, ...inserted);
+                return out;
+            }
+        }
+        // 粘贴/替换带有换行或逗号的完整片段时，按当前文本重建；
+        // 不要把旧模型里位于其它行的隐藏 Tag 再注入到新片段中。
+        if (
+            forceReparse &&
+            (raw.includes("\n") || raw.includes("\r") || raw.length < String(previousRaw || "").length)
+        ) {
+            if (inputType.startsWith("insert") && typeof previousRaw === "string") {
+                const prefix = (() => {
+                    let i = 0;
+                    while (i < previousRaw.length && i < raw.length && previousRaw[i] === raw[i]) i++;
+                    return i;
+                })();
+                const oldStart = previousRaw.lastIndexOf("\n", Math.max(0, prefix - 1)) + 1;
+                const oldEnd = previousRaw.indexOf("\n", oldStart);
+                const newEnd = raw.indexOf("\n", prefix);
+                const oldLine = previousRaw.slice(oldStart, oldEnd < 0 ? previousRaw.length : oldEnd);
+                const newLine = raw.slice(oldStart, newEnd < 0 ? raw.length : newEnd);
+                const oldLineTags = parseMagicPromptTags(oldLine).filter((t) => !t.isNewline);
+                const newLineTags = parseMagicPromptTags(newLine).filter((t) => !t.isNewline);
+                let common = 0;
+                while (
+                    common < oldLineTags.length &&
+                    common < newLineTags.length &&
+                    oldLineTags[common].text === newLineTags[common].text
+                ) {
+                    common++;
+                }
+                if (common === oldLineTags.length && newLineTags.length > oldLineTags.length) {
+                    const inserted = newLineTags.slice(common);
+                    const merged = old.slice();
+                    let currentLine = 0;
+                    let insertAt = merged.length;
+                    for (let i = 0; i < merged.length; i++) {
+                        if (merged[i].isNewline) {
+                            if (currentLine === caretLine) {
+                                insertAt = i;
+                                break;
+                            }
+                            currentLine++;
+                        }
+                        if (currentLine === caretLine) insertAt = i + 1;
+                    }
+                    merged.splice(insertAt, 0, ...inserted);
+                    return merged;
+                }
+            }
+            return parsed;
+        }
+        const oldVisible = old.filter((t) => !t.isNewline && !t.disabled);
+        const oldDisabled = old.filter((t) => !t.isNewline && t.disabled);
+        const parsedVisible = parsed.filter((t) => !t.isNewline && !t.disabled);
+        // 当前没有任何启用 Tag 时，文本框里的新内容只能是追加内容；
+        // 保留原有隐藏序列，把新解析结果接在其后，避免“全屏蔽后继续输入”丢芯片。
+        if (oldVisible.length === 0 && old.length > 0) {
+            if (parsedVisible.length === 0) {
+                return old;
+            }
+            return old.concat(parsed);
+        }
+        const hasAnyTextOverlap = old
+            .filter((item) => !item.isNewline)
+            .some((oldItem) => parsedVisible.some((item) => item.text === oldItem.text));
+        // 新文本与旧的可见序列完全没有交集时，说明用户重写了整段内容；
+        // 直接采用新解析结果，禁止旧禁用 Tag 跨文本残留。
+        if (parsedVisible.length > 0 && !hasAnyTextOverlap) {
+            return parsed;
+        }
+        const usedVisible = new Set();
+        const usedDisabled = new Set();
+        const visibleMatches = [];
+        let visibleCursor = 0;
+
+        for (const item of parsed) {
+            if (item.isNewline) {
+                visibleMatches.push(null);
+                continue;
+            }
+            if (item.disabled) {
+                visibleMatches.push(null);
+                continue;
+            }
+            let found = -1;
+            for (let i = visibleCursor; i < oldVisible.length; i++) {
+                if (usedVisible.has(i)) continue;
+                if (oldVisible[i].text === item.text) {
+                    found = i;
+                    break;
+                }
+            }
+            if (found >= 0) {
+                usedVisible.add(found);
+                visibleCursor = found + 1;
+                visibleMatches.push(oldVisible[found]);
+            } else {
+                visibleMatches.push({ ...item, disabled: false });
+            }
+        }
+
+        // 文本框一次性替换为同等或更多的新 Tag 时，旧可见序列若没有全部匹配，
+        // 视为整段重写；否则旧禁用 Tag 可能被误锚定到新内容中。
+        if (parsedVisible.length >= oldVisible.length && usedVisible.size < oldVisible.length) {
+            return parsed;
+        }
+
+        const parsedItems = [];
+        let visibleIndex = 0;
+        for (const item of parsed) {
+            if (item.isNewline || !item.disabled) {
+                parsedItems.push(item.isNewline ? item : visibleMatches[visibleIndex]);
+                visibleIndex += 1;
+                continue;
+            }
+            let reused = null;
+            for (let i = 0; i < oldDisabled.length; i++) {
+                if (usedDisabled.has(i)) continue;
+                if (oldDisabled[i].text === item.text) {
+                    usedDisabled.add(i);
+                    reused = oldDisabled[i];
+                    break;
+                }
+            }
+            parsedItems.push(reused || { ...item, disabled: true });
+        }
+
+        const matchedVisible = new Set(
+            parsedItems.filter((t) => t && !t.disabled && oldVisible.includes(t)),
+        );
+        const anchoredDisabled = new Map();
+        const trailingDisabled = [];
+        // 完全无交集的整段重写已经在上方直接返回；只要仍有旧可见 Tag 命中，
+        // 就继续保留禁用锚点，以支持“原地改名/删除一个 Tag”的局部编辑。
+        if (matchedVisible.size > 0) {
+            oldDisabled.forEach((token, disabledIndex) => {
+                if (usedDisabled.has(disabledIndex)) return;
+                const oldIndex = old.indexOf(token);
+                let anchor = null;
+                for (let i = oldIndex + 1; i < old.length; i++) {
+                    const candidate = old[i];
+                    if (candidate.isNewline) break;
+                    if (!candidate.disabled && matchedVisible.has(candidate)) {
+                        anchor = candidate;
+                        break;
+                    }
+                }
+                if (anchor) {
+                    const list = anchoredDisabled.get(anchor) || [];
+                    list.push(token);
+                    anchoredDisabled.set(anchor, list);
+                } else {
+                    trailingDisabled.push(token);
+                }
+            });
+        }
+
+        // 每个禁用 Tag 注入到它原来所在的“可见间隙”开头：
+        // 追加新 Tag 时，尾部禁用 Tag 仍留在新 Tag 之前；中间插入也不会越过它。
+        const injections = new Map();
+        let previousMatchedPosition = -1;
+        let lineStart = 0;
+        for (let i = 0; i < parsedItems.length; i++) {
+            if (parsedItems[i] && parsedItems[i].isNewline) {
+                previousMatchedPosition = i;
+                lineStart = i + 1;
+                continue;
+            }
+            if (!matchedVisible.has(parsedItems[i])) continue;
+            const anchored = anchoredDisabled.get(parsedItems[i]);
+            if (anchored) injections.set(Math.max(lineStart, previousMatchedPosition + 1), anchored);
+            previousMatchedPosition = i;
+        }
+        if (trailingDisabled.length) {
+            injections.set(Math.max(lineStart, previousMatchedPosition + 1), trailingDisabled);
+        }
+
+        const result = [];
+        for (let i = 0; i <= parsedItems.length; i++) {
+            const injected = injections.get(i);
+            if (injected) result.push(...injected);
+            if (i < parsedItems.length) result.push(parsedItems[i]);
+        }
+        return result.filter(Boolean);
+    };
+
+    // 节点 text 可能在弹窗外被修改；只有启用文本与保存模型一致时才完全信任保存的禁用状态。
+    // 若发生了外部编辑，则用当前文本对旧模型做一次有序合并。
+    if (savedTagState !== null) {
+        const savedEnabledText = serializeMagicEnabledTags(savedTagState);
+        const currentEnabledText = magicEnsureTrailingCommaPerLine(currentText || "");
+        const normalizedSavedText = magicEnsureTrailingCommaPerLine(savedEnabledText);
+        if (currentEnabledText !== normalizedSavedText) {
+            editorTags = reconcileEditorTags(currentText || "");
+            shell._magicTagModel = editorTags;
+        }
+    }
+    editorText = serializeMagicEnabledTags(editorTags);
+    shell._magicLastEditorText = magicEnsureTrailingCommaPerLine(editorText);
+
+    // 老工作流用 *tag 表示屏蔽。首次打开时马上迁移到完整模型，节点文本只留下启用 Tag，
+    // 这样旧星号不会继续被写回工作流，也不会在下一次打开时重新出现。
+    if (hasLegacyStarText) {
+        persistMagicPromptTagState(node, editorTags);
+        if (textWidget && node) syncMagicPromptTextWidget(node, textWidget, editorText);
+    }
+
+    const setEditorTags = (tags, preserveFloatIndex) => {
+        shell._magicTagModel = Array.isArray(tags) ? tags : [];
+        shell._magicModelDirty = true;
+        editorTags = shell._magicTagModel;
+        editorText = serializeMagicEnabledTags(editorTags);
+        persistMagicPromptTagState(node, editorTags);
+        const ta = shell.querySelector("[data-magic-ta]");
+        if (ta) ta.value = editorText;
+        if (preserveFloatIndex != null && preserveFloatIndex >= 0) {
+            shell._magicRebuildPreserveIdx = preserveFloatIndex;
+        }
+    };
 
     /** 历史/收藏操作后：写回 textarea（若在当前编辑 Tab）、节点 widget、widgets_values */
     function syncEditorTextToNodeAndDom() {
@@ -4657,11 +5327,12 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             const needSep = !(cur.endsWith(",") || /\n\s*$/.test(cur));
             editorText = magicEnsureTrailingCommaPerLine(cur + (needSep ? ", " : " ") + raw);
         }
+        setEditorTags(reconcileEditorTags(editorText));
         syncEditorTextToNodeAndDom();
     }
 
     function replaceEditorTextFromHistory(fullText) {
-        editorText = magicEnsureTrailingCommaPerLine(fullText || "");
+        setEditorTags(parseMagicPromptTags(fullText || ""));
         syncEditorTextToNodeAndDom();
     }
 
@@ -4852,6 +5523,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             box-sizing: border-box; outline: none; font-family: monospace;
         `;
         preventConflict(textarea);
+        textarea._magicComposing = false;
 
         /** 在焦点被按钮/子窗体抢走之前记下光标（mousedown 捕获阶段，activeElement 仍是 textarea） */
         if (shell._magicCaretSaveAbort) {
@@ -4904,7 +5576,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             { signal: caretSaveAc.signal },
         );
 
-        /** 失焦时与 WeiLin 对齐：每行非空行尾自动补英文逗号 */
+        /** 失焦时确保每个非空行都有英文逗号；关闭弹窗时再清理最后一行 */
         textarea.addEventListener(
             "blur",
             () => {
@@ -4969,7 +5641,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         tagStripTitle.style.cssText = `font-size: 11px; color: ${THEME.text2}; margin-bottom: 10px; line-height: 1.45;`;
         tagStripTitle.innerHTML = `
             <b>${magicT("Tag 预览")}</b>
-            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（*），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）")}</span>
+            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 双击芯片：屏蔽/解除屏蔽（*；删除按钮和正在编辑的输入框除外） · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）")}</span>
         `;
         const tagChipsHit = document.createElement("div");
         tagChipsHit.setAttribute("data-magic-tag-chips-hit", "1");
@@ -5001,7 +5673,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 const barEl = shell._magicTagFloatBar;
                 if (!barEl) return false;
                 const idx = parseInt(barEl.dataset.tagIndex, 10);
-                const tags = parseMagicPromptTags(textarea.value);
+                const tags = getEditorTags();
                 const t = tags[idx];
                 if (!t || t.isNewline) return false;
                 const en = (t.text || "").trim();
@@ -5367,7 +6039,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         mkSelBtn("📋", magicT("一键复制"), "#ce93d8", () => {
             const set = shell._magicChipSelSet;
             if (!set || !set.size) return;
-            const tags = parseMagicPromptTags(textarea.value);
+            const tags = getEditorTags();
             const txt = serializeMagicTagsAtIndices(tags, set);
             navigator.clipboard
                 .writeText(txt)
@@ -5377,7 +6049,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         mkSelBtn("🚫", magicT("一键屏蔽（*）"), "#e57373", () => {
             const set = shell._magicChipSelSet;
             if (!set || !set.size) return;
-            const next = parseMagicPromptTags(textarea.value);
+            const next = getEditorTags().slice();
             set.forEach((i) => {
                 if (next[i] && !next[i].isNewline) next[i] = { ...next[i], disabled: true };
             });
@@ -5388,7 +6060,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         mkSelBtn("✓", magicT("一键启用"), "#81c784", () => {
             const set = shell._magicChipSelSet;
             if (!set || !set.size) return;
-            const next = parseMagicPromptTags(textarea.value);
+            const next = getEditorTags().slice();
             set.forEach((i) => {
                 if (next[i] && !next[i].isNewline) next[i] = { ...next[i], disabled: false };
             });
@@ -5400,7 +6072,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             const set = shell._magicChipSelSet;
             if (!set || !set.size) return;
             const sorted = [...set].sort((a, b) => b - a);
-            const next = parseMagicPromptTags(textarea.value);
+            const next = getEditorTags().slice();
             for (const i of sorted) next.splice(i, 1);
             clearChipSelection();
             applyTagsAndRefresh(next);
@@ -5553,9 +6225,10 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 chip.style.opacity = "0.45";
             });
             chip.addEventListener("dragend", () => {
-                chip.style.opacity = "";
                 tagChipsRow.querySelectorAll("[data-magic-tag-index]").forEach((el) => {
-                    el.style.opacity = "";
+                    const idx = parseInt(el.dataset.magicTagIndex, 10);
+                    const item = getEditorTags()[idx];
+                    el.style.opacity = item && item.disabled ? "0.58" : "";
                 });
                 hideDropLineEl();
                 setTimeout(() => {
@@ -5609,7 +6282,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 const sorted = [...fromList].sort((a, b) => a - b);
                 const set = new Set(sorted);
                 if (set.has(index)) return;
-                const tags = parseMagicPromptTags(textarea.value);
+                const tags = getEditorTags();
                 const insertAfter = !!shell._magicDropInsertAfter;
                 const next = magicReorderTagsByIndices(tags, sorted, index, insertAfter);
                 clearChipSelection();
@@ -5695,19 +6368,120 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         );
 
         function applyTagsAndRefresh(tags, preserveFloatIndex) {
-            editorText = serializeMagicPromptTags(tags);
-            textarea.value = editorText;
-            if (preserveFloatIndex != null && preserveFloatIndex >= 0) {
-                shell._magicRebuildPreserveIdx = preserveFloatIndex;
-            }
+            setEditorTags(tags, preserveFloatIndex);
             updateStatAndChips();
         }
 
-        function updateStatAndChips() {
-            editorText = textarea.value;
-            const showStrip = magicPromptHasVisibleContent(editorText);
+        function updateStatAndChips({ preserveTextareaInput = false, inputEvent = null } = {}) {
+            const previousTags = getEditorTags();
+            const rawText = textarea.value || "";
+            shell._magicInputLineIndex = rawText.slice(0, textarea.selectionStart).split("\n").length - 1;
+            const normalizedRawText = magicEnsureTrailingCommaPerLine(rawText);
+            const forceReparse = normalizedRawText !== shell._magicLastEditorText;
+            const modelWasEdited = shell._magicModelDirty === true;
+            const hasDisabledTags = previousTags.some((item) => !item.isNewline && item.disabled);
+            let reconciled = modelWasEdited
+                ? previousTags
+                : hasDisabledTags
+                    ? reconcileEditorTags(rawText, forceReparse, inputEvent)
+                    : parseMagicPromptTags(rawText);
+            shell._magicModelDirty = false;
+            const inputType = inputEvent && typeof inputEvent.inputType === "string"
+                ? inputEvent.inputType
+                : "";
+            // 逐字/IME 输入只改变可见文本；把旧模型中的禁用 Tag 按原行和可见位置重新锚定。
+            // 粘贴、整段替换和删除走普通重建，避免旧内容跨文本残留。
+            const previousVisibleTexts = previousTags
+                .filter((item) => !item.isNewline && !item.disabled)
+                .map((item) => item.text);
+            const nextVisibleTexts = reconciled
+                .filter((item) => !item.isNewline && !item.disabled)
+                .map((item) => item.text);
+            const visibleOverlap = previousVisibleTexts.some((text) => nextVisibleTexts.includes(text));
+            const shouldReanchorDisabledTags =
+                hasDisabledTags &&
+                reconciled.some((item) => !item.isNewline && item.disabled) &&
+                (!inputEvent ||
+                    inputType === "insertText" ||
+                    inputType === "insertCompositionText");
+            if (!modelWasEdited && shouldReanchorDisabledTags) {
+                const oldLines = [[]];
+                const nextLines = [[]];
+                previousTags.forEach((item) => item.isNewline ? oldLines.push([]) : oldLines[oldLines.length - 1].push(item));
+                reconciled.forEach((item) => item.isNewline ? nextLines.push([]) : nextLines[nextLines.length - 1].push(item));
+                const merged = [];
+                const count = Math.max(oldLines.length, nextLines.length);
+                for (let li = 0; li < count; li++) {
+                    const oldLine = oldLines[li] || [];
+                    const nextLine = nextLines[li] || [];
+                    const visible = nextLine.filter((item) => !item.disabled);
+                    const inserts = new Map();
+                    oldLine.forEach((item, index) => {
+                        if (!item.disabled) return;
+                        const before = oldLine.slice(0, index).filter((x) => !x.disabled).length;
+                        const list = inserts.get(before) || [];
+                        list.push({ ...item });
+                        inserts.set(before, list);
+                    });
+                    for (let i = 0; i <= visible.length; i++) {
+                        if (inserts.has(i)) merged.push(...inserts.get(i));
+                        if (i < visible.length) merged.push(visible[i]);
+                    }
+                    if (li < count - 1) merged.push({ isNewline: true });
+                }
+                reconciled = merged;
+            }
+            // 最终一致性护栏：输入监听可能被补全组件重复触发；若本次文本与上一份
+            // 完整模型没有任何 Tag 交集，旧禁用芯片不得被第二次回写。
+            const rawParsed = parseMagicPromptTags(textarea.value || "");
+            const rawVisible = rawParsed.filter((t) => !t.isNewline && !t.disabled);
+            const previousWords = previousTags.filter((t) => !t.isNewline);
+            const hasPreviousOverlap = previousWords.some((oldItem) =>
+                rawVisible.some((item) => item.text === oldItem.text),
+            );
+            const inputIsInsertion =
+                inputEvent &&
+                typeof inputEvent.inputType === "string" &&
+                inputEvent.inputType.startsWith("insert");
+            if (rawVisible.length > 0 && !hasPreviousOverlap && !inputIsInsertion) {
+                reconciled = rawParsed;
+            }
+            // 某些补全/输入法实现会先触发一次空的 input，再提交实际文本。
+            // 旧模型中仍有禁用 Tag 时，不能让这次中间态把整条 Tag 区清空。
+            if (
+                reconciled.length === 0 &&
+                hasDisabledTags &&
+                previousTags.length > 0 &&
+                rawText.trim().length > 0 &&
+                (inputIsInsertion || visibleOverlap)
+            ) {
+                reconciled = previousTags.slice();
+            }
+            // 换行占位必须与 textarea 中真实的换行数一致。
+            // 退格删除换行后，旧的完整 Tag 模型不能把已删除的换行再次注入回文本。
+            const rawNewlineCount = (rawText.match(/\n/g) || []).length;
+            let keptNewlines = 0;
+            reconciled = reconciled.filter((item) => {
+                if (!item.isNewline) return true;
+                if (keptNewlines >= rawNewlineCount) return false;
+                keptNewlines += 1;
+                return true;
+            });
+            shell._magicTagModel = reconciled;
+            editorTags = reconciled;
+            const serializedText = serializeMagicEnabledTags(reconciled);
+            // 用户逐字输入/输入法组合期间，textarea 必须保留浏览器当前值和 selection。
+            // 序列化出来的行尾逗号只在失焦或程序操作时写回，否则每个字符都会把光标推到末尾。
+            editorText = preserveTextareaInput ? rawText : serializedText;
+            shell._magicLastEditorText = magicEnsureTrailingCommaPerLine(rawText);
+            persistMagicPromptTagState(node, reconciled);
+            if (!preserveTextareaInput && textarea.value !== serializedText) {
+                textarea.value = serializedText;
+            }
+            shell._magicLastRawEditorText = preserveTextareaInput ? rawText : textarea.value || "";
+            const showStrip = reconciled.length > 0;
             tagStrip.style.display = showStrip ? "" : "none";
-            const tags = showStrip ? parseMagicPromptTags(editorText) : [];
+            const tags = showStrip ? reconciled : [];
             const nWord = tags.filter((t) => !t.isNewline).length;
             const nNl = tags.filter((t) => t.isNewline).length;
             const ne = tags.filter((t) => !t.isNewline && !t.disabled).length;
@@ -5729,7 +6503,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 syncMagicPromptTextWidget(
                     node,
                     textWidget,
-                    magicEnsureTrailingCommaPerLine(editorText),
+                    preserveTextareaInput ? rawText : magicEnsureTrailingCommaPerLine(editorText),
                 );
             }
         }
@@ -5790,7 +6564,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                     del.addEventListener("click", (e) => {
                         e.stopPropagation();
                         e.preventDefault();
-                        const next = parseMagicPromptTags(textarea.value);
+                        const next = getEditorTags().slice();
                         next.splice(index, 1);
                         applyTagsAndRefresh(next);
                     });
@@ -5866,7 +6640,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 del.addEventListener("click", (e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    const next = parseMagicPromptTags(textarea.value);
+                    const next = getEditorTags().slice();
                     next.splice(index, 1);
                     applyTagsAndRefresh(next);
                 });
@@ -5875,7 +6649,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
 
                 const bottom = document.createElement("div");
                 bottom.setAttribute("data-magic-tag-bottom", "1");
-                bottom.title = magicT("双击此区域切换屏蔽（*）；锁定后单击下方取消锁定");
+                bottom.title = magicT("双击芯片切换屏蔽（*）；锁定后单击下方取消锁定");
                 bottom.style.cssText =
                     "display:flex;align-items:center;gap:5px;padding:5px 8px;color:#d8d8d8;font-size:11px;";
                 const llmBtn = document.createElement("button");
@@ -5945,7 +6719,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
 
                     const commitEdit = (vRaw) => {
                         const v = vRaw.trim();
-                        const next = parseMagicPromptTags(textarea.value);
+                        const next = getEditorTags().slice();
                         if (!next[index]) {
                             updateStatAndChips();
                             return;
@@ -5978,7 +6752,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 };
 
                 const toggleDis = () => {
-                    const next = parseMagicPromptTags(textarea.value);
+                    const next = getEditorTags().slice();
                     if (next[index]) {
                         next[index] = { ...next[index], disabled: !next[index].disabled };
                         applyTagsAndRefresh(next);
@@ -5987,12 +6761,8 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
 
                 chip.addEventListener("dblclick", (e) => {
                     if (e.target.closest("button[data-del]")) return;
-                    // 仅下方区域双击切换屏蔽，避免上方英文区双击与行内编辑/选字冲突
-                    if (!bottom.contains(e.target)) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        return;
-                    }
+                    // 芯片整体双击切换屏蔽；删除按钮和正在编辑的输入框保留各自行为。
+                    if (e.target.closest("input")) return;
                     e.preventDefault();
                     e.stopPropagation();
                     if (shell._magicTagUiTimer) {
@@ -6003,7 +6773,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 });
 
                 chip.addEventListener("click", (e) => {
-                    // detail===2 留给 dblclick（屏蔽，且仅下方区域会生效）
+                    // detail===2 留给 dblclick（屏蔽）
                     if (e.detail === 2) return;
                     if (e.target.closest("button[data-del]")) return;
                     if (e.target.closest("button[data-magic-cn-llm]")) return;
@@ -6180,7 +6950,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         const commitFloatBarWeight = () => {
             const idx = parseInt(floatBar.dataset.tagIndex, 10);
             if (Number.isNaN(idx)) return;
-            const tags = parseMagicPromptTags(textarea.value);
+            const tags = getEditorTags().slice();
             if (!tags[idx] || tags[idx].isNewline) return;
             const w = parseFloat(tagFloat.weightInp.value);
             if (!Number.isFinite(w)) return;
@@ -6215,7 +6985,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 const open = btn.dataset.bracketOpen;
                 const act = btn.dataset.bracketAct;
                 if (!open || !act) return;
-                const tags = parseMagicPromptTags(textarea.value);
+                const tags = getEditorTags().slice();
                 if (!tags[idx] || tags[idx].isNewline) return;
                 let t = tags[idx].text;
                 if (act === "add") t = magicWrapTagText(t, open);
@@ -6231,18 +7001,45 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             e.stopPropagation();
             const idx = parseInt(floatBar.dataset.tagIndex, 10);
             if (Number.isNaN(idx)) return;
-            const tags = parseMagicPromptTags(textarea.value);
+            const tags = getEditorTags().slice();
             if (!tags[idx] || tags[idx].isNewline) return;
-            const newText = serializeMagicPromptTagsWithNewlineAfter(tags, idx);
-            textarea.value = newText;
-            shell._magicRebuildPreserveIdx = idx;
-            updateStatAndChips();
+            tags.splice(idx + 1, 0, { isNewline: true });
+            applyTagsAndRefresh(tags, idx);
         });
 
-        const syncEditorFromTextarea = () => {
+        const syncEditorFromTextarea = (event, { normalize = false } = {}) => {
+            if (event && textarea._magicLastSyncInputEvent === event) return;
+            if (event) textarea._magicLastSyncInputEvent = event;
+            // 输入法组合阶段的临时文本不参与 Tag 重建。
+            if (textarea._magicComposing) return;
             clearChipSelection();
-            updateStatAndChips();
+            updateStatAndChips({
+                preserveTextareaInput: !!event && !normalize,
+                inputEvent: event || null,
+            });
         };
+        textarea.addEventListener("compositionstart", () => {
+            textarea._magicComposing = true;
+        }, { signal: caretSaveAc.signal });
+        textarea.addEventListener("compositionend", () => {
+            textarea._magicComposing = false;
+            // 浏览器通常会在 compositionend 之后再派发最终 input。
+            // 不要在这里抢先重建 textarea，否则最终字符到来前会把光标留在上一个字后面。
+            // 若某个输入法没有补发 input，再在下一拍用最终值兜底同步。
+            const valueAtCompositionEnd = textarea.value;
+            setTimeout(() => {
+                if (textarea.value === valueAtCompositionEnd &&
+                    textarea._magicLastRawEditorText !== textarea.value) {
+                    syncEditorFromTextarea({
+                        inputType: "insertCompositionText",
+                        data: "",
+                    });
+                }
+            }, 0);
+        }, { signal: caretSaveAc.signal });
+        textarea.addEventListener("input", syncEditorFromTextarea, {
+            signal: caretSaveAc.signal,
+        });
 
         // 工具栏
         const toolbar = document.createElement("div");
@@ -6321,8 +7118,8 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                                         : { ...t, text: (t.text || "").trim() },
                                 )
                                 .filter((t) => t.isNewline || (t.text && t.text.length));
-                            editorText = serializeMagicPromptTags(tgs);
-                            textarea.value = editorText;
+                            const next = reconcileEditorTags(serializeMagicPromptTags(tgs));
+                            setEditorTags(next);
                             syncEditorFromTextarea();
                             b.textContent = magicT("✅ 已完成");
                             setTimeout(() => {
@@ -6340,7 +7137,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                         }
                     })();
                 } else if (tb.action === "dedup") {
-                    const tgs = parseMagicPromptTags(editorText);
+                    const tgs = getEditorTags().slice();
                     const seen = new Set();
                     const out = [];
                     for (const t of tgs) {
@@ -6353,17 +7150,14 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                         seen.add(k);
                         out.push(t);
                     }
-                    editorText = serializeMagicPromptTags(out);
-                    textarea.value = editorText;
+                    applyTagsAndRefresh(out);
                 } else if (tb.action === "clear") {
-                    editorText = "";
-                    textarea.value = "";
+                    applyTagsAndRefresh([]);
                 } else if (tb.action === "clear_disabled") {
-                    const tgs = parseMagicPromptTags(editorText).filter(
+                    const tgs = getEditorTags().filter(
                         (t) => t.isNewline || !t.disabled,
                     );
-                    editorText = serializeMagicPromptTags(tgs);
-                    textarea.value = editorText;
+                    applyTagsAndRefresh(tgs);
                 } else if (tb.action === "copy") {
                     navigator.clipboard.writeText(editorText).then(() => {
                         b.textContent = magicT("✅ 已复制!");
@@ -6645,13 +7439,10 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         const h3 = magicT("主框为空（无换行、无有效字符）时下方 Tag 区会隐藏；换行在预览里显示为 ");
         const h4 = magicT("↵ 芯片");
         const h5 = magicT("。");
-        const h6 = magicT("屏蔽段以 ");
-        const h7 = magicT(" 写入，节点编码时");
-        const h8 = magicT("会忽略输出这些tag到final_text与conditioning。");
         hint.innerHTML = `
             <b>${h1}</b><code style="background:${THEME.bg3};padding:2px 5px;border-radius:3px;">,</code>${h2}
             ${h3}<b>${h4}</b>${h5}
-            ${h6}<code style="background:${THEME.bg3};padding:2px 5px;border-radius:3px;">*</code>${h7},${h8}
+            ${magicT("双击芯片可切换屏蔽；屏蔽 Tag 会从提示词区移除，但仍保留在 Tag 区以便恢复。")}
         `;
         content.appendChild(hint);
         content.appendChild(danbooruConnBar);

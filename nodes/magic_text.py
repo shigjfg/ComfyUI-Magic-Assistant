@@ -2,16 +2,20 @@ import re
 
 
 def _ensure_trailing_comma_per_line(text: str) -> str:
-    """与 WeiLin / 前端编辑器一致：每个非空行末尾有英文逗号；空行为空行。"""
+    """为非末行补英文逗号；最后一个非空行保留原样。"""
     if not text or not isinstance(text, str):
         return text if isinstance(text, str) else ""
     lines = text.split("\n")
+    last_non_empty = next(
+        (i for i in range(len(lines) - 1, -1, -1) if lines[i].rstrip(" \t\u3000")),
+        None,
+    )
     out = []
-    for line in lines:
+    for index, line in enumerate(lines):
         te = line.rstrip(" \t\u3000")
         if not te:
             out.append("")
-        elif re.search(r",\s*$", te):
+        elif index == last_non_empty or re.search(r",\s*$", te):
             out.append(te)
         else:
             out.append(te + ",")

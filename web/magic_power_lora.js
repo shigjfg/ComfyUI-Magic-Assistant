@@ -194,6 +194,156 @@ function mplT(text) {
     return mplTranslateText(text, mplGetCurrentLanguage());
 }
 
+const MPL_METADATA_SETTINGS_KEY = "magic_power_lora_fetch_settings";
+let mplMetadataModal = null;
+
+function mplMetadataNameKey(name) {
+    return String(name || "").replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function mplLoadMetadataSettings() {
+    let settings = {};
+    try {
+        settings = JSON.parse(localStorage.getItem(MPL_METADATA_SETTINGS_KEY) || "{}") || {};
+    } catch (error) { /* use the existing single-download defaults */ }
+    return {
+        download_txt: settings.download_txt !== false,
+        download_json: settings.download_json !== false,
+        download_image: settings.download_image !== false,
+        download_log: settings.download_log !== false,
+        save_path: settings.save_path === "subfolder" ? "subfolder" : "same_dir",
+    };
+}
+
+function mplCollectMetadataNames(node, scope = "node", localFiles = []) {
+    let items;
+    if (scope === "all") {
+        items = localFiles.map(name => ({ name }));
+    } else if (scope.startsWith("folder:")) {
+        items = node?.loraData?.folders?.[Number(scope.slice(7))]?.loras || [];
+    } else {
+        items = [
+            ...(node?.loraData?.loras || []),
+            ...(node?.loraData?.folders || []).flatMap(folder => folder?.loras || []),
+        ];
+    }
+    const seen = new Set();
+    return items.reduce((names, item) => {
+        const name = typeof item?.name === "string" ? item.name : "";
+        const key = mplMetadataNameKey(name);
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            names.push(name);
+        }
+        return names;
+    }, []);
+}
+
+function mplApplyMetadataData(node, name, data) {
+    const key = mplMetadataNameKey(name);
+    let changed = false;
+    const items = [
+        ...(node?.loraData?.loras || []),
+        ...(node?.loraData?.folders || []).flatMap(folder => folder?.loras || []),
+    ];
+    for (const item of items) {
+        if (mplMetadataNameKey(item?.name) !== key) continue;
+        for (const field of ["triggerWords", "jsonInfo", "logInfo"]) {
+            if (typeof data?.[field] === "string" && item[field] !== data[field]) {
+                item[field] = data[field];
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+function mplMetadataTypes(settings) {
+    return ["txt", "json", "image", "log"].filter(type => settings[`download_${type}`]);
+}
+
+function mplMetadataRequestedTypes(name, settings) {
+    const types = mplMetadataTypes(settings);
+    const retry = settings.retry_types?.[mplMetadataNameKey(name)];
+    return Array.isArray(retry) ? types.filter(type => retry.includes(type)) : types;
+}
+
+function mplMetadataNeeds(name, settings, metadata) {
+    const existing = metadata[mplMetadataNameKey(name)] || {};
+    return mplMetadataTypes(settings).some(type => !existing[type]);
+}
+
+function mplFilterMetadataNames(names, filters, settings, metadata) {
+    const search = String(filters.search || "").trim().toLowerCase();
+    return names.filter(name => {
+        const key = mplMetadataNameKey(name);
+        const directory = key.split("/").slice(0, -1).join("/");
+        if (filters.directory === "." && !filters.recursive && directory) return false;
+        if (filters.directory && filters.directory !== ".") {
+            if (directory !== filters.directory && !(filters.recursive && directory.startsWith(filters.directory + "/"))) return false;
+        }
+        if (search && !key.toLowerCase().includes(search)) return false;
+        return !filters.onlyMissing || mplMetadataNeeds(name, settings, metadata);
+    });
+}
+
+function mplMetadataPreflight(names, selected, settings, metadata) {
+    const selectedNames = names.filter(name => selected.has(mplMetadataNameKey(name)));
+    const need = selectedNames.filter(name => mplMetadataNeeds(name, settings, metadata)).length;
+    return { scoped: names.length, selected: selectedNames.length, need, complete: selectedNames.length - need, names: selectedNames };
+}
+
+function mplMetadataHasSharedSelection(names, sharedInfo) {
+    const selected = new Set(names.map(mplMetadataNameKey));
+    return names.some(name => {
+        const group = sharedInfo[mplMetadataNameKey(name)] || [];
+        return new Set([name, ...group].map(mplMetadataNameKey).filter(key => selected.has(key))).size > 1;
+    });
+}
+
+function mplMetadataGraphNodes(origin) {
+    const nodes = (app?.graph?._nodes || []).filter(node => node?.type === NODE_NAME || node?.constructor?.type === NODE_NAME);
+    return [...new Set([origin, ...nodes])];
+}
+
+async function mplRunMetadataQueue(names, settings, state, onProgress) {
+    const results = [];
+    state.running = true;
+    try {
+        for (const name of names) {
+            if (state.cancelRequested) break;
+            onProgress({ current: name, completed: results.length, total: names.length });
+            let result;
+            try {
+                const requestedTypes = mplMetadataRequestedTypes(name, settings);
+                const response = await api.fetchApi("/ma/lora/fetch_metadata", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        lora_name: name,
+                        options: Object.fromEntries(["txt", "json", "image", "log"].map(type => [`download_${type}`, requestedTypes.includes(type)])),
+                        save_path_mode: settings.save_path,
+                        overwrite: settings.overwrite === true,
+                        ...(settings.update_existing === true ? { update_existing: true } : {}),
+                    }),
+                });
+                result = await response.json();
+                if (!response.ok || !["success", "skipped", "not_found", "partial", "error"].includes(result?.status)) {
+                    result = { status: "error", message: result?.message || `${mplT("请求失败")} (${response.status})` };
+                }
+            } catch (error) {
+                result = { status: "error", message: error.message || String(error) };
+            }
+            const entry = { ...result, name };
+            results.push(entry);
+            onProgress({ current: name, completed: results.length, total: names.length, result: entry });
+        }
+        return results;
+    } finally {
+        state.running = false;
+    }
+}
+
 /** 与「添加 Lora」弹窗相同的目录树（用于检测范围导航） */
 function buildMplFolderTree(allFiles) {
     const folderTree = {};
@@ -475,6 +625,7 @@ app.registerExtension({
                 };
                 footer.append(
                     createBtn("➕ 添加 Lora", "mpl-btn-add", () => this.showAddLoraModal()),
+                    createBtn("📥 一键下载信息", "mpl-btn-metadata", () => this.showBatchMetadataModal()),
                     createBtn("⚙️设置", "mpl-btn-icon", () => this.showSettingsModal()),
                     createBtn("📁+", "mpl-btn-icon", () => this.addFolder()),
                     createBtn("📂预设", "mpl-btn-icon", () => this.loadPresetModal())
@@ -579,6 +730,8 @@ app.registerExtension({
                     .mpl-weight-display { min-width: 50px; padding: 4px 8px; text-align: center; color: #fff; font-size: 12px; user-select: none; background: #2a2a2a; cursor: pointer; }
                     .mpl-weight-display:hover { background: #333; }
                     .mpl-btn-add { flex: 1; background: #2196F3; border: none; color: white; border-radius: 3px; height: 26px; cursor: pointer; font-size: 12px; }
+                    .mpl-btn-metadata { flex: 1; background: #00897b; border: none; color: white; border-radius: 3px; height: 26px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+                    .mpl-btn-metadata:hover { background: #009688; }
                     .mpl-btn-icon { 
                         min-width: 40px; 
                         height: 26px; 
@@ -644,6 +797,92 @@ app.registerExtension({
                         color: #4CAF50; 
                     }
                     .mpl-lora-preview { display: none; }
+                    .mpl-metadata-dialog {
+                        position: fixed; z-index: 9999; display: flex; flex-direction: column;
+                        width: 820px; height: 600px; max-width: calc(100vw - 40px); max-height: calc(100vh - 56px);
+                        min-width: min(660px, calc(100vw - 40px)); min-height: min(420px, calc(100vh - 56px));
+                        background: #202328; color: #dce1e7; border: 1px solid #454b54; border-radius: 10px;
+                        box-shadow: 0 12px 36px rgba(0,0,0,.45); overflow: hidden; resize: both;
+                        box-sizing: border-box; font: 12px/1.45 sans-serif; outline: none;
+                    }
+                    .mpl-metadata-dialog *, .mpl-metadata-dialog *::before, .mpl-metadata-dialog *::after { box-sizing: border-box; }
+                    .mpl-metadata-header { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: #272b31; border-bottom: 1px solid #373d45; flex-shrink: 0; cursor: move; }
+                    .mpl-metadata-title { font-size: 14px; font-weight: 600; flex: 1; }
+                    .mpl-metadata-header-icon { color: #8cbcf0; font-size: 16px; }
+                    .mpl-metadata-close { width: 25px; height: 25px; padding: 0 !important; font-size: 18px !important; background: transparent !important; border-color: transparent !important; }
+                    .mpl-metadata-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+                    .mpl-metadata-filters { padding: 11px 14px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #373d45; background: #23272d; flex-shrink: 0; }
+                    .mpl-metadata-filter-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+                    .mpl-metadata-field { display: flex; align-items: center; gap: 7px; min-width: 0; }
+                    .mpl-metadata-field > span { color: #929ca9; white-space: nowrap; font-size: 11px; }
+                    .mpl-metadata-scope { width: 230px; flex-shrink: 0; }
+                    .mpl-metadata-directory { flex: 1; min-width: 100px; }
+                    .mpl-metadata-dialog select, .mpl-metadata-dialog input[type=search] {
+                        min-width: 0; width: 100%; height: 30px; margin: 0; padding: 4px 8px;
+                        color: #dce1e7; background: #191c21; border: 1px solid #424954; border-radius: 5px;
+                        font: inherit; outline: none;
+                    }
+                    .mpl-metadata-dialog select:focus, .mpl-metadata-dialog input[type=search]:focus { border-color: #659cd4; }
+                    .mpl-metadata-dialog input[type=checkbox] { width: 13px; height: 13px; margin: 0; accent-color: #70a8df; flex-shrink: 0; }
+                    .mpl-metadata-check { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; font-size: 11px; }
+                    .mpl-metadata-search { flex: 1; }
+                    .mpl-metadata-workspace { display: grid; grid-template-columns: 190px minmax(0,1fr); flex: 1; min-height: 0; }
+                    .mpl-metadata-settings { padding: 12px; border-right: 1px solid #373d45; background: #23272d; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+                    .mpl-metadata-setting-group { display: flex; flex-direction: column; gap: 7px; }
+                    .mpl-metadata-caption { color: #929ca9; font-size: 11px; font-weight: 600; }
+                    .mpl-metadata-types { display: flex; flex-direction: column; gap: 6px; }
+                    .mpl-metadata-type { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 1px solid #3b424c; border-radius: 5px; background: #292e35; cursor: pointer; font-size: 11px; }
+                    .mpl-metadata-type:has(input:checked) { border-color: #527aa2; background: #2b3542; color: #c3ddf6; }
+                    .mpl-metadata-mode-help { font-size: 11px; color: #97a2b0; line-height: 1.6; }
+                    .mpl-metadata-library { min-width: 0; min-height: 0; padding: 10px 12px 0; display: flex; flex-direction: column; gap: 8px; }
+                    .mpl-metadata-selection { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+                    .mpl-metadata-counts { margin-left: auto; display: flex; align-items: center; gap: 9px; color: #93a3b6; font-size: 10px; flex-wrap: wrap; }
+                    .mpl-metadata-hint { color: #83909f; font-size: 10px; line-height: 1.5; flex-shrink: 0; }
+                    .mpl-metadata-warning { color: #e3b46f; font-size: 11px; white-space: pre-wrap; max-height: 65px; overflow: auto; flex-shrink: 0; }
+                    .mpl-metadata-warning:empty { display: none; }
+                    .mpl-metadata-inventory { flex: 1; min-height: 100px; overflow: auto; overscroll-behavior: contain; border: 1px solid #3a424d; border-radius: 6px; background: #1d2025; }
+                    .mpl-metadata-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
+                    .mpl-metadata-table thead { position: sticky; top: 0; z-index: 1; background: #2b3139; color: #a6b1be; }
+                    .mpl-metadata-table th { padding: 8px 7px; text-align: left; font-weight: 500; white-space: nowrap; }
+                    .mpl-metadata-table td { padding: 7px; border-bottom: 1px solid #2c323a; vertical-align: middle; }
+                    .mpl-metadata-table tr:has(input:checked) { background: #24303d; }
+                    .mpl-metadata-table tbody tr:hover { background: #2a333f; }
+                    .mpl-metadata-file { overflow: hidden; }
+                    .mpl-metadata-file-name { color: #dde5ee; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    .mpl-metadata-file-path { color: #788797; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+                    .mpl-metadata-status { display: inline-block; padding: 2px 5px; border-radius: 4px; font-size: 10px; white-space: nowrap; }
+                    .mpl-metadata-present { color: #93c8b5; background: #263c36; }
+                    .mpl-metadata-missing { color: #dcb774; background: #413824; }
+                    .mpl-metadata-unavailable { color: #9da7b2; background: #30353c; }
+                    .mpl-metadata-progress { padding: 9px 14px; border-top: 1px solid #373d45; display: flex; align-items: center; gap: 10px; background: #23272d; flex-shrink: 0; }
+                    .mpl-metadata-progress-text { width: 125px; min-width: 0; font-size: 11px; color: #9eafc2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    .mpl-metadata-progress-row { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+                    .mpl-metadata-progress progress { flex: 1; min-width: 0; width: 100%; height: 6px; accent-color: #72a9df; }
+                    .mpl-metadata-progress-count { color: #a4b2c2; font-size: 10px; white-space: nowrap; }
+                    .mpl-metadata-current { color: #8693a3; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+                    .mpl-metadata-results { flex-shrink: 0; margin-bottom: 8px; color: #98a7b9; font-size: 11px; }
+                    .mpl-metadata-results summary { cursor: pointer; padding: 5px 0; }
+                    .mpl-metadata-stats { display: flex; flex-wrap: wrap; gap: 9px; font-size: 10px; padding-bottom: 5px; }
+                    .mpl-metadata-result-list { max-height: 105px; overflow-y: auto; overscroll-behavior: contain; font-size: 10px; }
+                    .mpl-metadata-result { padding: 7px 0; border-bottom: 1px solid #343c46; overflow-wrap: anywhere; }
+                    .mpl-metadata-result-title { display: flex; align-items: baseline; gap: 7px; color: #becad8; }
+                    .mpl-metadata-result-status { color: #93c8b5; white-space: nowrap; }
+                    .mpl-metadata-result-status-error { color: #e3b46f; }
+                    .mpl-metadata-result-message { color: #8d9cad; margin-top: 3px; white-space: pre-wrap; }
+                    .mpl-metadata-footer { padding: 10px 14px; border-top: 1px solid #373d45; display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+                    .mpl-metadata-footer-spacer { flex: 1; }
+                    .mpl-metadata-dialog button { padding: 5px 9px; margin: 0; border: 1px solid #434d5b; border-radius: 5px; background: #2c333d; color: #becad8; cursor: pointer; font: 11px/1.45 sans-serif; white-space: nowrap; }
+                    .mpl-metadata-dialog button:hover:not(:disabled) { background: #394353; border-color: #5f7793; color: #eef4fb; }
+                    .mpl-metadata-dialog button:disabled { opacity: .4; cursor: default; }
+                    .mpl-metadata-dialog .mpl-metadata-primary { background: #3c77ad; border-color: #568aba; color: white; padding: 6px 16px; }
+                    .mpl-metadata-dialog .mpl-metadata-primary:hover:not(:disabled) { background: #4988c2; }
+                    @media (max-width: 720px) {
+                        .mpl-metadata-workspace { grid-template-columns: 155px minmax(0,1fr); }
+                        .mpl-metadata-scope { width: 190px; }
+                        .mpl-metadata-filter-row { flex-wrap: wrap; }
+                        .mpl-metadata-counts { margin-left: 0; }
+                        .mpl-metadata-current { display: none; }
+                    }
                     .mpl-spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:20px; height:20px; border:2px solid #333; border-top:2px solid #fff; border-radius:50%; animation:mpl-spin 1s linear infinite; }
                     @keyframes mpl-spin { 0% { transform:translate(-50%,-50%) rotate(0deg); } 100% { transform:translate(-50%,-50%) rotate(360deg); } }
                 `;
@@ -1398,14 +1637,14 @@ app.registerExtension({
                     newY = Math.max(minY, Math.min(newY, maxY));
 
                     // 一比一参考 magic_resolution.js：清除 top/left/right/bottom，用 transform 定位
-                    dialog.style.top = '';
-                    dialog.style.left = '';
+                    dialog.style.top = '0px';
+                    dialog.style.left = '0px';
                     dialog.style.right = '';
                     dialog.style.bottom = '';
 
                     // 如果父元素是 flex 居中，需要改父样式
                     const parent = dialog.parentElement;
-                    if (parent && parent.style.display === 'flex') {
+                    if (parent && parent !== document.body && parent.style.display === 'flex') {
                         parent.style.display = 'block';
                         parent.style.position = 'fixed';
                         parent.style.top = '0';
@@ -1431,6 +1670,15 @@ app.registerExtension({
                 document.addEventListener("touchmove", drag);
                 document.addEventListener("mouseup", dragEnd);
                 document.addEventListener("touchend", dragEnd);
+                return () => {
+                    isDragging = false;
+                    titleBar.removeEventListener("mousedown", dragStart);
+                    titleBar.removeEventListener("touchstart", dragStart);
+                    document.removeEventListener("mousemove", drag);
+                    document.removeEventListener("touchmove", drag);
+                    document.removeEventListener("mouseup", dragEnd);
+                    document.removeEventListener("touchend", dragEnd);
+                };
             };
 
             // --- Klein 模式提示 Banner ---
@@ -2414,6 +2662,527 @@ app.registerExtension({
                 }, 100);
             };
 
+            nodeType.prototype.showBatchMetadataModal = function() {
+                if (mplMetadataModal?.isConnected) {
+                    mplMetadataModal.focus();
+                    return;
+                }
+                const node = this;
+                const settings = mplLoadMetadataSettings();
+                const state = { running: false, cancelRequested: false };
+                const results = new Map();
+                let localFiles = [];
+                let metadata = {};
+                let sharedInfo = {};
+                let visibleNames = [];
+                const selected = new Set();
+                let selectionTouched = false;
+                let inventoryCheckboxes = [];
+                let loadingFiles = true;
+                let inventoryReady = false;
+                const sourceUnavailable = new Map();
+                let closed = false;
+                let lastSettings = null;
+                const el = (tag, text, className, parent) => {
+                    const element = document.createElement(tag);
+                    if (text) element.textContent = mplT(text);
+                    if (className) element.className = className;
+                    if (parent) parent.appendChild(element);
+                    return element;
+                };
+                const dialog = el("div", "", "mpl-metadata-dialog");
+                dialog.style.left = Math.max(20, (window.innerWidth - Math.min(820, window.innerWidth - 40)) / 2) + "px";
+                dialog.style.top = Math.max(28, (window.innerHeight - Math.min(600, window.innerHeight - 56)) / 2) + "px";
+                dialog.setAttribute("role", "dialog");
+                dialog.setAttribute("aria-modal", "false");
+                dialog.setAttribute("aria-label", mplT("LoRA 信息管理"));
+                dialog.tabIndex = -1;
+                const header = el("div", "", "mpl-metadata-header", dialog);
+                el("span", "📥", "mpl-metadata-header-icon", header);
+                el("div", "LoRA 信息管理", "mpl-metadata-title", header);
+                const headerCloseBtn = el("button", "×", "mpl-metadata-close", header);
+                headerCloseBtn.type = "button";
+                headerCloseBtn.setAttribute("aria-label", mplT("关闭"));
+                headerCloseBtn.title = mplT("关闭");
+                const body = el("div", "", "mpl-metadata-body", dialog);
+                const filters = el("div", "", "mpl-metadata-filters", body);
+                const filterRow = el("div", "", "mpl-metadata-filter-row", filters);
+                const scopeRow = el("label", "", "mpl-metadata-field mpl-metadata-scope", filterRow);
+                el("span", "下载范围", "", scopeRow);
+                const scopeSelect = el("select", "", "", scopeRow);
+                scopeSelect.setAttribute("aria-label", mplT("下载范围"));
+                const addScope = (value, text, translate = true) => {
+                    const option = el("option", "", "", scopeSelect);
+                    option.value = value;
+                    option.textContent = translate ? mplT(text) : text;
+                };
+                addScope("all", "全部本地 LoRA");
+                addScope("node", "当前节点全部 LoRA（含禁用项）");
+                (node.loraData?.folders || []).forEach((folder, index) => {
+                    addScope(`folder:${index}`, `${mplT("节点文件夹：")}${folder.name}`, false);
+                });
+                scopeSelect.value = "all";
+                const directoryRow = el("div", "", "mpl-metadata-field mpl-metadata-directory", filterRow);
+                el("span", "本地目录", "", directoryRow);
+                const directorySelect = el("select", "", "", directoryRow);
+                directorySelect.setAttribute("aria-label", mplT("本地目录"));
+                const recursiveLabel = el("label", "", "mpl-metadata-check", filterRow);
+                const recursiveCheckbox = el("input", "", "", recursiveLabel);
+                recursiveCheckbox.type = "checkbox";
+                recursiveCheckbox.checked = true;
+                recursiveCheckbox.setAttribute("aria-label", mplT("包含子目录"));
+                el("span", "包含子目录", "", recursiveLabel);
+                const searchRow = el("div", "", "mpl-metadata-filter-row", filters);
+                const search = el("input", "", "mpl-metadata-search", searchRow);
+                search.type = "search";
+                search.placeholder = mplT("搜索文件名或路径…");
+                search.setAttribute("aria-label", mplT("搜索文件名或路径…"));
+                const missingLabel = el("label", "", "mpl-metadata-check", searchRow);
+                const missingOnly = el("input", "", "", missingLabel);
+                missingOnly.type = "checkbox";
+                missingOnly.checked = false;
+                missingOnly.setAttribute("aria-label", mplT("仅显示缺少所选信息的 LoRA"));
+                el("span", "仅看缺失", "", missingLabel);
+                const workspace = el("div", "", "mpl-metadata-workspace", body);
+                const settingsPanel = el("div", "", "mpl-metadata-settings", workspace);
+                const typeGroup = el("div", "", "mpl-metadata-setting-group", settingsPanel);
+                el("div", "下载内容", "mpl-metadata-caption", typeGroup);
+                const optionRow = el("div", "", "mpl-metadata-types", typeGroup);
+                const checkboxes = {};
+                const typeLabels = { download_txt: "触发词 (.txt)", download_json: "模型介绍 (.json)", download_image: "预览图像", download_log: "推荐权重 (.log)" };
+                for (const [key, label] of [
+                    ["download_txt", "触发词文件 (.txt)"],
+                    ["download_json", "模型介绍信息 (.json)"],
+                    ["download_image", "预览图像"],
+                    ["download_log", "默认权重下载 (.log)"],
+                ]) {
+                    const wrapper = el("label", "", "mpl-metadata-type", optionRow);
+                    const checkbox = el("input", "", "", wrapper);
+                    checkbox.type = "checkbox";
+                    checkbox.checked = settings[key];
+                    checkbox.setAttribute("data-download-type", key.slice(9));
+                    checkbox.setAttribute("aria-label", mplT(label));
+                    el("span", typeLabels[key], "", wrapper);
+                    checkboxes[key] = checkbox;
+                }
+                const pathRow = el("label", "", "mpl-metadata-setting-group", settingsPanel);
+                el("span", "保存路径", "mpl-metadata-caption", pathRow);
+                const pathSelect = el("select", "", "", pathRow);
+                pathSelect.setAttribute("aria-label", mplT("保存路径"));
+                for (const [value, label] of [["same_dir", "LoRA 同目录"], ["subfolder", "magicloradate 子目录"]]) {
+                    const option = el("option", label, "", pathSelect);
+                    option.value = value;
+                }
+                pathSelect.value = settings.save_path;
+                pathSelect.title = mplT("已有信息更新原位置，新信息按保存位置保存。");
+                const modeRow = el("label", "", "mpl-metadata-setting-group", settingsPanel);
+                el("span", "处理方式", "mpl-metadata-caption", modeRow);
+                const modeSelect = el("select", "", "", modeRow);
+                modeSelect.setAttribute("aria-label", mplT("处理方式"));
+                for (const [value, label] of [["missing", "补全缺失信息"], ["update", "更新已有信息"]]) {
+                    const option = el("option", label, "", modeSelect);
+                    option.value = value;
+                }
+                modeSelect.value = "missing";
+                const modeHelp = el("div", "", "mpl-metadata-mode-help", settingsPanel);
+                const library = el("div", "", "mpl-metadata-library", workspace);
+                const sharedWarning = el("div", "", "mpl-metadata-warning", library);
+                const selectionRow = el("div", "", "mpl-metadata-selection", library);
+                const selectVisibleBtn = el("button", "选择当前可见项", "", selectionRow);
+                const clearSelectionBtn = el("button", "清空选择", "", selectionRow);
+                const refreshInventoryBtn = el("button", "刷新列表", "", searchRow);
+                [selectVisibleBtn, clearSelectionBtn, refreshInventoryBtn].forEach(button => { button.type = "button"; });
+                const preflightRow = el("div", "", "mpl-metadata-counts", selectionRow);
+                const preflightCounters = {};
+                for (const [key, label] of [["scoped", "当前范围"], ["selected", "已勾选"], ["need", "需补全"], ["complete", "信息完整"]]) {
+                    const stat = el("span", "", "", preflightRow);
+                    el("span", label, "", stat);
+                    preflightCounters[key] = el("span", "", "", stat);
+                    preflightCounters[key].style.marginLeft = "4px";
+                }
+                el("div", "只有当前范围和筛选结果中勾选的 LoRA 会被处理。", "mpl-metadata-hint", library);
+                const inventoryErrors = el("div", "", "mpl-metadata-warning", library);
+                const inventoryWrap = el("div", "", "mpl-metadata-inventory", library);
+                const inventoryTable = el("table", "", "mpl-metadata-table", inventoryWrap);
+                const head = el("thead", "", "", inventoryTable);
+                const headRow = el("tr", "", "", head);
+                for (const [label, width] of [["选择", "42px"], ["LoRA 文件", ""], [".txt", "55px"], [".json", "55px"], ["预览", "55px"], [".log", "55px"]]) {
+                    const cell = el("th", label, "", headRow);
+                    if (width) cell.style.width = width;
+                }
+                const inventoryBody = el("tbody", "", "", inventoryTable);
+                const resultDetails = el("details", "", "mpl-metadata-results", library);
+                el("summary", "下载结果", "", resultDetails);
+                const stats = el("div", "", "mpl-metadata-stats", resultDetails);
+                const resultList = el("div", "", "mpl-metadata-result-list", resultDetails);
+                const progressPanel = el("div", "", "mpl-metadata-progress", dialog);
+                const phase = el("div", "准备就绪", "mpl-metadata-progress-text", progressPanel);
+                phase.setAttribute("aria-live", "polite");
+                const progressRow = el("div", "", "mpl-metadata-progress-row", progressPanel);
+                const progress = el("progress", "", "", progressRow);
+                progress.max = 1;
+                progress.value = 0;
+                const progressCount = el("span", "", "mpl-metadata-progress-count", progressRow);
+                progressCount.textContent = "0 / 0";
+                const currentName = el("div", "", "mpl-metadata-current", progressPanel);
+                const counters = {};
+                const statusLabels = { success: "成功", skipped: "已跳过", not_found: "未找到", partial: "部分完成", error: "失败" };
+                const statusCounts = Object.fromEntries(Object.keys(statusLabels).map(status => [status, 0]));
+                for (const [status, label] of Object.entries(statusLabels)) {
+                    const stat = el("span", "", "", stats);
+                    el("span", label, "", stat);
+                    counters[status] = el("span", "", "", stat);
+                    counters[status].style.marginLeft = "4px";
+                    counters[status].textContent = "0";
+                }
+                const footer = el("div", "", "mpl-metadata-footer", dialog);
+                const closeBtn = el("button", "关闭", "", footer);
+                el("div", "", "mpl-metadata-footer-spacer", footer);
+                const stopBtn = el("button", "停止后续下载", "", footer);
+                const retryBtn = el("button", "重试当前范围失败项", "", footer);
+                const startBtn = el("button", "开始下载", "mpl-metadata-primary", footer);
+                [closeBtn, stopBtn, retryBtn, startBtn].forEach(button => { button.type = "button"; });
+                stopBtn.disabled = true;
+                retryBtn.disabled = true;
+                const readSettings = () => ({
+                    ...Object.fromEntries(Object.entries(checkboxes).map(([key, checkbox]) => [key, checkbox.checked])),
+                    save_path: pathSelect.value,
+                    overwrite: modeSelect.value === "update",
+                    update_existing: modeSelect.value === "update",
+                });
+                const scopeNames = () => mplCollectMetadataNames(node, scopeSelect.value, localFiles || []);
+                const selectedNames = () => mplMetadataPreflight(visibleNames, selected, readSettings(), metadata).names;
+                const retryNames = () => {
+                    const visible = new Set(visibleNames.map(mplMetadataNameKey));
+                    return Array.from(results.values()).filter(result => selected.has(mplMetadataNameKey(result.name)) && visible.has(mplMetadataNameKey(result.name)) && ["error", "partial"].includes(result.status)).map(result => result.name);
+                };
+                const updateControls = () => {
+                    const busy = state.running || loadingFiles;
+                    for (const control of [scopeSelect, pathSelect, modeSelect, directorySelect, recursiveCheckbox, search, missingOnly, selectVisibleBtn, clearSelectionBtn, refreshInventoryBtn]) control.disabled = busy;
+                    Object.values(checkboxes).forEach(checkbox => { checkbox.disabled = busy; });
+                    inventoryCheckboxes.forEach(checkbox => { checkbox.disabled = busy; });
+                    const preflight = mplMetadataPreflight(visibleNames, selected, readSettings(), metadata);
+                    const hasSharedSelection = modeSelect.value === "update" && mplMetadataHasSharedSelection(preflight.names, sharedInfo);
+                    sharedWarning.textContent = hasSharedSelection ? mplT("选中项包含共享信息文件的同名模型，请每组只选择一个。") : "";
+                    startBtn.disabled = busy || !inventoryReady || !preflight.selected || hasSharedSelection || !Object.values(checkboxes).some(checkbox => checkbox.checked);
+                    retryBtn.disabled = busy || !retryNames().length;
+                    stopBtn.disabled = !state.running || state.cancelRequested;
+                    closeBtn.disabled = state.running;
+                    headerCloseBtn.disabled = state.running;
+                    phase.title = phase.textContent;
+                    for (const key of Object.keys(preflightCounters)) preflightCounters[key].textContent = loadingFiles ? "…" : String(preflight[key]);
+                };
+                const autoSelectPending = () => {
+                    selected.clear();
+                    scopeNames().filter(name => mplMetadataNeeds(name, readSettings(), metadata)).forEach(name => selected.add(mplMetadataNameKey(name)));
+                };
+                const renderInventory = () => {
+                    visibleNames = mplFilterMetadataNames(scopeNames(), {
+                        directory: directorySelect.value,
+                        recursive: recursiveCheckbox.checked,
+                        search: search.value,
+                        onlyMissing: missingOnly.checked,
+                    }, readSettings(), metadata);
+                    inventoryBody.replaceChildren();
+                    inventoryCheckboxes = [];
+                    for (const name of visibleNames) {
+                        const key = mplMetadataNameKey(name);
+                        const row = el("tr", "", "", inventoryBody);
+                        const selectCell = el("td", "", "", row);
+                        const checkbox = el("input", "", "", selectCell);
+                        checkbox.type = "checkbox";
+                        checkbox.checked = selected.has(key);
+                        checkbox.setAttribute("data-lora-name", name);
+                        checkbox.setAttribute("aria-label", name);
+                        checkbox.onchange = () => {
+                            selectionTouched = true;
+                            if (checkbox.checked) selected.add(key); else selected.delete(key);
+                            updateControls();
+                        };
+                        inventoryCheckboxes.push(checkbox);
+                        const nameCell = el("td", "", "mpl-metadata-file", row);
+                        nameCell.title = name;
+                        const parts = mplMetadataNameKey(name).split("/");
+                        const fileName = el("div", "", "mpl-metadata-file-name", nameCell);
+                        fileName.textContent = parts.pop();
+                        const filePath = el("div", "", "mpl-metadata-file-path", nameCell);
+                        filePath.textContent = parts.join("/") || mplT("根目录");
+                        for (const type of ["txt", "json", "image", "log"]) {
+                            const exists = metadata[key]?.[type] === true;
+                            const unavailable = sourceUnavailable.get(key)?.has(type);
+                            const cell = el("td", "", "", row);
+                            const status = el("span", exists ? "已有" : unavailable ? "来源未提供" : "缺失", "mpl-metadata-status " + (exists ? "mpl-metadata-present" : unavailable ? "mpl-metadata-unavailable" : "mpl-metadata-missing"), cell);
+                            if (unavailable) {
+                                status.textContent = "—";
+                                status.title = mplT("来源未提供");
+                            }
+                        }
+                    }
+                    if (!visibleNames.length) {
+                        const row = el("tr", "", "", inventoryBody);
+                        const cell = el("td", "暂无符合条件的 LoRA", "mpl-metadata-hint", row);
+                        cell.style.textAlign = "center";
+                        cell.style.padding = "20px";
+                        cell.colSpan = 6;
+                    }
+                    updateControls();
+                };
+                const saveSettings = () => {
+                    const { overwrite, update_existing, ...savedSettings } = readSettings();
+                    try { localStorage.setItem(MPL_METADATA_SETTINGS_KEY, JSON.stringify(savedSettings)); }
+                    catch (error) { console.warn("[MagicPowerLora] 保存下载设置失败:", error); }
+                    if (!selectionTouched) autoSelectPending();
+                    renderInventory();
+                };
+                Object.values(checkboxes).forEach(checkbox => { checkbox.onchange = saveSettings; });
+                pathSelect.onchange = saveSettings;
+                scopeSelect.onchange = () => {
+                    if (!selectionTouched) autoSelectPending();
+                    renderInventory();
+                };
+                directorySelect.onchange = renderInventory;
+                recursiveCheckbox.onchange = renderInventory;
+                search.oninput = renderInventory;
+                missingOnly.onchange = renderInventory;
+                const updateModeHelp = () => {
+                    modeHelp.title = mplT(modeSelect.value === "update"
+                        ? "更新所选类型的现有信息文件（含 .txt）；节点权重和自定义触发词保持不变。"
+                        : "补全缺失文件，不覆盖已有 .txt/.json/预览图/.log。节点权重和自定义触发词保持不变。");
+                    modeHelp.textContent = mplT(modeSelect.value === "update"
+                        ? "覆盖所选信息文件，节点设置不变。"
+                        : "仅补缺失文件，保留已有内容。");
+                };
+                modeSelect.onchange = () => {
+                    if (modeSelect.value === "update") missingOnly.checked = false;
+                    updateModeHelp();
+                    renderInventory();
+                };
+                selectVisibleBtn.onclick = () => {
+                    selectionTouched = true;
+                    visibleNames.forEach(name => selected.add(mplMetadataNameKey(name)));
+                    renderInventory();
+                };
+                clearSelectionBtn.onclick = () => {
+                    selectionTouched = true;
+                    selected.clear();
+                    renderInventory();
+                };
+                const loadInventory = async (autoSelect = false) => {
+                    loadingFiles = true;
+                    if (!state.running) phase.textContent = mplT("正在读取本地 LoRA 列表…");
+                    updateControls();
+                    try {
+                        const response = await api.fetchApi("/ma/lora/list?include_metadata=true");
+                        const data = await response.json();
+                        if (!response.ok || data.error || !Array.isArray(data.files)) throw new Error(data.error || data.message || mplT("读取本地 LoRA 列表失败"));
+                        if (closed) return;
+                        localFiles = data.files;
+                        metadata = Object.fromEntries(Object.entries(data.metadata || {}).map(([name, values]) => [mplMetadataNameKey(name), values]));
+                        sharedInfo = Object.fromEntries(Object.entries(data.shared_info || {}).map(([name, group]) => [mplMetadataNameKey(name), group]));
+                        inventoryReady = true;
+                        mplSetLoraNameList(localFiles);
+                        const oldDirectory = directorySelect.value;
+                        directorySelect.replaceChildren();
+                        for (const [value, label] of [["", "所有目录"], [".", "根目录"]]) {
+                            const option = el("option", label, "", directorySelect);
+                            option.value = value;
+                        }
+                        const directories = new Set();
+                        for (const name of localFiles) {
+                            const parts = mplMetadataNameKey(name).split("/").slice(0, -1);
+                            for (let length = 1; length <= parts.length; length++) directories.add(parts.slice(0, length).join("/"));
+                        }
+                        for (const directory of [...directories].sort((a, b) => a.localeCompare(b))) {
+                            const option = el("option", "", "", directorySelect);
+                            option.value = directory;
+                            option.textContent = directory;
+                        }
+                        directorySelect.value = [...directorySelect.options].some(option => option.value === oldDirectory) ? oldDirectory : "";
+                        inventoryErrors.replaceChildren();
+                        if (Array.isArray(data.errors) && data.errors.length) {
+                            el("div", "清单读取异常", "", inventoryErrors);
+                            for (const error of data.errors) {
+                                const errorLine = el("div", "", "", inventoryErrors);
+                                errorLine.textContent = `${error.path || ""}: ${error.error || ""}`;
+                            }
+                        }
+                        if (autoSelect) autoSelectPending();
+                        if (!state.running) phase.textContent = mplT("准备就绪");
+                    } catch (error) {
+                        inventoryErrors.textContent = `${mplT("读取本地 LoRA 列表失败")}: ${error.message}`;
+                        if (!state.running) phase.textContent = mplT("读取本地 LoRA 列表失败");
+                    } finally {
+                        loadingFiles = false;
+                        if (!closed) renderInventory();
+                    }
+                };
+                refreshInventoryBtn.onclick = () => loadInventory(false);
+                const resultRows = new Map();
+                const updateResults = (result) => {
+                    const key = mplMetadataNameKey(result.name);
+                    const previous = results.get(key);
+                    if (previous) statusCounts[previous.status]--;
+                    statusCounts[result.status]++;
+                    results.set(key, result);
+                    let row = resultRows.get(key);
+                    if (!row) {
+                        row = el("div", "", "mpl-metadata-result", resultList);
+                        resultRows.set(key, row);
+                    }
+                    row.replaceChildren();
+                    const rowTitle = el("div", "", "mpl-metadata-result-title", row);
+                    el("span", statusLabels[result.status], "mpl-metadata-result-status" + (["error", "partial"].includes(result.status) ? " mpl-metadata-result-status-error" : ""), rowTitle);
+                    const name = el("span", "", "", rowTitle);
+                    name.textContent = result.name;
+                    const message = el("div", "", "mpl-metadata-result-message", row);
+                    message.textContent = result.message || "";
+                    if (result.unavailable?.length) {
+                        const unavailable = el("div", "", "mpl-metadata-result-message", row);
+                        unavailable.textContent = `${mplT("来源未提供")}: ${result.unavailable.join(", ")}`;
+                    }
+                    for (const status of Object.keys(counters)) {
+                        counters[status].textContent = String(statusCounts[status]);
+                    }
+                    resultDetails.open = true;
+                };
+                const run = async (names, runSettings, clearResults) => {
+                    if (state.running || loadingFiles || !names.length) return;
+                    state.cancelRequested = false;
+                    state.running = true;
+                    lastSettings = { ...runSettings };
+                    if (clearResults) {
+                        results.clear();
+                        resultRows.clear();
+                        resultList.replaceChildren();
+                        for (const status of Object.keys(counters)) {
+                            statusCounts[status] = 0;
+                            counters[status].textContent = "0";
+                        }
+                    }
+                    phase.textContent = mplT("下载中…");
+                    updateControls();
+                    const changedNames = new Set();
+                    const affectedNodes = new Set([node]);
+                    const graphNodes = mplMetadataGraphNodes(node);
+                    const referencesByName = new Map();
+                    for (const target of graphNodes) {
+                        for (const name of mplCollectMetadataNames(target)) {
+                            const key = mplMetadataNameKey(name);
+                            if (!referencesByName.has(key)) referencesByName.set(key, new Set());
+                            referencesByName.get(key).add(target);
+                        }
+                    }
+                    try {
+                        await mplRunMetadataQueue(names, runSettings, state, ({ current, completed, total, result }) => {
+                            currentName.textContent = current;
+                            currentName.title = current;
+                            progress.max = total;
+                            progress.value = completed;
+                            progressCount.textContent = `${completed} / ${total}`;
+                            if (result) {
+                                updateResults(result);
+                                sourceUnavailable.set(mplMetadataNameKey(result.name), new Set(result.unavailable || []));
+                                if (result.saved?.length) {
+                                    changedNames.add(result.name);
+                                    for (const target of referencesByName.get(mplMetadataNameKey(result.name)) || []) {
+                                        mplApplyMetadataData(target, result.name, result.data);
+                                        affectedNodes.add(target);
+                                    }
+                                }
+                            }
+                        });
+                        state.running = true;
+                        if (changedNames.size) {
+                            affectedNodes.forEach(target => target.updateWidget());
+                            await loadLoraImageList();
+                            for (const target of affectedNodes) {
+                                target.renderEmbeddedList();
+                                if (target._addLoraModal?.isConnected && target._refreshFileListFunc) await target._refreshFileListFunc();
+                                changedNames.forEach(name => target.refreshLoraImageCache(name));
+                            }
+                        }
+                        await loadInventory(false);
+                        phase.textContent = mplT(state.cancelRequested ? "已停止，当前文件已处理完成。" : "下载任务完成");
+                    } catch (error) {
+                        phase.textContent = `${mplT("下载任务失败")}: ${error.message}`;
+                    } finally {
+                        state.running = false;
+                        currentName.textContent = "";
+                        updateControls();
+                    }
+                };
+                const startRun = (names, runSettings, clearResults) => {
+                    const snapshot = names.slice();
+                    if (runSettings.overwrite) {
+                        if (mplMetadataHasSharedSelection(snapshot, sharedInfo)) {
+                            phase.textContent = mplT("选中项包含共享信息文件的同名模型，请每组只选择一个。");
+                            return;
+                        }
+                        const types = [...new Set(snapshot.flatMap(name => mplMetadataRequestedTypes(name, runSettings)))];
+                        const existingNames = snapshot.filter(name => mplMetadataRequestedTypes(name, runSettings).some(type => metadata[mplMetadataNameKey(name)]?.[type]));
+                        const existingCount = snapshot.reduce((count, name) => count + mplMetadataRequestedTypes(name, runSettings).filter(type => metadata[mplMetadataNameKey(name)]?.[type]).length, 0);
+                        const prompt = [
+                            mplT("更新已有信息确认"),
+                            `${mplT("所选 LoRA：")}${snapshot.length}`,
+                            `${mplT("将更新已有信息的 LoRA：")}${existingNames.length}`,
+                            `${mplT("将更新的已有信息项：")}${existingCount}`,
+                            `${mplT("信息类型：")}${types.map(type => type === "image" ? mplT("预览图像") : `.${type}`).join(", ")}`,
+                            mplT("会覆盖所选模型的已有信息文件，节点权重和自定义触发词保持不变。"),
+                        ].join("\n");
+                        if (!confirm(prompt)) return;
+                    }
+                    return run(snapshot, runSettings, clearResults);
+                };
+                startBtn.onclick = () => {
+                    saveSettings();
+                    return startRun(selectedNames(), readSettings(), true);
+                };
+                retryBtn.onclick = () => {
+                    const names = retryNames();
+                    const retryTypes = {};
+                    for (const name of names) {
+                        const failed = results.get(mplMetadataNameKey(name))?.failed;
+                        if (Array.isArray(failed) && failed.length) retryTypes[mplMetadataNameKey(name)] = failed;
+                    }
+                    return startRun(names, { ...lastSettings, retry_types: retryTypes }, false);
+                };
+                const stop = () => {
+                    if (!state.running) return;
+                    state.cancelRequested = true;
+                    phase.textContent = mplT("正在停止：等待当前文件处理完成…");
+                    updateControls();
+                };
+                stopBtn.onclick = stop;
+                const close = () => {
+                    if (state.running) { stop(); return; }
+                    closed = true;
+                    releaseDrag?.();
+                    dialog.remove();
+                    if (mplMetadataModal === dialog) mplMetadataModal = null;
+                };
+                const handleEsc = event => {
+                    event.stopPropagation();
+                    if (event.key === "Escape" && !closed) { event.preventDefault(); close(); }
+                };
+                closeBtn.onclick = close;
+                headerCloseBtn.onclick = close;
+                for (const eventName of ["pointerdown", "pointermove", "pointerup", "mousedown", "wheel"]) {
+                    dialog.addEventListener(eventName, event => event.stopPropagation());
+                }
+                dialog.addEventListener("keydown", handleEsc);
+                dialog.addEventListener("keyup", event => event.stopPropagation());
+                header.addEventListener("mousedown", event => {
+                    if (!event.target.closest("button")) dialog.focus();
+                });
+                document.body.appendChild(dialog);
+                mplMetadataModal = dialog;
+                const releaseDrag = node.makeDialogDraggable(dialog, header);
+                updateModeHelp();
+                updateControls();
+                dialog.focus();
+                return loadInventory(true);
+            };
+
             nodeType.prototype.showFetchModal = function(lora, contentAreas, parentOverlay) {
                 // 设置存储的键名
                 const SETTINGS_KEY = "magic_power_lora_fetch_settings";
@@ -2685,7 +3454,7 @@ app.registerExtension({
                         
                         const result = await response.json();
                         
-                        if (result.status === 'success') {
+                        if (result.status === 'success' || result.status === 'partial') {
                             // 更新编辑框内容
                             if (result.data.triggerWords) {
                                 const txtArea = contentAreas[0].querySelector('textarea');
@@ -3122,7 +3891,7 @@ app.registerExtension({
                         
                         // 使用API获取预览图
                         const safeName = encodeURIComponent(lora.name);
-                        img.src = api.apiURL(`/ma/lora/image?name=${safeName}`);
+                        img.src = api.apiURL(`/ma/lora/image?name=${safeName}&t=${Date.now()}`);
                         img.onerror = () => {
                             this._previewDiv.innerHTML = `<div style="padding:20px;color:#888;text-align:center;">${mplT("无预览图")}</div>`;
                         };
@@ -3676,7 +4445,7 @@ app.registerExtension({
                     await loadLoraImageList();
                     
                     // 生成时间戳来强制刷新所有图片缓存
-                    const cacheTimestamp = new Date().getTime();
+                    let cacheTimestamp = new Date().getTime();
                     
                     const resp = await api.fetchApi("/ma/lora/list");
                     const data = await resp.json();
@@ -4291,6 +5060,7 @@ app.registerExtension({
                             Object.assign(folderTree, newFolderTree);
                             rootFiles.length = 0;
                             rootFiles.push(...newRootFiles);
+                            cacheTimestamp = Date.now();
                             
                             // 重新渲染
                             renderContent();

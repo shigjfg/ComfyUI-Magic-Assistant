@@ -16,7 +16,25 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-09-30**
+> Latest Update / 最新更新：**2026-10-07**
+>
+> **V1.4.5 版本介绍 / Version Introduction** 2026-10-07
+>
+> 1. **✨ 新增**: Magic Power LoRA Loader - 一键批量补全 LoRA 信息
+>    * 在节点底部新增「一键下载信息」入口，可一次浏览和处理整个本地 LoRA 库，也可以只处理当前节点或节点文件夹中的 LoRA
+>    * 支持按目录、子目录、文件名或路径筛选，并可查看触发词、模型介绍、预览图和推荐权重哪些信息已经存在
+>    * 默认只补全缺失内容，不会覆盖已有文件；也可以在确认后主动更新已有信息，并选择保存到 LoRA 同目录或 `magicloradate` 子目录
+>    * 下载过程会显示进度和每个文件的结果，支持停止后续任务、只重试失败项目；不会改变工作流中的标签、权重、启用状态或排序
+>    * **New**: Magic Power LoRA Loader now includes a one-click batch tool for completing LoRA information
+>    * Browse and process the entire local LoRA library, or limit the scope to the current node or node folder
+>    * Filter by directory, subfolder, filename, or path, and see which trigger words, model descriptions, previews, and recommended weights already exist
+>    * Missing information is filled by default without overwriting existing files; confirmed updates can replace existing information and save beside the LoRA or in a `magicloradate` subfolder
+>    * Progress and per-file results are shown, failed items can be retried, and stopping prevents new downloads from starting without changing workflow tags, weights, enabled states, or order
+>      <img width="578" height="425" alt="Image" src="https://github.com/user-attachments/assets/986ca27d-26ed-4590-a79c-dccad23f38b2" />
+>
+> 2. **🔧 优化**: Magic Cache - 重复运行后的缓存清理
+>    * 多次运行工作流或切换缓存设置后，会更可靠地清理上一次运行留下的缓存状态，减少旧缓存影响后续生成的情况
+>    * **Improved**: Magic Cache now cleans up cache state more reliably after repeated workflow runs or cache-setting changes, reducing stale state from affecting later generations
 >
 > **V1.4.4 版本介绍 / Version Introduction** 2026-09-30
 >
@@ -66,6 +84,9 @@
 >    * **New Node**: Magic Resize & Merge maps the processed crop back to its original position using `CROP_INFO`
 >    * An optional crop mask enables soft blending, while pixels outside the crop remain unchanged; empty masks fall back to full-image resizing
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.4.2 版本介绍 / Version Introduction** 2026-09-04
 >
 > 1. **🔍 新增**: Magic Power LoRA Loader - 工作流缺失 LoRA 检测
@@ -87,9 +108,6 @@
 >    * Magic Multi-Function AI Prompt Replace 在等待网络响应或重试时，会显示进度，并可使用 ComfyUI 的停止按钮及时中断，不必一直等待超时
 >    * **Improved**: LLM model discovery now uses the ComfyUI backend, reducing browser CORS failures and supporting more OpenAI-compatible response formats
 >    * Magic Multi-Function AI Prompt Replace reports progress while waiting or retrying and can be stopped with ComfyUI's Stop button instead of waiting for the timeout
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.4.1 版本介绍 / Version Introduction** 2026-08-15
 >
@@ -947,6 +965,8 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **文件夹开关**: 文件夹开关按钮，一键启用/禁用文件夹下所有 lora。
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
+* **LoRA 信息批量管理**: 节点底部打开独立弹窗，浏览本地 LoRA 库，按目录、子目录、搜索或手动勾选批量获取触发词、介绍、预览和推荐权重，也可选择当前节点或节点文件夹。显示已有／缺失状态，默认只补缺失；可确认后主动更新已有信息。支持进度、停止及失败重试，不自动修改工作流权重或标签。详见 [需求与使用说明](docs/lora_metadata_batch.md)。
+* **批量信息筛选与安全更新**: 批量窗口支持真实目录、递归子目录、文件名或路径搜索、只看缺失项和手动多选；已有信息默认保留，更新时会写回原位置，并在下载完成后刷新节点中的信息状态。
 * **LoRA 检测功能**: LoRA 添加窗口新增 LoRA 检测功能，可以根据路径选择全部 LoRA 进行 LoRA 的查重和检测更新。
 * **工作流缺失 LoRA 检测**: 打开工作流或刷新 LoRA 列表时，自动检查已启用的 LoRA 文件是否存在；缺失文件会被 ComfyUI 标记，避免运行时悄悄跳过 LoRA。编辑列表、删除文件或恢复旧工作流后会自动重新检查。
 * **缺失状态即时同步**: 编辑 LoRA 节点设置或刷新列表后，立即同步缺失 LoRA 状态并触发 ComfyUI 官方模型缺失检查。
@@ -967,6 +987,8 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Smart Preview Detection**: Automatically finds preview images in `magicloradate` subdirectory or same directory as LoRA files.
 * **Folder Toggle**: One-click toggle button to enable/disable all LoRAs in a folder.
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
+* **Batch LoRA Information**: Open an independent library dialog from the node footer. Filter by directory, subdirectories or search, select individual files, or use the current node or a node folder. View existing/missing information and fetch trigger words, descriptions, previews and recommended weights. Missing-only is the default; updating existing information requires confirmation. Progress, stopping and retrying failures are supported without changing workflow weights or tags. Stopping finishes the current file before ending the queue.
+* **Filtered and safe batch updates**: The batch dialog supports real directories, recursive subfolders, filename/path search, missing-only filtering, and manual multi-selection. Existing information is preserved by default; updates write back to the original location and refresh the node's information state when downloads finish.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
 * **LoRA Detection**: New LoRA detection feature in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs.
 * **Workflow missing-LoRA detection**: When a workflow is opened or the LoRA list is refreshed, enabled LoRA files are checked automatically. Missing files are marked by ComfyUI instead of being silently skipped, and the check refreshes after editing the list, deleting files, or restoring an older workflow.

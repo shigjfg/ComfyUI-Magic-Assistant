@@ -10,6 +10,7 @@ import contextlib
 import dataclasses
 import unittest
 import inspect
+import weakref
 from collections import defaultdict
 from typing import Optional, DefaultDict, Dict
 from unittest.mock import patch
@@ -2267,6 +2268,28 @@ class MagicCache:
         global _patched_components_registry
         cleaned = False
 
+        # Cache wrappers are stored on the patcher itself. Restore the wrapper
+        # that existed before Magic Cache so repeated prompt execution does not
+        # keep a chain of old Tea/FBCache closures alive.
+        try:
+            model_options = getattr(model, 'model_options', {})
+            if isinstance(model_options, dict):
+                current_wrapper = model_options.get('model_function_wrapper')
+                cache_wrapper = getattr(model, '_magic_cache_wrapper', None)
+                if cache_wrapper is not None and current_wrapper is cache_wrapper:
+                    base_wrapper = getattr(model, '_magic_cache_base_wrapper', None)
+                    if base_wrapper is None:
+                        model_options.pop('model_function_wrapper', None)
+                    else:
+                        model_options['model_function_wrapper'] = base_wrapper
+                    cleaned = True
+                if hasattr(model, '_magic_cache_wrapper'):
+                    delattr(model, '_magic_cache_wrapper')
+                if hasattr(model, '_magic_cache_base_wrapper'):
+                    delattr(model, '_magic_cache_base_wrapper')
+        except Exception:
+            pass
+
         # 1. 清理 FBCache patch
         if hasattr(model, '_fbcache_patched_component'):
             component = model._fbcache_patched_component
@@ -2293,6 +2316,35 @@ class MagicCache:
         except Exception:
             pass
 
+        # TeaCache may add forward_orig and state tensors to the diffusion
+        # model. Remove only values that this node created.
+        tea_component = getattr(model, '_teacache_patched_component', None)
+        if tea_component is not None:
+            for name in (
+                'teacache_state',
+                'accumulated_rel_l1_distance',
+                'previous_modulated_input',
+                'teacache_unet_hidden_states_residual',
+            ):
+                if hasattr(tea_component, name):
+                    try:
+                        delattr(tea_component, name)
+                        cleaned = True
+                    except Exception:
+                        pass
+            if getattr(model, '_magic_cache_added_forward_orig', False):
+                try:
+                    if hasattr(tea_component, 'forward_orig'):
+                        delattr(tea_component, 'forward_orig')
+                    cleaned = True
+                except Exception:
+                    pass
+        if hasattr(model, '_magic_cache_added_forward_orig'):
+            try:
+                delattr(model, '_magic_cache_added_forward_orig')
+            except Exception:
+                pass
+
         # 从全局注册表中移除该模型的组件 ID
         if hasattr(model, '_fbcache_patched_component') and model._fbcache_patched_component:
             comp_id = id(model._fbcache_patched_component)
@@ -2309,7 +2361,14 @@ class MagicCache:
             self.log("rel_l1_thresh=0，跳过 TeaCache 优化", "info")
             return model
 
+        _missing = object()
+        base_wrapper = getattr(model, '_magic_cache_base_wrapper', _missing)
+        if base_wrapper is _missing:
+            previous_wrapper = getattr(model, 'model_options', {}).get('model_function_wrapper')
+            base_wrapper = previous_wrapper
+
         new_model = model.clone()
+        new_model_ref = weakref.ref(new_model)
         model_options = getattr(new_model, 'model_options', None)
         if model_options is None or not isinstance(model_options, dict):
             model_options = {}
@@ -2323,6 +2382,7 @@ class MagicCache:
         if diffusion_model is None:
             self.log("未找到 diffusion_model，跳过 TeaCache 优化", "warning")
             return new_model
+        diffusion_model_ref = weakref.ref(diffusion_model)
 
         # Auto-adapt: UNetModel (SDXL/SD1.5) can use TeaCache with model_type sdxl/sd15
         if diffusion_model.__class__.__name__ == "UNetModel" and model_type not in ("sdxl", "sd15"):
@@ -2345,49 +2405,68 @@ class MagicCache:
             is_cfg = False
             # TeaCache patch for UNetModel (SDXL/SD1.5)
             context = create_patch_unet_model__forward_teacache(diffusion_model)
+            context_factory = lambda context=context: context
         elif "flux" in model_type or "klein" in model_type or "sdnq" in model_type or "anima" in model_type:
             is_cfg = False
             # Save original forward as forward_orig if it doesn't exist
+            added_forward_orig = False
             if not hasattr(diffusion_model, 'forward_orig'):
                 diffusion_model.forward_orig = diffusion_model.forward
-            context = patch.multiple(
-                diffusion_model,
-                forward=teacache_flux_forward.__get__(diffusion_model, diffusion_model.__class__)
-            )
+                added_forward_orig = True
+            # Do not keep a patch context (and its bound model method) in the
+            # long-lived wrapper closure. Build it only while sampling.
+            def context_factory(model_ref=diffusion_model_ref):
+                current_model = model_ref()
+                if current_model is None:
+                    return contextlib.nullcontext()
+                return patch.multiple(
+                    current_model,
+                    forward=teacache_flux_forward.__get__(
+                        current_model, current_model.__class__)
+                )
         elif "lumina_2" in model_type:
             is_cfg = True
             context = patch.multiple(
                 diffusion_model,
                 forward=teacache_lumina_forward.__get__(diffusion_model, diffusion_model.__class__)
             )
+            context_factory = lambda context=context: context
         elif "hidream_i1" in model_type:
             is_cfg = True if "full" in model_type else False
             context = patch.multiple(
                 diffusion_model,
                 forward=teacache_hidream_forward.__get__(diffusion_model, diffusion_model.__class__)
             )
+            context_factory = lambda context=context: context
         elif "ltxv" in model_type:
             is_cfg = True
             context = patch.multiple(
                 diffusion_model,
                 forward=teacache_ltxvmodel_forward.__get__(diffusion_model, diffusion_model.__class__)
             )
+            context_factory = lambda context=context: context
         elif "hunyuan_video" in model_type:
             is_cfg = False
+            added_forward_orig = False
             if not hasattr(diffusion_model, 'forward_orig'):
                 diffusion_model.forward_orig = diffusion_model.forward
+                added_forward_orig = True
             context = patch.multiple(
                 diffusion_model,
                 forward=teacache_hunyuanvideo_forward.__get__(diffusion_model, diffusion_model.__class__)
             )
+            context_factory = lambda context=context: context
         elif "wan2.1" in model_type:
             is_cfg = True
+            added_forward_orig = False
             if not hasattr(diffusion_model, 'forward_orig'):
                 diffusion_model.forward_orig = diffusion_model.forward
+                added_forward_orig = True
             context = patch.multiple(
                 diffusion_model,
                 forward=teacache_wanmodel_forward.__get__(diffusion_model, diffusion_model.__class__)
             )
+            context_factory = lambda context=context: context
         else:
             supported_types = ", ".join(SUPPORTED_MODELS_COEFFICIENTS.keys())
             error_msg = f"不支持的模型类型: {model_type}。支持的类型: {supported_types}"
@@ -2403,11 +2482,12 @@ class MagicCache:
             transformer_options = c["transformer_options"]
             sigmas = transformer_options.get("sample_sigmas")
             if sigmas is None:
-                model_opts = getattr(new_model, 'model_options', {})
+                cache_model = new_model_ref()
+                model_opts = getattr(cache_model, 'model_options', {}) if cache_model is not None else {}
                 if isinstance(model_opts, dict) and "transformer_options" in model_opts:
                     sigmas = model_opts["transformer_options"].get("sample_sigmas")
             if sigmas is None:
-                with context:
+                with context_factory():
                     return model_function(input, timestep, **c)
             
             matched_step_index = (sigmas == timestep[0]).nonzero()
@@ -2422,14 +2502,16 @@ class MagicCache:
             
             if current_step_index == 0:
                 # Reset TeaCache state at the beginning of a sampling sequence
-                if hasattr(diffusion_model, 'teacache_state'):
-                    delattr(diffusion_model, 'teacache_state')
-                if hasattr(diffusion_model, 'accumulated_rel_l1_distance'):
-                    delattr(diffusion_model, 'accumulated_rel_l1_distance')
-                if hasattr(diffusion_model, 'previous_modulated_input'):
-                    delattr(diffusion_model, 'previous_modulated_input')
-                if hasattr(diffusion_model, 'teacache_unet_hidden_states_residual'):
-                    delattr(diffusion_model, 'teacache_unet_hidden_states_residual')
+                cache_diffusion_model = diffusion_model_ref()
+                if cache_diffusion_model is not None:
+                    if hasattr(cache_diffusion_model, 'teacache_state'):
+                        delattr(cache_diffusion_model, 'teacache_state')
+                    if hasattr(cache_diffusion_model, 'accumulated_rel_l1_distance'):
+                        delattr(cache_diffusion_model, 'accumulated_rel_l1_distance')
+                    if hasattr(cache_diffusion_model, 'previous_modulated_input'):
+                        delattr(cache_diffusion_model, 'previous_modulated_input')
+                    if hasattr(cache_diffusion_model, 'teacache_unet_hidden_states_residual'):
+                        delattr(cache_diffusion_model, 'teacache_unet_hidden_states_residual')
             
             current_percent = current_step_index / (len(sigmas) - 1)
             transformer_options["current_percent"] = current_percent
@@ -2438,7 +2520,7 @@ class MagicCache:
             else:
                 transformer_options["enable_teacache"] = False
                 
-            with context:
+            with context_factory():
                 return model_function(input, timestep, **c)
 
         # Compose with any existing wrapper (TeaCache as outer wrapper; preserves existing wrappers)
@@ -2450,12 +2532,17 @@ class MagicCache:
                     kwargs
                 )
             new_model.set_model_unet_function_wrapper(composed_wrapper)
+            installed_wrapper = composed_wrapper
         else:
             new_model.set_model_unet_function_wrapper(unet_wrapper_function)
+            installed_wrapper = unet_wrapper_function
 
         # 标记 TeaCache 已应用 (用于自动清理)
         new_model._teacache_patched = True
         new_model._teacache_patched_component = diffusion_model
+        new_model._magic_cache_wrapper = installed_wrapper
+        new_model._magic_cache_base_wrapper = base_wrapper
+        new_model._magic_cache_added_forward_orig = locals().get('added_forward_orig', False)
 
         # 注册到全局清理列表（使用组件的 id）
         register_patched_component(diffusion_model, "teacache")
@@ -2469,6 +2556,14 @@ class MagicCache:
             return model
 
         patch_get_output_data()
+        _missing = object()
+        base_wrapper = getattr(model, '_magic_cache_base_wrapper', _missing)
+        inherited_tea_component = getattr(model, '_teacache_patched_component', None)
+        inherited_added_forward_orig = getattr(
+            model, '_magic_cache_added_forward_orig', False)
+        if base_wrapper is _missing:
+            previous_wrapper = getattr(model, 'model_options', {}).get('model_function_wrapper')
+            base_wrapper = previous_wrapper
 
         using_validation = max_consecutive_cache_hits >= 0 or start > 0 or end < 1
         if using_validation:
@@ -2526,6 +2621,9 @@ class MagicCache:
             prev_input_state = (model_input.shape, model_input.dtype, model_input.device)
 
         model = model.clone()
+        if inherited_tea_component is not None:
+            model._teacache_patched_component = inherited_tea_component
+            model._magic_cache_added_forward_orig = inherited_added_forward_orig
         diffusion_model = model.get_model_object(object_to_patch)
         
         if diffusion_model is None:
@@ -2700,6 +2798,10 @@ class MagicCache:
                 )
             ])
             dummy_single_transformer_blocks = torch.nn.ModuleList()
+            model_ref = weakref.ref(model)
+            diffusion_model_ref = weakref.ref(diffusion_model)
+            model._fbcache_cached_transformer_blocks = cached_transformer_blocks
+            model._fbcache_dummy_single_transformer_blocks = dummy_single_transformer_blocks
 
             def model_unet_function_wrapper(model_function, kwargs):
                 try:
@@ -2710,14 +2812,25 @@ class MagicCache:
 
                     ensure_cache_state(input, t)
 
+                    current_model = model_ref()
+                    current_diffusion_model = diffusion_model_ref()
+                    if current_model is None or current_diffusion_model is None:
+                        return model_function(input, timestep, **c)
+                    current_cached_blocks = getattr(
+                        current_model, '_fbcache_cached_transformer_blocks', None)
+                    current_dummy_blocks = getattr(
+                        current_model, '_fbcache_dummy_single_transformer_blocks', None)
+                    if current_cached_blocks is None:
+                        return model_function(input, timestep, **c)
+
                     with unittest.mock.patch.object(
-                            diffusion_model,
+                            current_diffusion_model,
                             double_blocks_name,
-                            cached_transformer_blocks,
+                            current_cached_blocks,
                     ), unittest.mock.patch.object(
-                            diffusion_model,
+                            current_diffusion_model,
                             single_blocks_name,
-                            dummy_single_transformer_blocks,
+                            current_dummy_blocks,
                     ) if single_blocks_name is not None else contextlib.nullcontext(
                     ):
                         result = model_function(input, timestep, **c)
@@ -2731,6 +2844,7 @@ class MagicCache:
         is_sdnq_wrapper = model.__class__.__name__ == "SDNQModelWrapper" or \
                          (not hasattr(model, "set_model_unet_function_wrapper") and 
                           hasattr(model, "get_pipeline") and hasattr(model, "get_model_object"))
+        installed_wrapper = None
         
         if is_sdnq_wrapper:
             # For SDNQ models, we need to patch the pipeline's transformer/unet forward directly
@@ -2890,8 +3004,14 @@ class MagicCache:
                         kwargs
                     )
                 model.set_model_unet_function_wrapper(composed_wrapper)
+                installed_wrapper = composed_wrapper
             else:
                 model.set_model_unet_function_wrapper(model_unet_function_wrapper)
+                installed_wrapper = model_unet_function_wrapper
+
+        if installed_wrapper is not None:
+            model._magic_cache_wrapper = installed_wrapper
+        model._magic_cache_base_wrapper = base_wrapper
         
         return model
 

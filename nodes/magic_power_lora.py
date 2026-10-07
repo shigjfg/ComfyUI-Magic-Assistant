@@ -15,11 +15,14 @@ import urllib.error
 import urllib.parse
 import re
 import shutil
+import tempfile
 import time
 import asyncio
 import functools
 from datetime import datetime
 from collections import defaultdict
+
+_LORA_PREVIEW_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".preview.png", ".preview.jpg", ".cover.png", ".cover.jpg")
 
 try:
     import cv2
@@ -302,8 +305,7 @@ class MagicPowerLoraLoader:
             base_name = os.path.splitext(lora_path)[0]
             
             # 图片扩展名候选列表
-            candidates = [".png", ".jpg", ".jpeg", ".webp"]
-            candidates += [".preview.png", ".preview.jpg", ".cover.png", ".cover.jpg"]
+            candidates = _LORA_PREVIEW_SUFFIXES
             
             # 1. 优先检查 magicloradate 子目录（参考zml代码的zml子目录优先逻辑）
             magicloradate_dir = os.path.join(dirname, "magicloradate")
@@ -906,9 +908,50 @@ def _ma_json_response(data, status=200):
         return web.Response(body=fb.encode("utf-8"), status=500, content_type="application/json")
 
 
+def _get_lora_metadata_paths(lora_path):
+    """按读取优先级查找信息文件：magicloradate > LoRA 同级目录。"""
+    paths = {"txt": None, "json": None, "image": None, "log": None}
+    if not lora_path or not os.path.isfile(lora_path):
+        return paths
+    lora_dir = os.path.dirname(lora_path)
+    basename = os.path.splitext(os.path.basename(lora_path))[0]
+    for kind in paths:
+        suffixes = _LORA_PREVIEW_SUFFIXES if kind == "image" else (f".{kind}",)
+        paths[kind] = next((os.path.join(directory, basename + suffix)
+            for directory in (os.path.join(lora_dir, "magicloradate"), lora_dir) for suffix in suffixes
+            if os.path.isfile(os.path.join(directory, basename + suffix))), None)
+    return paths
+
+
+def _get_lora_metadata_inventory():
+    """本地信息清单：不读取模型内容、不计算哈希、不访问网络。"""
+    names = folder_paths.get_filename_list("loras")
+    metadata = {}
+    errors = []
+    by_info_basename = {}
+    for name in names:
+        try:
+            lora_path = folder_paths.get_full_path("loras", name)
+            if lora_path and os.path.isfile(lora_path):
+                # 不同根目录的相同相对名称不冲突；同实体目录、同名模型共享信息。
+                key = os.path.normcase(os.path.splitext(os.path.abspath(lora_path))[0])
+                by_info_basename.setdefault(key, []).append(name)
+            paths = _get_lora_metadata_paths(lora_path)
+            metadata[name] = {kind: bool(path) for kind, path in paths.items()}
+            if not lora_path or not os.path.isfile(lora_path):
+                errors.append({"path": name, "error": "LoRA文件未找到"})
+        except Exception as e:
+            metadata[name] = {"txt": False, "json": False, "image": False, "log": False}
+            errors.append({"path": name, "error": str(e)})
+    shared_info = {name: group for group in by_info_basename.values() if len(group) > 1 for name in group}
+    return {"files": names, "metadata": metadata, "errors": errors, "shared_info": shared_info}
+
+
 @PromptServer.instance.routes.get("/ma/lora/list")
 async def get_lora_list(request):
     try:
+        if request.query.get("include_metadata", "").lower() == "true":
+            return web.json_response(await _run_blocking(_get_lora_metadata_inventory))
         lora_names = folder_paths.get_filename_list("loras")
         return web.json_response({"files": lora_names})
     except Exception as e:
@@ -958,7 +1001,7 @@ async def get_lora_images(request):
             found = False
             
             # 先检查magicloradate子目录
-            for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+            for ext in _LORA_PREVIEW_SUFFIXES:
                 preview_path_magic = os.path.join(magicloradate_dir, f"{lora_basename_no_ext}{ext}")
                 if os.path.isfile(preview_path_magic):
                     lora_dir_relative = os.path.dirname(lora_filename)  # e.g. "subdir"
@@ -970,7 +1013,7 @@ async def get_lora_images(request):
             
             # 如果magicloradate子目录没有找到，检查同层级
             if not found:
-                for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+                for ext in _LORA_PREVIEW_SUFFIXES:
                     preview_path_same = os.path.join(lora_dir, f"{lora_basename_no_ext}{ext}")
                     if os.path.isfile(preview_path_same):
                         lora_dir_relative = os.path.dirname(lora_filename)  # e.g. "subdir"
@@ -1450,14 +1493,16 @@ def _run_lora_update_check(scope, path_parts):
         "errors": errors[:80],
     }
 
-def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5):
+def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5, strict=False):
     """从Civitai API获取数据（带重试机制）"""
     hnorm = (hash_string or "").strip()
     if not hnorm:
         return None
     # 官方示例里 SHA256 为大写；本地 hashlib 多为小写
     hash_for_url = hnorm.upper()
+    last_error = None
     for attempt in range(max_retries):
+        fetching_model = False
         try:
             url = f"https://civitai.com/api/v1/model-versions/by-hash/{hash_for_url}"
             if attempt > 0:
@@ -1473,78 +1518,120 @@ def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5):
             with urllib.request.urlopen(req, timeout=30) as response:
                 if response.status == 200:
                     raw = response.read().decode("utf-8", errors="replace")
-                    try:
-                        data = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
+                    data = json.loads(raw)
                     if not isinstance(data, dict) or "modelId" not in data:
-                        continue
+                        raise ValueError("Civitai 返回了无效的模型版本信息")
                     model_url = f"https://civitai.com/api/v1/models/{data['modelId']}"
                     model_req = urllib.request.Request(model_url, headers=headers)
+                    fetching_model = True
                     with urllib.request.urlopen(model_req, timeout=30) as model_response:
                         if model_response.status == 200:
                             mraw = model_response.read().decode("utf-8", errors="replace")
                             try:
                                 data["model"] = json.loads(mraw)
                             except json.JSONDecodeError:
+                                if strict:
+                                    raise ValueError("Civitai 返回了无效的模型介绍")
+                                data["model"] = {}
+                            if not isinstance(data["model"], dict):
+                                if strict:
+                                    raise ValueError("Civitai 返回了无效的模型介绍")
                                 data["model"] = {}
                         else:
+                            if strict:
+                                raise RuntimeError(f"获取 Civitai 模型介绍失败（HTTP {model_response.status}）")
                             data["model"] = {}
                     return data
+                raise RuntimeError(f"Civitai 返回 HTTP {response.status}")
         except urllib.error.HTTPError as e:
-            if e.code == 429:
-                time.sleep(api_delay * (2 ** attempt))
-                continue
-            elif e.code == 404:
+            if e.code == 404 and not fetching_model:
                 return None
+            if e.code == 429:
+                last_error = RuntimeError("Civitai 请求受到限流（HTTP 429），请稍后重试")
+            elif e.code in (401, 403):
+                last_error = RuntimeError(f"Civitai 拒绝访问（HTTP {e.code}），请检查网络或访问权限")
+            else:
+                phase = "模型介绍" if fetching_model else "模型版本"
+                last_error = RuntimeError(f"获取 Civitai {phase}失败（HTTP {e.code}）")
+            if e.code != 429 and e.code < 500:
+                break
         except Exception as e:
-            if attempt < max_retries - 1:
-                time.sleep(api_delay * (2 ** attempt))
+            last_error = e
+    if strict and last_error is not None:
+        raise RuntimeError(f"Civitai 请求失败: {last_error}") from last_error
     return None
+
+def _atomic_write_lora_text(destination_path, content):
+    """只在完整写入后替换旧文件，临时文件留在目标目录内。"""
+    os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=".magic-lora-", suffix=".tmp", dir=os.path.dirname(destination_path))
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as out_file:
+            out_file.write(content)
+        os.replace(temp_path, destination_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 def download_file(url, destination_path):
     """下载文件，如果是视频则提取第一帧"""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
+    temp_path = None
+    video_path = None
+    cap = None
     try:
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=60) as response:
             if response.status == 200:
                 content_type = response.getheader('Content-Type', '')
-                is_video = content_type.startswith('video/') or url.lower().endswith(('.mp4', '.avi', '.mov', '.mkv'))
-                
-                if is_video and CV2_AVAILABLE:
-                    video_path = destination_path + ".temp.mp4"
+                url_path = urllib.parse.urlparse(url).path.lower()
+                is_video = content_type.startswith('video/') or url_path.endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm'))
+                if is_video and not CV2_AVAILABLE:
+                    return False
+                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+                fd, temp_path = tempfile.mkstemp(
+                    prefix=".magic-lora-", suffix=os.path.splitext(destination_path)[1], dir=os.path.dirname(destination_path)
+                )
+                os.close(fd)
+                if is_video:
+                    fd, video_path = tempfile.mkstemp(prefix=".magic-lora-", suffix=".mp4", dir=os.path.dirname(destination_path))
+                    os.close(fd)
                     with open(video_path, 'wb') as out_file:
                         shutil.copyfileobj(response, out_file)
-                    
                     cap = cv2.VideoCapture(video_path)
                     if cap.isOpened():
                         ret, frame = cap.read()
-                        if ret:
-                            img_ext = os.path.splitext(destination_path)[1].lower()
-                            if img_ext not in ['.png', '.jpg', '.jpeg', '.webp']:
-                                destination_path = os.path.splitext(destination_path)[0] + '.jpg'
-                            cv2.imwrite(destination_path, frame)
-                            cap.release()
-                            try:
-                                os.remove(video_path)
-                            except:
-                                pass
-                            return True
-                        cap.release()
-                    try:
-                        os.remove(video_path)
-                    except:
-                        pass
-                    return False
+                        if not ret or not cv2.imwrite(temp_path, frame):
+                            return False
+                    else:
+                        return False
                 else:
-                    with open(destination_path, 'wb') as out_file:
+                    with open(temp_path, 'wb') as out_file:
                         shutil.copyfileobj(response, out_file)
-                    return True
+                    # Civitai 有时返回无后缀图像；也避免把错误页保存成预览。
+                    with Image.open(temp_path) as source:
+                        source.load()
+                        source_format = source.format
+                        preview = source.copy()
+                    output_format = {'.png': 'PNG', '.jpg': 'JPEG', '.jpeg': 'JPEG', '.webp': 'WEBP'}.get(
+                        os.path.splitext(destination_path)[1].lower()
+                    )
+                    if output_format and source_format != output_format:
+                        if output_format == 'JPEG':
+                            preview = preview.convert('RGB')
+                        preview.save(temp_path, format=output_format)
+                os.replace(temp_path, destination_path)
+                return True
     except Exception as e:
         print(f"下载文件时出错 {url}: {e}")
+    finally:
+        if cap is not None:
+            cap.release()
+        for path in (temp_path, video_path):
+            if path and os.path.exists(path):
+                os.remove(path)
     return False
 
 def extract_lora_weight_from_civitai_data(civitai_data, lora_filename):
@@ -1566,137 +1653,144 @@ def extract_lora_weight_from_civitai_data(civitai_data, lora_filename):
         print(f"提取权重信息时出错: {e}")
         return None
 
+def _fetch_lora_metadata(lora_name, options, save_path_mode, overwrite=True, update_existing=False):
+    """单项下载；批量队列传 overwrite=False，只补齐不存在的信息。"""
+    result = {
+        "status": "success", "message": "", "data": {},
+        "saved": [], "unchanged": [], "unavailable": [], "failed": [],
+    }
+    lora_path = folder_paths.get_full_path("loras", lora_name)
+    if not lora_path or not os.path.isfile(lora_path):
+        result.update(status="error", message=f"LoRA文件未找到: {lora_name}", _http_status=404)
+        return result
+
+    lora_dir = os.path.dirname(lora_path)
+    lora_basename = os.path.splitext(os.path.basename(lora_path))[0]
+    magic_dir = os.path.join(lora_dir, "magicloradate")
+    save_dir = magic_dir if save_path_mode == "subfolder" else lora_dir
+    labels = {"txt": "触发词", "json": "介绍信息", "image": "预览图像", "log": "默认权重"}
+    existing_paths = _get_lora_metadata_paths(lora_path)
+    pending = []
+    for kind in labels:
+        if not options.get(f"download_{kind}", True):
+            continue
+        if not overwrite and existing_paths[kind]:
+            result["unchanged"].append(kind)
+        else:
+            pending.append(kind)
+    if not pending:
+        result.update(status="skipped", message="所选信息已存在，已跳过下载" if result["unchanged"] else "未选择需要下载的信息")
+        return result
+
+    try:
+        civitai_data = fetch_civitai_data_by_hash(calculate_sha256(lora_path), strict=True)
+    except Exception as e:
+        result.update(status="error", message=str(e), failed=pending)
+        return result
+    if not civitai_data:
+        result.update(status="not_found", message="Civitai 未找到此 LoRA（可能未上传或文件哈希不匹配）", unavailable=pending)
+        return result
+
+    model = civitai_data.get("model") or {}
+    messages = [f"已从Civitai获取到 '{model.get('name', 'Unknown')}' 的信息"]
+    # 查询网络期间用户可能补写了信息；同时重新解析更新模式的目标位置。
+    existing_paths = _get_lora_metadata_paths(lora_path)
+    for kind in pending:
+        try:
+            if not overwrite and existing_paths[kind]:
+                result["unchanged"].append(kind)
+                messages.append(f"已保留现有{labels[kind]}")
+                continue
+            content = None
+            data_key = None
+            if kind == "txt":
+                if civitai_data.get("trainedWords"):
+                    content = ", ".join(civitai_data["trainedWords"])
+                    data_key = "triggerWords"
+            elif kind == "json":
+                model_desc = clean_html(model.get("description", ""))
+                version_desc = clean_html(civitai_data.get("description", ""))
+                model_id = civitai_data.get("modelId")
+                version_id = civitai_data.get("id")
+                civitai_link = f"https://civitai.com/models/{model_id}?modelVersionId={version_id}" if model_id and version_id else "链接不可用"
+                # 兼容已有读取界面：.json 保存的是介绍纯文本。
+                content = (
+                    f"--- 基础信息 ---\n基础模型: {civitai_data.get('baseModel', 'N/A')}\n"
+                    f"C站链接: {civitai_link}\n\n"
+                    f"--- 模型介绍 ---\n\n{model_desc if model_desc else '无模型介绍。'}\n\n"
+                    f"--- 版本信息 ---\n\n{version_desc if version_desc else '无版本信息。'}\n"
+                )
+                data_key = "jsonInfo"
+            elif kind == "log":
+                preferred_weight = extract_lora_weight_from_civitai_data(civitai_data, os.path.basename(lora_path))
+                if preferred_weight is not None:
+                    content = json.dumps({
+                        "description": "", "sd version": "", "activation text": "",
+                        "preferred weight": preferred_weight, "negative text": "", "notes": "",
+                    }, ensure_ascii=False, indent=2, allow_nan=False)
+                    data_key = "logInfo"
+            elif kind == "image":
+                image = next((image for image in (civitai_data.get("images") or [])
+                    if image.get("url") and (CV2_AVAILABLE or (
+                        str(image.get("type", "")).lower() != "video" and not
+                        urllib.parse.urlparse(image["url"]).path.lower().endswith((".mp4", ".avi", ".mov", ".mkv", ".webm"))
+                    ))), None)
+                if image:
+                    img_url = image["url"]
+                    img_ext = os.path.splitext(urllib.parse.urlparse(img_url).path)[1].lower()
+                    if img_ext not in (".png", ".jpg", ".jpeg", ".webp"):
+                        img_ext = ".jpg"
+                    img_path = os.path.join(save_dir, lora_basename + img_ext)
+                    if update_existing and existing_paths[kind]:
+                        img_path = existing_paths[kind]
+                    # 旧单项接口仍只更新所选目标目录里的预览。
+                    elif overwrite:
+                        img_path = next((os.path.join(save_dir, lora_basename + suffix) for suffix in _LORA_PREVIEW_SUFFIXES
+                            if os.path.isfile(os.path.join(save_dir, lora_basename + suffix))), img_path)
+                    if not download_file(img_url, img_path):
+                        raise RuntimeError("下载失败或图像不可用")
+                    result["saved"].append(kind)
+                    messages.append("预览图像已保存")
+                    continue
+            if content is None:
+                result["unavailable"].append(kind)
+                messages.append(f"Civitai 未提供可用的{labels[kind]}")
+                continue
+            destination = existing_paths[kind] if update_existing and existing_paths[kind] else os.path.join(save_dir, f"{lora_basename}.{kind}")
+            _atomic_write_lora_text(destination, content)
+            result["data"][data_key] = content
+            result["saved"].append(kind)
+            messages.append(f"{labels[kind]}已保存")
+        except Exception as e:
+            result["failed"].append(kind)
+            messages.append(f"{labels[kind]}保存失败: {e}")
+
+    if result["failed"]:
+        result["status"] = "partial" if result["saved"] else "error"
+    elif not result["saved"]:
+        result["status"] = "skipped"
+    result["message"] = "\n".join(messages)
+    return result
+
 @PromptServer.instance.routes.post("/ma/lora/fetch_metadata")
 async def fetch_metadata(request):
-    """爬取LoRA元数据"""
+    """爬取LoRA元数据；哈希、网络与文件写入均不阻塞事件循环。"""
     try:
         data = await request.json()
-        lora_name = data.get("lora_name")
-        options = data.get("options", {})
-        save_path_mode = data.get("save_path_mode", "same_dir")  # "same_dir" or "subfolder"
-        
-        if not lora_name:
+        if not isinstance(data, dict) or not isinstance(data.get("lora_name"), str) or not data["lora_name"].strip():
             return web.json_response({"status": "error", "message": "缺少lora_name参数"}, status=400)
-        
-        download_txt = options.get("download_txt", True)
-        download_json = options.get("download_json", True)
-        download_image = options.get("download_image", True)
-        download_log = options.get("download_log", True)
-        
-        lora_path = folder_paths.get_full_path("loras", lora_name)
-        if not lora_path or not os.path.exists(lora_path):
-            return web.json_response({"status": "error", "message": f"LoRA文件未找到: {lora_name}"}, status=404)
-        
-        lora_dir = os.path.dirname(lora_path)
-        lora_basename = os.path.splitext(os.path.basename(lora_path))[0]
-        
-        # 确定保存目录
-        if save_path_mode == "subfolder":
-            save_dir = os.path.join(lora_dir, "magicloradate")
-            os.makedirs(save_dir, exist_ok=True)
-        else:
-            save_dir = lora_dir
-        
-        # 计算哈希并获取Civitai数据
-        file_hash = calculate_sha256(lora_path)
-        civitai_data = fetch_civitai_data_by_hash(file_hash)
-        
-        result = {
-            "status": "success",
-            "message": [],
-            "data": {
-                "triggerWords": "",
-                "jsonInfo": "",
-                "logInfo": ""
-            }
-        }
-        
-        if not civitai_data:
-            result["message"].append("无法从Civitai获取此LoRA的信息（可能未上传或哈希不匹配）")
-            return web.json_response(result)
-        
-        model_name = civitai_data.get('model', {}).get('name', 'Unknown')
-        result["message"].append(f"已从Civitai获取到 '{model_name}' 的信息")
-        
-        # 保存触发词文件
-        if download_txt and civitai_data.get('trainedWords'):
-            words_content = ", ".join(civitai_data['trainedWords'])
-            txt_path = os.path.join(save_dir, f"{lora_basename}.txt")
-            try:
-                with open(txt_path, 'w', encoding='utf-8') as f:
-                    f.write(words_content)
-                result["data"]["triggerWords"] = words_content
-                result["message"].append("触发词已保存")
-            except Exception as e:
-                result["message"].append(f"触发词保存失败: {e}")
-        
-        # 保存介绍信息（JSON格式）
-        if download_json:
-            raw_model_desc = civitai_data.get('model', {}).get('description', '')
-            raw_version_desc = civitai_data.get('description', '')
-            model_desc = clean_html(raw_model_desc)
-            version_desc = clean_html(raw_version_desc)
-            base_model = civitai_data.get('baseModel', 'N/A')
-            model_id = civitai_data.get('modelId')
-            version_id = civitai_data.get('id')
-            civitai_link = f"https://civitai.com/models/{model_id}?modelVersionId={version_id}" if model_id and version_id else "链接不可用"
-            
-            json_content = (
-                f"--- 基础信息 ---\n"
-                f"基础模型: {base_model}\n"
-                f"C站链接: {civitai_link}\n\n"
-                f"--- 模型介绍 ---\n\n{model_desc if model_desc else '无模型介绍。'}\n\n"
-                f"--- 版本信息 ---\n\n{version_desc if version_desc else '无版本信息。'}\n"
-            )
-            json_path = os.path.join(save_dir, f"{lora_basename}.json")
-            try:
-                with open(json_path, 'w', encoding='utf-8') as f:
-                    f.write(json_content)
-                result["data"]["jsonInfo"] = json_content
-                result["message"].append("介绍信息已保存")
-            except Exception as e:
-                result["message"].append(f"介绍信息保存失败: {e}")
-        
-        # 保存预览图像
-        if download_image and civitai_data.get('images'):
-            first_image = civitai_data['images'][0]
-            img_url = first_image.get('url')
-            if img_url:
-                img_ext = os.path.splitext(urllib.parse.urlparse(img_url).path)[1]
-                if not img_ext or img_ext.lower() not in ['.png', '.jpg', '.jpeg', '.webp']:
-                    img_ext = '.jpg'
-                img_path = os.path.join(save_dir, f"{lora_basename}{img_ext}")
-                if download_file(img_url, img_path):
-                    result["message"].append("预览图像已保存")
-                else:
-                    result["message"].append("预览图像保存失败")
-        
-        # 保存默认权重到.log文件
-        if download_log:
-            preferred_weight = extract_lora_weight_from_civitai_data(civitai_data, os.path.basename(lora_path))
-            if preferred_weight is not None:
-                log_path = os.path.join(save_dir, f"{lora_basename}.log")
-                log_content = f'''{{
-"description": "",
-"sd version": "",
-"activation text": "",
-"preferred weight": {preferred_weight},
-"negative text": "",
-"notes": ""
-}}'''
-                try:
-                    with open(log_path, 'w', encoding='utf-8') as f:
-                        f.write(log_content)
-                    result["data"]["logInfo"] = log_content
-                    result["message"].append(f"默认权重已保存: {preferred_weight}")
-                except Exception as e:
-                    result["message"].append(f"默认权重保存失败: {e}")
-            else:
-                result["message"].append("未找到匹配的权重信息")
-        
-        result["message"] = "\n".join(result["message"])
-        return web.json_response(result)
-        
+        options = data.get("options", {})
+        save_path_mode = data.get("save_path_mode", "same_dir")
+        overwrite = data.get("overwrite", True)
+        update_existing = data.get("update_existing", False)
+        if (not isinstance(options, dict) or save_path_mode not in ("same_dir", "subfolder")
+                or not isinstance(overwrite, bool) or not isinstance(update_existing, bool)):
+            return web.json_response({"status": "error", "message": "下载选项、保存位置或覆盖选项无效"}, status=400)
+        result = await _run_blocking(_fetch_lora_metadata, data["lora_name"], options, save_path_mode, overwrite, update_existing)
+        http_status = result.pop("_http_status", 200)
+        return web.json_response(result, status=http_status)
+    except (ValueError, TypeError) as e:
+        return web.json_response({"status": "error", "message": f"请求参数无效: {e}"}, status=400)
     except Exception as e:
         print(f"爬取元数据时出错: {e}")
         return web.json_response({"status": "error", "message": f"服务器内部错误: {e}"}, status=500)
