@@ -249,6 +249,8 @@ function mplApplyMetadataData(node, name, data) {
     for (const item of items) {
         if (mplMetadataNameKey(item?.name) !== key) continue;
         for (const field of ["triggerWords", "jsonInfo", "logInfo"]) {
+            // A batch download must not replace trigger words edited in a node.
+            if (field === "triggerWords" && String(item[field] || "").trim()) continue;
             if (typeof data?.[field] === "string" && item[field] !== data[field]) {
                 item[field] = data[field];
                 changed = true;
@@ -262,18 +264,85 @@ function mplMetadataTypes(settings) {
     return ["txt", "json", "image", "log"].filter(type => settings[`download_${type}`]);
 }
 
-function mplMetadataRequestedTypes(name, settings) {
+function mplMetadataFieldState(name, type, metadata = {}, fieldStates = {}) {
+    const key = mplMetadataNameKey(name);
+    const recorded = fieldStates[key]?.[type] || {};
+    if (["invalid", "local_error"].includes(recorded.state)) return { ...recorded, needs_fetch: false };
+    if (metadata[key]?.[type] === true) return { ...recorded, state: "present", needs_fetch: false };
+    if (recorded.state && recorded.state !== "present") {
+        return { ...recorded, needs_fetch: ["missing", "error"].includes(recorded.state) && recorded.needs_fetch !== false };
+    }
+    return { state: "missing", needs_fetch: true };
+}
+
+function mplMetadataRequestedTypes(name, settings, metadata = null, fieldStates = {}) {
     const types = mplMetadataTypes(settings);
+    if (settings.local_action) {
+        return types.filter(type => {
+            const field = mplMetadataFieldState(name, type, metadata || {}, fieldStates);
+            if (settings.local_action === "adopt") {
+                return !field.local_reviewed && !["present", "invalid", "local_error"].includes(field.state);
+            }
+            return field.local_reviewed === true || field.state === "user_skipped";
+        });
+    }
     const retry = settings.retry_types?.[mplMetadataNameKey(name)];
-    return Array.isArray(retry) ? types.filter(type => retry.includes(type)) : types;
+    const requested = Array.isArray(retry) ? types.filter(type => retry.includes(type)) : types;
+    if (!metadata) return requested;
+    return requested.filter(type => {
+        const field = mplMetadataFieldState(name, type, metadata, fieldStates);
+        if (settings.update_existing) return field.state !== "local_error";
+        if (["present", "invalid", "local_error"].includes(field.state)) return false;
+        return settings.force_refresh === true || field.needs_fetch === true;
+    });
 }
 
-function mplMetadataNeeds(name, settings, metadata) {
-    const existing = metadata[mplMetadataNameKey(name)] || {};
-    return mplMetadataTypes(settings).some(type => !existing[type]);
+function mplMetadataNeeds(name, settings, metadata, fieldStates = {}) {
+    return mplMetadataRequestedTypes(name, settings, metadata, fieldStates).length > 0;
 }
 
-function mplFilterMetadataNames(names, filters, settings, metadata) {
+function mplMetadataFailureDetails(result, typeLabels) {
+    const failedTypes = Array.isArray(result.failed) && result.failed.length
+        ? result.failed
+        : result.status === "error" ? result.requested_types || [] : [];
+    return failedTypes.map(type => {
+        const field = result.field_states?.[type] || {};
+        const reason = field.last_error || field.reason;
+        return reason ? { type, label: typeLabels[`download_${type}`] || type, reason } : null;
+    }).filter(Boolean);
+}
+
+function mplMetadataLocalIssues(name, settings, metadata, fieldStates = {}) {
+    return mplMetadataTypes(settings).some(type => ["invalid", "local_error"].includes(mplMetadataFieldState(name, type, metadata, fieldStates).state));
+}
+
+function mplMergeMetadataFieldStates(name, result, metadata, fieldStates, requestedTypes = []) {
+    const key = mplMetadataNameKey(name);
+    metadata[key] ||= {};
+    fieldStates[key] ||= {};
+    const requested = new Set(requestedTypes);
+    for (const type of result.saved || []) {
+        metadata[key][type] = true;
+        fieldStates[key][type] = { state: "present", needs_fetch: false };
+    }
+    const updates = result.field_states || Object.fromEntries((result.unavailable || []).map(type => [type, { state: "unavailable", needs_fetch: false }]));
+    for (const [type, update] of Object.entries(updates)) {
+        if (!requested.has(type) || !update || typeof update !== "object") continue;
+        const previous = fieldStates[key][type];
+        if (update.state === "present") metadata[key][type] = true;
+        if (["invalid", "local_error"].includes(update.state)) {
+            fieldStates[key][type] = { ...previous, ...update, needs_fetch: false };
+        } else if (metadata[key][type] === true) {
+            fieldStates[key][type] = { ...update, state: "present", needs_fetch: false };
+        } else if (update.state === "error" && ["unavailable", "not_found", "unresolved", "unsupported", "user_skipped"].includes(previous?.state)) {
+            fieldStates[key][type] = { ...previous, last_error: update.reason, last_attempt_at: update.checked_at };
+        } else {
+            fieldStates[key][type] = { ...previous, ...update };
+        }
+    }
+}
+
+function mplFilterMetadataNames(names, filters, settings, metadata, fieldStates = {}) {
     const search = String(filters.search || "").trim().toLowerCase();
     return names.filter(name => {
         const key = mplMetadataNameKey(name);
@@ -283,14 +352,19 @@ function mplFilterMetadataNames(names, filters, settings, metadata) {
             if (directory !== filters.directory && !(filters.recursive && directory.startsWith(filters.directory + "/"))) return false;
         }
         if (search && !key.toLowerCase().includes(search)) return false;
-        return !filters.onlyMissing || mplMetadataNeeds(name, settings, metadata);
+        const mode = filters.status || (filters.onlyMissing ? "pending" : "all");
+        if (mode === "local_missing") return mplMetadataTypes(settings).some(type => mplMetadataFieldState(name, type, metadata, fieldStates).state !== "present");
+        if (mode === "pending" && settings.local_action) return mplMetadataNeeds(name, settings, metadata, fieldStates);
+        return mode !== "pending" || mplMetadataNeeds(name, settings, metadata, fieldStates) || mplMetadataLocalIssues(name, settings, metadata, fieldStates);
     });
 }
 
-function mplMetadataPreflight(names, selected, settings, metadata) {
+function mplMetadataPreflight(names, selected, settings, metadata, fieldStates = {}) {
     const selectedNames = names.filter(name => selected.has(mplMetadataNameKey(name)));
-    const need = selectedNames.filter(name => mplMetadataNeeds(name, settings, metadata)).length;
-    return { scoped: names.length, selected: selectedNames.length, need, complete: selectedNames.length - need, names: selectedNames };
+    const actionableNames = selectedNames.filter(name => mplMetadataNeeds(name, settings, metadata, fieldStates));
+    const issues = selectedNames.filter(name => mplMetadataLocalIssues(name, settings, metadata, fieldStates)).length;
+    const complete = selectedNames.filter(name => !mplMetadataNeeds(name, settings, metadata, fieldStates) && !mplMetadataLocalIssues(name, settings, metadata, fieldStates)).length;
+    return { scoped: names.length, selected: selectedNames.length, need: actionableNames.length, complete, issues, names: selectedNames, actionableNames };
 }
 
 function mplMetadataHasSharedSelection(names, sharedInfo) {
@@ -306,16 +380,18 @@ function mplMetadataGraphNodes(origin) {
     return [...new Set([origin, ...nodes])];
 }
 
-async function mplRunMetadataQueue(names, settings, state, onProgress) {
+async function mplRunMetadataQueue(names, settings, state, onProgress, metadata = null, fieldStates = {}) {
     const results = [];
     state.running = true;
+    state.pauseResult = null;
     try {
         for (const name of names) {
             if (state.cancelRequested) break;
             onProgress({ current: name, completed: results.length, total: names.length });
             let result;
+            const requestedTypes = mplMetadataRequestedTypes(name, settings, metadata, fieldStates);
+            if (!requestedTypes.length) continue;
             try {
-                const requestedTypes = mplMetadataRequestedTypes(name, settings);
                 const response = await api.fetchApi("/ma/lora/fetch_metadata", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -324,19 +400,31 @@ async function mplRunMetadataQueue(names, settings, state, onProgress) {
                         options: Object.fromEntries(["txt", "json", "image", "log"].map(type => [`download_${type}`, requestedTypes.includes(type)])),
                         save_path_mode: settings.save_path,
                         overwrite: settings.overwrite === true,
+                        force_refresh: settings.force_refresh === true,
                         ...(settings.update_existing === true ? { update_existing: true } : {}),
                     }),
                 });
                 result = await response.json();
-                if (!response.ok || !["success", "skipped", "not_found", "partial", "error"].includes(result?.status)) {
-                    result = { status: "error", message: result?.message || `${mplT("请求失败")} (${response.status})` };
+                if (!response.ok || !["success", "skipped", "checked", "empty", "not_found", "partial", "error"].includes(result?.status)) {
+                    result = { ...result, status: "error", message: result?.message || `${mplT("请求失败")} (${response.status})` };
                 }
             } catch (error) {
                 result = { status: "error", message: error.message || String(error) };
             }
-            const entry = { ...result, name };
+            const confirmedEmpty = !result.saved?.length && requestedTypes.every(type => result.field_states?.[type] ? ["unavailable", "unresolved", "unsupported"].includes(result.field_states[type].state) : result.unavailable?.includes(type));
+            const sourceNotFound = !result.saved?.length && requestedTypes.every(type => result.field_states?.[type]?.state === "not_found");
+            let status = result.status;
+            if (["success", "skipped", "empty"].includes(status)) {
+                if (sourceNotFound) status = "not_found";
+                else if (confirmedEmpty || status === "empty") status = "checked";
+            }
+            const entry = { ...result, status, name, requested_types: requestedTypes };
             results.push(entry);
             onProgress({ current: name, completed: results.length, total: names.length, result: entry });
+            if (entry.stop_queue) {
+                state.pauseResult = entry;
+                break;
+            }
         }
         return results;
     } finally {
@@ -825,7 +913,10 @@ app.registerExtension({
                     .mpl-metadata-dialog select:focus, .mpl-metadata-dialog input[type=search]:focus { border-color: #659cd4; }
                     .mpl-metadata-dialog input[type=checkbox] { width: 13px; height: 13px; margin: 0; accent-color: #70a8df; flex-shrink: 0; }
                     .mpl-metadata-check { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; font-size: 11px; }
-                    .mpl-metadata-search { flex: 1; }
+                    .mpl-metadata-dialog .mpl-metadata-search-row { flex-wrap: wrap; }
+                    .mpl-metadata-dialog .mpl-metadata-search-row input.mpl-metadata-search { flex: 1 1 260px; width: auto; min-width: min(220px, 100%); max-width: 100%; }
+                    .mpl-metadata-dialog .mpl-metadata-search-row select.mpl-metadata-status-filter { flex: 0 0 150px; width: 150px; min-width: 130px; max-width: 100%; }
+                    .mpl-metadata-dialog .mpl-metadata-search-row .mpl-metadata-refresh { flex: 0 0 auto; width: auto; }
                     .mpl-metadata-workspace { display: grid; grid-template-columns: 190px minmax(0,1fr); flex: 1; min-height: 0; }
                     .mpl-metadata-settings { padding: 12px; border-right: 1px solid #373d45; background: #23272d; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
                     .mpl-metadata-setting-group { display: flex; flex-direction: column; gap: 7px; }
@@ -2673,6 +2764,7 @@ app.registerExtension({
                 const results = new Map();
                 let localFiles = [];
                 let metadata = {};
+                let fieldStates = {};
                 let sharedInfo = {};
                 let visibleNames = [];
                 const selected = new Set();
@@ -2680,7 +2772,6 @@ app.registerExtension({
                 let inventoryCheckboxes = [];
                 let loadingFiles = true;
                 let inventoryReady = false;
-                const sourceUnavailable = new Map();
                 let closed = false;
                 let lastSettings = null;
                 const el = (tag, text, className, parent) => {
@@ -2732,21 +2823,22 @@ app.registerExtension({
                 recursiveCheckbox.checked = true;
                 recursiveCheckbox.setAttribute("aria-label", mplT("包含子目录"));
                 el("span", "包含子目录", "", recursiveLabel);
-                const searchRow = el("div", "", "mpl-metadata-filter-row", filters);
+                const searchRow = el("div", "", "mpl-metadata-filter-row mpl-metadata-search-row", filters);
                 const search = el("input", "", "mpl-metadata-search", searchRow);
                 search.type = "search";
                 search.placeholder = mplT("搜索文件名或路径…");
                 search.setAttribute("aria-label", mplT("搜索文件名或路径…"));
-                const missingLabel = el("label", "", "mpl-metadata-check", searchRow);
-                const missingOnly = el("input", "", "", missingLabel);
-                missingOnly.type = "checkbox";
-                missingOnly.checked = false;
-                missingOnly.setAttribute("aria-label", mplT("仅显示缺少所选信息的 LoRA"));
-                el("span", "仅看缺失", "", missingLabel);
+                const statusSelect = el("select", "", "mpl-metadata-status-filter", searchRow);
+                statusSelect.setAttribute("aria-label", mplT("信息状态筛选"));
+                for (const [value, label] of [["pending", "仅看待处理"], ["local_missing", "所有本地缺项"], ["all", "全部状态"]]) {
+                    const option = el("option", label, "", statusSelect);
+                    option.value = value;
+                }
+                statusSelect.value = "pending";
                 const workspace = el("div", "", "mpl-metadata-workspace", body);
                 const settingsPanel = el("div", "", "mpl-metadata-settings", workspace);
                 const typeGroup = el("div", "", "mpl-metadata-setting-group", settingsPanel);
-                el("div", "下载内容", "mpl-metadata-caption", typeGroup);
+                const typeCaption = el("div", "下载内容", "mpl-metadata-caption", typeGroup);
                 const optionRow = el("div", "", "mpl-metadata-types", typeGroup);
                 const checkboxes = {};
                 const typeLabels = { download_txt: "触发词 (.txt)", download_json: "模型介绍 (.json)", download_image: "预览图像", download_log: "推荐权重 (.log)" };
@@ -2779,7 +2871,7 @@ app.registerExtension({
                 el("span", "处理方式", "mpl-metadata-caption", modeRow);
                 const modeSelect = el("select", "", "", modeRow);
                 modeSelect.setAttribute("aria-label", mplT("处理方式"));
-                for (const [value, label] of [["missing", "补全缺失信息"], ["update", "更新已有信息"]]) {
+                for (const [value, label] of [["missing", "补全所选信息"], ["recheck", "重新检查来源"], ["update", "更新已有信息"], ["adopt", "标记已整理（离线）"], ["restore", "恢复自动补全（离线）"]]) {
                     const option = el("option", label, "", modeSelect);
                     option.value = value;
                 }
@@ -2790,11 +2882,11 @@ app.registerExtension({
                 const selectionRow = el("div", "", "mpl-metadata-selection", library);
                 const selectVisibleBtn = el("button", "选择当前可见项", "", selectionRow);
                 const clearSelectionBtn = el("button", "清空选择", "", selectionRow);
-                const refreshInventoryBtn = el("button", "刷新列表", "", searchRow);
+                const refreshInventoryBtn = el("button", "刷新列表", "mpl-metadata-refresh", searchRow);
                 [selectVisibleBtn, clearSelectionBtn, refreshInventoryBtn].forEach(button => { button.type = "button"; });
                 const preflightRow = el("div", "", "mpl-metadata-counts", selectionRow);
                 const preflightCounters = {};
-                for (const [key, label] of [["scoped", "当前范围"], ["selected", "已勾选"], ["need", "需补全"], ["complete", "信息完整"]]) {
+                for (const [key, label] of [["scoped", "当前范围"], ["selected", "已勾选"], ["need", "将处理"], ["complete", "无需获取"], ["issues", "本地异常"]]) {
                     const stat = el("span", "", "", preflightRow);
                     el("span", label, "", stat);
                     preflightCounters[key] = el("span", "", "", stat);
@@ -2812,7 +2904,7 @@ app.registerExtension({
                 }
                 const inventoryBody = el("tbody", "", "", inventoryTable);
                 const resultDetails = el("details", "", "mpl-metadata-results", library);
-                el("summary", "下载结果", "", resultDetails);
+                el("summary", "处理结果", "", resultDetails);
                 const stats = el("div", "", "mpl-metadata-stats", resultDetails);
                 const resultList = el("div", "", "mpl-metadata-result-list", resultDetails);
                 const progressPanel = el("div", "", "mpl-metadata-progress", dialog);
@@ -2826,7 +2918,7 @@ app.registerExtension({
                 progressCount.textContent = "0 / 0";
                 const currentName = el("div", "", "mpl-metadata-current", progressPanel);
                 const counters = {};
-                const statusLabels = { success: "成功", skipped: "已跳过", not_found: "未找到", partial: "部分完成", error: "失败" };
+                const statusLabels = { success: "已补充", checked: "检查完成", reviewed: "已整理", restored: "已恢复", skipped: "已跳过", not_found: "未找到来源", partial: "部分完成", error: "失败" };
                 const statusCounts = Object.fromEntries(Object.keys(statusLabels).map(status => [status, 0]));
                 for (const [status, label] of Object.entries(statusLabels)) {
                     const stat = el("span", "", "", stats);
@@ -2840,6 +2932,7 @@ app.registerExtension({
                 el("div", "", "mpl-metadata-footer-spacer", footer);
                 const stopBtn = el("button", "停止后续下载", "", footer);
                 const retryBtn = el("button", "重试当前范围失败项", "", footer);
+                retryBtn.title = mplT("仅重试当前可见且勾选的失败项，沿用上次处理方式和失败字段。");
                 const startBtn = el("button", "开始下载", "mpl-metadata-primary", footer);
                 [closeBtn, stopBtn, retryBtn, startBtn].forEach(button => { button.type = "button"; });
                 stopBtn.disabled = true;
@@ -2849,24 +2942,28 @@ app.registerExtension({
                     save_path: pathSelect.value,
                     overwrite: modeSelect.value === "update",
                     update_existing: modeSelect.value === "update",
+                    force_refresh: ["update", "recheck"].includes(modeSelect.value),
+                    local_action: ["adopt", "restore"].includes(modeSelect.value) ? modeSelect.value : null,
                 });
+                const isLocalAction = () => ["adopt", "restore"].includes(modeSelect.value);
                 const scopeNames = () => mplCollectMetadataNames(node, scopeSelect.value, localFiles || []);
-                const selectedNames = () => mplMetadataPreflight(visibleNames, selected, readSettings(), metadata).names;
+                const selectedNames = () => mplMetadataPreflight(visibleNames, selected, readSettings(), metadata, fieldStates).actionableNames;
                 const retryNames = () => {
                     const visible = new Set(visibleNames.map(mplMetadataNameKey));
                     return Array.from(results.values()).filter(result => selected.has(mplMetadataNameKey(result.name)) && visible.has(mplMetadataNameKey(result.name)) && ["error", "partial"].includes(result.status)).map(result => result.name);
                 };
                 const updateControls = () => {
                     const busy = state.running || loadingFiles;
-                    for (const control of [scopeSelect, pathSelect, modeSelect, directorySelect, recursiveCheckbox, search, missingOnly, selectVisibleBtn, clearSelectionBtn, refreshInventoryBtn]) control.disabled = busy;
+                    for (const control of [scopeSelect, pathSelect, modeSelect, directorySelect, recursiveCheckbox, search, statusSelect, selectVisibleBtn, clearSelectionBtn, refreshInventoryBtn]) control.disabled = busy;
                     Object.values(checkboxes).forEach(checkbox => { checkbox.disabled = busy; });
                     inventoryCheckboxes.forEach(checkbox => { checkbox.disabled = busy; });
-                    const preflight = mplMetadataPreflight(visibleNames, selected, readSettings(), metadata);
-                    const hasSharedSelection = modeSelect.value === "update" && mplMetadataHasSharedSelection(preflight.names, sharedInfo);
+                    const preflight = mplMetadataPreflight(visibleNames, selected, readSettings(), metadata, fieldStates);
+                    const hasSharedSelection = !isLocalAction() && mplMetadataHasSharedSelection(preflight.actionableNames, sharedInfo);
                     sharedWarning.textContent = hasSharedSelection ? mplT("选中项包含共享信息文件的同名模型，请每组只选择一个。") : "";
-                    startBtn.disabled = busy || !inventoryReady || !preflight.selected || hasSharedSelection || !Object.values(checkboxes).some(checkbox => checkbox.checked);
-                    retryBtn.disabled = busy || !retryNames().length;
-                    stopBtn.disabled = !state.running || state.cancelRequested;
+                    startBtn.disabled = busy || !inventoryReady || !preflight.need || hasSharedSelection || !Object.values(checkboxes).some(checkbox => checkbox.checked);
+                    pathSelect.disabled = busy || isLocalAction();
+                    retryBtn.disabled = busy || isLocalAction() || !lastSettings || !retryNames().length;
+                    stopBtn.disabled = !state.running || state.cancelRequested || state.localReview;
                     closeBtn.disabled = state.running;
                     headerCloseBtn.disabled = state.running;
                     phase.title = phase.textContent;
@@ -2874,15 +2971,20 @@ app.registerExtension({
                 };
                 const autoSelectPending = () => {
                     selected.clear();
-                    scopeNames().filter(name => mplMetadataNeeds(name, readSettings(), metadata)).forEach(name => selected.add(mplMetadataNameKey(name)));
+                    for (const name of scopeNames()) {
+                        const key = mplMetadataNameKey(name);
+                        if (!mplMetadataNeeds(name, readSettings(), metadata, fieldStates)) continue;
+                        if (!isLocalAction() && (sharedInfo[key] || []).some(sharedName => selected.has(mplMetadataNameKey(sharedName)))) continue;
+                        selected.add(key);
+                    }
                 };
                 const renderInventory = () => {
                     visibleNames = mplFilterMetadataNames(scopeNames(), {
                         directory: directorySelect.value,
                         recursive: recursiveCheckbox.checked,
                         search: search.value,
-                        onlyMissing: missingOnly.checked,
-                    }, readSettings(), metadata);
+                        status: statusSelect.value,
+                    }, readSettings(), metadata, fieldStates);
                     inventoryBody.replaceChildren();
                     inventoryCheckboxes = [];
                     for (const name of visibleNames) {
@@ -2907,15 +3009,33 @@ app.registerExtension({
                         fileName.textContent = parts.pop();
                         const filePath = el("div", "", "mpl-metadata-file-path", nameCell);
                         filePath.textContent = parts.join("/") || mplT("根目录");
+                        if (sharedInfo[key]?.length) filePath.title = `${mplT("共享信息文件：")}${sharedInfo[key].join(", ")}`;
+                        const rowStates = ["txt", "json", "image", "log"].map(type => mplMetadataFieldState(name, type, metadata, fieldStates).state);
+                        if (rowStates.every(value => ["unavailable", "unresolved", "unsupported"].includes(value))) {
+                            el("div", rowStates.every(value => value === "unavailable") ? "已检查，来源无可用信息" : "已检查，暂无可用信息", "mpl-metadata-file-path", nameCell);
+                        }
                         for (const type of ["txt", "json", "image", "log"]) {
-                            const exists = metadata[key]?.[type] === true;
-                            const unavailable = sourceUnavailable.get(key)?.has(type);
+                            const field = mplMetadataFieldState(name, type, metadata, fieldStates);
+                            const labels = { present: "已有", missing: "待获取", unavailable: "未提供", not_found: "未匹配", error: "失败", invalid: "不可用", unsupported: "不支持", unresolved: "未提取", local_error: "读取异常", user_skipped: "已整理" };
                             const cell = el("td", "", "", row);
-                            const status = el("span", exists ? "已有" : unavailable ? "来源未提供" : "缺失", "mpl-metadata-status " + (exists ? "mpl-metadata-present" : unavailable ? "mpl-metadata-unavailable" : "mpl-metadata-missing"), cell);
-                            if (unavailable) {
-                                status.textContent = "—";
-                                status.title = mplT("来源未提供");
+                            const status = el("span", labels[field.state] || "待获取", "mpl-metadata-status " + (field.state === "present" ? "mpl-metadata-present" : ["missing", "error", "invalid", "local_error"].includes(field.state) ? "mpl-metadata-missing" : "mpl-metadata-unavailable"), cell);
+                            const explanations = { unavailable: type === "image" ? "本次来源未返回可用预览" : "来源未提供", not_found: "未找到来源，可重新检查或手动补充。", invalid: "本地文件不可用；更新已有信息可修复，普通补全不会覆盖。", local_error: "本地信息读取失败，请检查目录访问权限后刷新列表。", unresolved: "未提取到可用内容，可重新检查或手动补充。", unsupported: "来源内容暂无法在本机处理，可重新检查或手动补充。", user_skipped: "用户已确认整理，普通补全跳过；可恢复自动补全或重新检查来源。" };
+                            const details = [mplT(explanations[field.state] || labels[field.state] || "待获取")];
+                            if (field.reason) details.push(String(field.reason));
+                            if (field.checked_at) {
+                                const checkedDate = new Date(field.checked_at);
+                                details.push(`${mplT("上次检查：")}${Number.isNaN(checkedDate.getTime()) ? field.checked_at : checkedDate.toLocaleString()}`);
                             }
+                            if (field.last_error) details.push(`${mplT("最近重查失败：")}${field.last_error}`);
+                            if (field.local_reviewed) {
+                                if (field.state !== "user_skipped") details.push(mplT("用户已确认整理，普通补全跳过；可恢复自动补全或重新检查来源。"));
+                                if (field.local_reviewed_at) {
+                                    const reviewDate = new Date(field.local_reviewed_at);
+                                    details.push(`${mplT("整理时间：")}${Number.isNaN(reviewDate.getTime()) ? field.local_reviewed_at : reviewDate.toLocaleString()}`);
+                                }
+                                if (field.source_state && field.state === "user_skipped") details.push(`${mplT("来源检查结果：")}${mplT(labels[field.source_state] || field.source_state)}${field.source_reason ? ` — ${field.source_reason}` : ""}`);
+                            }
+                            status.title = details.join("\n");
                         }
                     }
                     if (!visibleNames.length) {
@@ -2928,7 +3048,7 @@ app.registerExtension({
                     updateControls();
                 };
                 const saveSettings = () => {
-                    const { overwrite, update_existing, ...savedSettings } = readSettings();
+                    const { overwrite, update_existing, force_refresh, local_action, ...savedSettings } = readSettings();
                     try { localStorage.setItem(MPL_METADATA_SETTINGS_KEY, JSON.stringify(savedSettings)); }
                     catch (error) { console.warn("[MagicPowerLora] 保存下载设置失败:", error); }
                     if (!selectionTouched) autoSelectPending();
@@ -2943,17 +3063,24 @@ app.registerExtension({
                 directorySelect.onchange = renderInventory;
                 recursiveCheckbox.onchange = renderInventory;
                 search.oninput = renderInventory;
-                missingOnly.onchange = renderInventory;
+                statusSelect.onchange = renderInventory;
                 const updateModeHelp = () => {
-                    modeHelp.title = mplT(modeSelect.value === "update"
-                        ? "更新所选类型的现有信息文件（含 .txt）；节点权重和自定义触发词保持不变。"
-                        : "补全缺失文件，不覆盖已有 .txt/.json/预览图/.log。节点权重和自定义触发词保持不变。");
-                    modeHelp.textContent = mplT(modeSelect.value === "update"
-                        ? "覆盖所选信息文件，节点设置不变。"
-                        : "仅补缺失文件，保留已有内容。");
+                    const help = {
+                        update: ["更新所选类型的现有信息文件（含 .txt）；节点权重和自定义触发词保持不变。", "覆盖所选信息文件，节点设置不变。"],
+                        recheck: ["重查未提供、未匹配或未提取的所选字段，保留已有文件和节点设置。", "重查缺项，保留已有内容。"],
+                        missing: ["补全未检查或获取失败的所选字段；已确认无内容的字段跳过，保留已有文件和节点设置。", "补全待处理项，已确认空值不重复获取。"],
+                        adopt: ["将所选字段标记为用户已整理，普通补全跳过；不检查在线来源，可随时撤销。", "人工标记已整理，不联网。"],
+                        restore: ["仅撤销所选字段的人工整理标记，恢复原来的补全判断；不会立即获取在线信息。", "撤销人工标记，不联网。"],
+                    }[modeSelect.value];
+                    modeHelp.title = mplT(help[0]);
+                    modeHelp.textContent = mplT(help[1]);
+                    startBtn.textContent = mplT(modeSelect.value === "adopt" ? "保存整理标记" : modeSelect.value === "restore" ? "恢复自动补全" : "开始下载");
+                    typeCaption.textContent = mplT(isLocalAction() ? "标记内容" : "下载内容");
+                    pathRow.style.display = isLocalAction() ? "none" : "flex";
                 };
                 modeSelect.onchange = () => {
-                    if (modeSelect.value === "update") missingOnly.checked = false;
+                    statusSelect.value = modeSelect.value === "update" ? "all" : modeSelect.value === "recheck" ? "local_missing" : "pending";
+                    if (!selectionTouched || isLocalAction()) autoSelectPending();
                     updateModeHelp();
                     renderInventory();
                 };
@@ -2978,6 +3105,7 @@ app.registerExtension({
                         if (closed) return;
                         localFiles = data.files;
                         metadata = Object.fromEntries(Object.entries(data.metadata || {}).map(([name, values]) => [mplMetadataNameKey(name), values]));
+                        if (data.field_states) fieldStates = Object.fromEntries(Object.entries(data.field_states).map(([name, values]) => [mplMetadataNameKey(name), values]));
                         sharedInfo = Object.fromEntries(Object.entries(data.shared_info || {}).map(([name, group]) => [mplMetadataNameKey(name), group]));
                         inventoryReady = true;
                         mplSetLoraNameList(localFiles);
@@ -3005,6 +3133,10 @@ app.registerExtension({
                                 const errorLine = el("div", "", "", inventoryErrors);
                                 errorLine.textContent = `${error.path || ""}: ${error.error || ""}`;
                             }
+                        }
+                        if (data.record_warning) {
+                            const warning = el("div", "", "", inventoryErrors);
+                            warning.textContent = `${mplT("检查记录未保存：")}${data.record_warning}`;
                         }
                         if (autoSelect) autoSelectPending();
                         if (!state.running) phase.textContent = mplT("准备就绪");
@@ -3038,27 +3170,98 @@ app.registerExtension({
                     message.textContent = result.message || "";
                     if (result.unavailable?.length) {
                         const unavailable = el("div", "", "mpl-metadata-result-message", row);
-                        unavailable.textContent = `${mplT("来源未提供")}: ${result.unavailable.join(", ")}`;
+                        const explanations = { unavailable: "来源未提供", not_found: "未找到来源", unsupported: "不支持", unresolved: "未提取" };
+                        unavailable.textContent = result.unavailable.map(type => `${mplT(typeLabels[`download_${type}`] || type)}: ${mplT(explanations[result.field_states?.[type]?.state] || "来源未提供")}`).join("; ");
+                    }
+                    const failureDetails = mplMetadataFailureDetails(result, typeLabels)
+                        .map(detail => `${mplT(detail.label)}: ${detail.reason}`);
+                    if (failureDetails.length) {
+                        const failure = el("div", "", "mpl-metadata-result-message mpl-metadata-result-status-error", row);
+                        failure.textContent = `${mplT("失败原因：")}${failureDetails.join("; ")}`;
+                    }
+                    if (result.record_warning) {
+                        const warning = el("div", "", "mpl-metadata-warning", row);
+                        warning.textContent = `${mplT("检查记录未保存：")}${result.record_warning}`;
                     }
                     for (const status of Object.keys(counters)) {
                         counters[status].textContent = String(statusCounts[status]);
                     }
                     resultDetails.open = true;
                 };
+                const clearRunResults = () => {
+                    results.clear();
+                    resultRows.clear();
+                    resultList.replaceChildren();
+                    for (const status of Object.keys(counters)) {
+                        statusCounts[status] = 0;
+                        counters[status].textContent = "0";
+                    }
+                };
+                const runLocalReview = async (names, runSettings) => {
+                    if (state.running || loadingFiles || !names.length) return;
+                    const reviewed = runSettings.local_action === "adopt";
+                    const types = mplMetadataTypes(runSettings);
+                    state.running = true;
+                    state.localReview = true;
+                    state.cancelRequested = false;
+                    state.pauseResult = null;
+                    lastSettings = null;
+                    clearRunResults();
+                    progress.max = names.length;
+                    progress.value = 0;
+                    progressCount.textContent = `0 / ${names.length}`;
+                    phase.textContent = mplT(reviewed ? "正在保存整理标记…" : "正在恢复自动补全…");
+                    updateControls();
+                    try {
+                        const response = await api.fetchApi("/ma/lora/local_metadata_review", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ lora_names: names, types, reviewed }),
+                        });
+                        const result = await response.json();
+                        if (!["success", "partial", "error"].includes(result?.status) || !Array.isArray(result.updated) || !Array.isArray(result.errors)) {
+                            throw new Error(result?.message || `${mplT("请求失败")} (${response.status})`);
+                        }
+                        const updated = new Set(result.updated.map(mplMetadataNameKey));
+                        const errorsByName = new Map();
+                        for (const error of result.errors) {
+                            const key = mplMetadataNameKey(error.name);
+                            const previous = errorsByName.get(key);
+                            errorsByName.set(key, [previous, error.error || mplT("整理标记保存失败")].filter(Boolean).join("\n"));
+                        }
+                        let failed = 0;
+                        for (const name of names) {
+                            const key = mplMetadataNameKey(name);
+                            const error = errorsByName.get(key) || (!updated.has(key) ? result.message || mplT("未收到此项的处理结果") : null);
+                            if (error) {
+                                failed++;
+                                updateResults({ name, status: "error", message: error });
+                            } else {
+                                updateResults({ name, status: reviewed ? "reviewed" : "restored", message: mplT(reviewed ? "人工整理标记已保存，普通补全跳过所选缺项。" : "人工整理标记已撤销，未获取在线信息。") });
+                            }
+                        }
+                        progress.value = names.length;
+                        progressCount.textContent = `${names.length} / ${names.length}`;
+                        await loadInventory(false);
+                        phase.textContent = failed || result.errors.length || !response.ok || result.status === "error"
+                            ? mplT("整理标记未全部完成，请查看结果。")
+                            : mplT(reviewed ? "整理标记已保存。" : "已恢复自动补全，尚未获取在线信息。");
+                    } catch (error) {
+                        for (const name of names) updateResults({ name, status: "error", message: error.message || String(error) });
+                        phase.textContent = `${mplT("整理标记处理失败：")}${error.message || String(error)}`;
+                    } finally {
+                        state.running = false;
+                        state.localReview = false;
+                        currentName.textContent = "";
+                        updateControls();
+                    }
+                };
                 const run = async (names, runSettings, clearResults) => {
                     if (state.running || loadingFiles || !names.length) return;
                     state.cancelRequested = false;
                     state.running = true;
                     lastSettings = { ...runSettings };
-                    if (clearResults) {
-                        results.clear();
-                        resultRows.clear();
-                        resultList.replaceChildren();
-                        for (const status of Object.keys(counters)) {
-                            statusCounts[status] = 0;
-                            counters[status].textContent = "0";
-                        }
-                    }
+                    if (clearResults) clearRunResults();
                     phase.textContent = mplT("下载中…");
                     updateControls();
                     const changedNames = new Set();
@@ -3080,8 +3283,8 @@ app.registerExtension({
                             progress.value = completed;
                             progressCount.textContent = `${completed} / ${total}`;
                             if (result) {
+                                mplMergeMetadataFieldStates(result.name, result, metadata, fieldStates, result.requested_types);
                                 updateResults(result);
-                                sourceUnavailable.set(mplMetadataNameKey(result.name), new Set(result.unavailable || []));
                                 if (result.saved?.length) {
                                     changedNames.add(result.name);
                                     for (const target of referencesByName.get(mplMetadataNameKey(result.name)) || []) {
@@ -3090,7 +3293,7 @@ app.registerExtension({
                                     }
                                 }
                             }
-                        });
+                        }, metadata, fieldStates);
                         state.running = true;
                         if (changedNames.size) {
                             affectedNodes.forEach(target => target.updateWidget());
@@ -3102,7 +3305,13 @@ app.registerExtension({
                             }
                         }
                         await loadInventory(false);
-                        phase.textContent = mplT(state.cancelRequested ? "已停止，当前文件已处理完成。" : "下载任务完成");
+                        if (state.pauseResult) {
+                            const retryAfter = state.pauseResult.retry_after;
+                            const retryHint = retryAfter == null ? "" : ` ${mplT(/^\d+(\.\d+)?$/.test(String(retryAfter)) ? "重试等待秒数：" : "建议重试时间：")}${retryAfter}`;
+                            phase.textContent = `${mplT("来源请求受限，已暂停后续处理：")}${state.pauseResult.message || mplT("请求失败")}${retryHint}`;
+                        } else {
+                            phase.textContent = mplT(state.cancelRequested ? "已停止，当前文件已处理完成。" : "信息检查与补全完成");
+                        }
                     } catch (error) {
                         phase.textContent = `${mplT("下载任务失败")}: ${error.message}`;
                     } finally {
@@ -3112,15 +3321,30 @@ app.registerExtension({
                     }
                 };
                 const startRun = (names, runSettings, clearResults) => {
-                    const snapshot = names.slice();
-                    if (runSettings.overwrite) {
-                        if (mplMetadataHasSharedSelection(snapshot, sharedInfo)) {
-                            phase.textContent = mplT("选中项包含共享信息文件的同名模型，请每组只选择一个。");
-                            return;
+                    const snapshot = names.filter(name => mplMetadataRequestedTypes(name, runSettings, metadata, fieldStates).length);
+                    if (!snapshot.length) {
+                        phase.textContent = mplT("所选信息无需处理。");
+                        return;
+                    }
+                    if (runSettings.local_action) {
+                        if (runSettings.local_action === "adopt") {
+                            const prompt = [
+                                `${mplT("所选 LoRA：")}${snapshot.length}`,
+                                `${mplT("信息类型：")}${mplMetadataTypes(runSettings).map(type => mplT(typeLabels[`download_${type}`])).join(", ")}`,
+                                mplT("人工确认所选缺项暂不在线补全，不检查来源。可用“恢复自动补全”撤销。"),
+                            ].join("\n");
+                            if (!confirm(prompt)) return;
                         }
-                        const types = [...new Set(snapshot.flatMap(name => mplMetadataRequestedTypes(name, runSettings)))];
-                        const existingNames = snapshot.filter(name => mplMetadataRequestedTypes(name, runSettings).some(type => metadata[mplMetadataNameKey(name)]?.[type]));
-                        const existingCount = snapshot.reduce((count, name) => count + mplMetadataRequestedTypes(name, runSettings).filter(type => metadata[mplMetadataNameKey(name)]?.[type]).length, 0);
+                        return runLocalReview(snapshot, runSettings);
+                    }
+                    if (mplMetadataHasSharedSelection(snapshot, sharedInfo)) {
+                        phase.textContent = mplT("选中项包含共享信息文件的同名模型，请每组只选择一个。");
+                        return;
+                    }
+                    if (runSettings.overwrite) {
+                        const types = [...new Set(snapshot.flatMap(name => mplMetadataRequestedTypes(name, runSettings, metadata, fieldStates)))];
+                        const existingNames = snapshot.filter(name => mplMetadataRequestedTypes(name, runSettings, metadata, fieldStates).some(type => metadata[mplMetadataNameKey(name)]?.[type] || mplMetadataFieldState(name, type, metadata, fieldStates).state === "invalid"));
+                        const existingCount = snapshot.reduce((count, name) => count + mplMetadataRequestedTypes(name, runSettings, metadata, fieldStates).filter(type => metadata[mplMetadataNameKey(name)]?.[type] || mplMetadataFieldState(name, type, metadata, fieldStates).state === "invalid").length, 0);
                         const prompt = [
                             mplT("更新已有信息确认"),
                             `${mplT("所选 LoRA：")}${snapshot.length}`,
@@ -3138,16 +3362,18 @@ app.registerExtension({
                     return startRun(selectedNames(), readSettings(), true);
                 };
                 retryBtn.onclick = () => {
+                    if (!lastSettings || isLocalAction()) return;
                     const names = retryNames();
                     const retryTypes = {};
                     for (const name of names) {
-                        const failed = results.get(mplMetadataNameKey(name))?.failed;
-                        if (Array.isArray(failed) && failed.length) retryTypes[mplMetadataNameKey(name)] = failed;
+                        const result = results.get(mplMetadataNameKey(name));
+                        const failed = result?.failed;
+                        retryTypes[mplMetadataNameKey(name)] = Array.isArray(failed) && failed.length ? failed : result?.requested_types || mplMetadataTypes(lastSettings || {});
                     }
                     return startRun(names, { ...lastSettings, retry_types: retryTypes }, false);
                 };
                 const stop = () => {
-                    if (!state.running) return;
+                    if (!state.running || state.localReview) return;
                     state.cancelRequested = true;
                     phase.textContent = mplT("正在停止：等待当前文件处理完成…");
                     updateControls();
@@ -3184,6 +3410,7 @@ app.registerExtension({
             };
 
             nodeType.prototype.showFetchModal = function(lora, contentAreas, parentOverlay) {
+                let fetching = false;
                 // 设置存储的键名
                 const SETTINGS_KEY = "magic_power_lora_fetch_settings";
                 
@@ -3276,6 +3503,10 @@ app.registerExtension({
                     margin-bottom: 12px;
                 `;
                 optionsContainer.appendChild(optionsTitle);
+                const fetchHelp = document.createElement("div");
+                fetchHelp.textContent = mplT("重新检查缺项，保留已有文件和编辑内容。");
+                fetchHelp.style.cssText = "color: #999; font-size: 12px; margin-bottom: 12px;";
+                optionsContainer.appendChild(fetchHelp);
                 
                 const downloadTxt = document.createElement("label");
                 downloadTxt.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
@@ -3403,7 +3634,7 @@ app.registerExtension({
                     transition: all 0.2s;
                 `;
                 cancelFetchBtn.onclick = () => {
-                    document.body.removeChild(fetchOverlay);
+                    closeFetch();
                 };
                 cancelFetchBtn.onmouseenter = () => {
                     cancelFetchBtn.style.background = "#555";
@@ -3427,8 +3658,14 @@ app.registerExtension({
                     transition: all 0.2s;
                 `;
                 fetchConfirmBtn.onclick = async () => {
+                    if (![txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox].some(checkbox => checkbox.checked)) return;
+                    fetching = true;
+                    const controls = [txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox, sameDirRadio, subfolderRadio, cancelFetchBtn];
+                    controls.forEach(control => { control.disabled = true; });
                     fetchConfirmBtn.disabled = true;
                     fetchConfirmBtn.textContent = "爬取中...";
+                    const editors = ["triggerWords", "jsonInfo", "logInfo"].map((field, index) => ({ field, textarea: contentAreas[index]?.querySelector('textarea') }));
+                    const editorValues = new Map(editors.map(({ field, textarea }) => [field, textarea?.value || ""]));
                     
                     try {
                         const options = {
@@ -3448,28 +3685,23 @@ app.registerExtension({
                             body: JSON.stringify({
                                 lora_name: lora.name,
                                 options: options,
-                                save_path_mode: savePathMode
+                                save_path_mode: savePathMode,
+                                overwrite: false,
+                                force_refresh: true,
                             })
                         });
                         
                         const result = await response.json();
                         
-                        if (result.status === 'success' || result.status === 'partial') {
-                            // 更新编辑框内容
-                            if (result.data.triggerWords) {
-                                const txtArea = contentAreas[0].querySelector('textarea');
-                                if (txtArea) txtArea.value = result.data.triggerWords;
-                                lora.triggerWords = result.data.triggerWords;
-                            }
-                            if (result.data.jsonInfo) {
-                                const jsonArea = contentAreas[1].querySelector('textarea');
-                                if (jsonArea) jsonArea.value = result.data.jsonInfo;
-                                lora.jsonInfo = result.data.jsonInfo;
-                            }
-                            if (result.data.logInfo) {
-                                const logArea = contentAreas[2].querySelector('textarea');
-                                if (logArea) logArea.value = result.data.logInfo;
-                                lora.logInfo = result.data.logInfo;
+                        if (response.ok && ['success', 'partial', 'skipped', 'checked', 'empty', 'not_found'].includes(result.status)) {
+                            // Fill empty editors only; retain saved content and edits made while fetching.
+                            for (const { field, textarea } of editors) {
+                                const value = result.data?.[field];
+                                if (typeof value !== "string" || !value.trim()) continue;
+                                const previous = editorValues.get(field);
+                                if (textarea && (previous.trim() || textarea.value !== previous)) continue;
+                                if (textarea) textarea.value = value;
+                                if (!String(lora[field] || "").trim()) lora[field] = value;
                             }
                             
                             // 刷新全局图片列表缓存（类似参考代码的loadImageList）
@@ -3491,20 +3723,26 @@ app.registerExtension({
                                 this._renderContentFunc();
                             }
                             
-                            document.body.removeChild(fetchOverlay);
-                            alert(result.message || "爬取成功！内容已自动填入编辑框。");
+                            fetching = false;
+                            closeFetch();
+                            const message = result.message || mplT(result.saved?.length ? "信息检查与补全完成" : "已检查，未新增信息。");
+                            alert(message + (result.record_warning ? `\n${mplT("检查记录未保存：")}${result.record_warning}` : ""));
                         } else {
-                            alert(result.message || "爬取失败");
-                            fetchConfirmBtn.disabled = false;
-                            fetchConfirmBtn.textContent = "开始爬取";
+                            alert((result.message || mplT("爬取失败")) + (result.record_warning ? `\n${mplT("检查记录未保存：")}${result.record_warning}` : ""));
                         }
                     } catch (error) {
                         console.error("爬取元数据时出错:", error);
                         alert("爬取失败: " + error.message);
-                        fetchConfirmBtn.disabled = false;
-                        fetchConfirmBtn.textContent = "开始爬取";
+                    } finally {
+                        fetching = false;
+                        controls.forEach(control => { control.disabled = false; });
+                        fetchConfirmBtn.disabled = ![txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox].some(checkbox => checkbox.checked);
+                        fetchConfirmBtn.textContent = mplT("开始爬取");
                     }
                 };
+                const updateFetchAvailability = () => { fetchConfirmBtn.disabled = fetching || ![txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox].some(checkbox => checkbox.checked); };
+                [txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox].forEach(checkbox => checkbox.addEventListener("change", updateFetchAvailability));
+                updateFetchAvailability();
                 fetchConfirmBtn.onmouseenter = () => {
                     if (!fetchConfirmBtn.disabled) {
                         fetchConfirmBtn.style.background = "#5CBF60";
@@ -3529,16 +3767,20 @@ app.registerExtension({
                 // 点击遮罩层关闭
                 fetchOverlay.onclick = (e) => {
                     if (e.target === fetchOverlay) {
-                        document.body.removeChild(fetchOverlay);
+                        closeFetch();
                     }
                 };
                 
                 // ESC键关闭
                 const handleEsc = (e) => {
                     if (e.key === "Escape") {
-                        document.body.removeChild(fetchOverlay);
-                        document.removeEventListener("keydown", handleEsc);
+                        closeFetch();
                     }
+                };
+                const closeFetch = () => {
+                    if (fetching) return;
+                    fetchOverlay.remove();
+                    document.removeEventListener("keydown", handleEsc);
                 };
                 document.addEventListener("keydown", handleEsc);
                 

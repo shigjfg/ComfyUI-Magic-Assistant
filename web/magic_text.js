@@ -52,6 +52,7 @@ app.registerExtension({
                     syncMagicPromptTextWidget(this, textWidget, visibleText);
                 }
             }
+            if (textWidget) installMagicPromptTextSerializer(this, textWidget);
 
             // 添加编辑提示词按钮
             if (!this.widgets) this.widgets = [];
@@ -2995,7 +2996,7 @@ function magicPromptHasVisibleContent(raw) {
     return s.trim().length > 0;
 }
 
-/** 屏蔽 tag 的前缀字符（! → *，避免与 !? 等表情/tag 混合用法冲突） */
+/** 旧工作流隐藏 tag 的兼容前缀（当前界面使用芯片隐藏状态，不再显示此前缀） */
 const DISABLE_PREFIX = "*";
 const DISABLE_REG = /^\*/;
 const MAGIC_PROMPT_TAG_STATE_KEY = "magic_prompt_tag_state";
@@ -3062,6 +3063,55 @@ function persistMagicPromptTagState(node, tags) {
     } catch (_) {
         /* ignore */
     }
+}
+
+/**
+ * 运行队列序列化时，widget.value 只包含启用 Tag；把节点级完整模型带上，
+ * 否则 ComfyUI 用 widgets_values 恢复节点后，禁用芯片就无法再重建。
+ */
+function installMagicPromptTextSerializer(node, textWidget) {
+    if (!textWidget || textWidget._magicPromptSerializerInstalled) return;
+    const originalSerializeValue =
+        typeof textWidget.serializeValue === "function"
+            ? textWidget.serializeValue
+            : null;
+    textWidget._magicPromptOriginalSerializeValue = originalSerializeValue;
+    textWidget.serializeValue = function (serialNode, widgetIndex) {
+        // ComfyUI may invoke serializeValue as a detached callback, so `this`
+        // is not guaranteed to be the widget that owns the value.
+        const currentValue = textWidget.value;
+        if (typeof currentValue !== "string") {
+            return originalSerializeValue
+                ? originalSerializeValue.call(textWidget, serialNode, widgetIndex)
+                : currentValue;
+        }
+
+        const savedTagState =
+            readMagicPromptTagState(node) || readMagicPromptTagState(serialNode);
+        if (savedTagState === null) {
+            return originalSerializeValue
+                ? originalSerializeValue.call(textWidget, serialNode, widgetIndex)
+                : currentValue;
+        }
+
+        const enabledText = serializeMagicPromptTags(
+            savedTagState.filter((item) => item.isNewline || !item.disabled),
+        );
+        const currentEnabledText = magicEnsureTrailingCommaPerLine(currentValue);
+        const savedEnabledText = magicEnsureTrailingCommaPerLine(enabledText);
+        if (currentEnabledText !== savedEnabledText) {
+            return originalSerializeValue
+                ? originalSerializeValue.call(textWidget, serialNode, widgetIndex)
+                : currentValue;
+        }
+
+        const fullText = serializeMagicPromptTags(savedTagState);
+        if (serialNode && Array.isArray(serialNode.widgets_values)) {
+            serialNode.widgets_values[widgetIndex] = fullText;
+        }
+        return fullText;
+    };
+    textWidget._magicPromptSerializerInstalled = true;
 }
 
 /**
@@ -5641,7 +5691,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         tagStripTitle.style.cssText = `font-size: 11px; color: ${THEME.text2}; margin-bottom: 10px; line-height: 1.45;`;
         tagStripTitle.innerHTML = `
             <b>${magicT("Tag 预览")}</b>
-            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 双击芯片：屏蔽/解除屏蔽（*；删除按钮和正在编辑的输入框除外） · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）")}</span>
+            <span style="opacity:0.9">${magicT(" · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 双击芯片：隐藏/显示（删除按钮和正在编辑的输入框除外） · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）")}</span>
         `;
         const tagChipsHit = document.createElement("div");
         tagChipsHit.setAttribute("data-magic-tag-chips-hit", "1");
@@ -6046,7 +6096,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 .then(() => showMagicChipToast(magicT("✅ 已复制到剪贴板")))
                 .catch(() => showMagicChipToast(magicT("❌ 复制失败（请检查浏览器权限）")));
         });
-        mkSelBtn("🚫", magicT("一键屏蔽（*）"), "#e57373", () => {
+        mkSelBtn("🚫", magicT("一键隐藏"), "#e57373", () => {
             const set = shell._magicChipSelSet;
             if (!set || !set.size) return;
             const next = getEditorTags().slice();
@@ -6649,7 +6699,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
 
                 const bottom = document.createElement("div");
                 bottom.setAttribute("data-magic-tag-bottom", "1");
-                bottom.title = magicT("双击芯片切换屏蔽（*）；锁定后单击下方取消锁定");
+                    bottom.title = magicT("双击芯片隐藏/显示；锁定后单击下方取消锁定");
                 bottom.style.cssText =
                     "display:flex;align-items:center;gap:5px;padding:5px 8px;color:#d8d8d8;font-size:11px;";
                 const llmBtn = document.createElement("button");
@@ -6761,7 +6811,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
 
                 chip.addEventListener("dblclick", (e) => {
                     if (e.target.closest("button[data-del]")) return;
-                    // 芯片整体双击切换屏蔽；删除按钮和正在编辑的输入框保留各自行为。
+                    // 芯片整体双击切换隐藏/显示；删除按钮和正在编辑的输入框保留各自行为。
                     if (e.target.closest("input")) return;
                     e.preventDefault();
                     e.stopPropagation();
@@ -6773,7 +6823,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 });
 
                 chip.addEventListener("click", (e) => {
-                    // detail===2 留给 dblclick（屏蔽）
+                    // detail===2 留给 dblclick（隐藏/显示）
                     if (e.detail === 2) return;
                     if (e.target.closest("button[data-del]")) return;
                     if (e.target.closest("button[data-magic-cn-llm]")) return;
@@ -7056,9 +7106,9 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             { key: "clear_all", label: magicT("🗑️ 清空全部"), action: "clear" },
             {
                 key: "clear_disabled",
-                label: magicT("🚫 清空屏蔽"),
+                label: magicT("🚫 清空隐藏"),
                 action: "clear_disabled",
-                title: magicT("删除所有以 * 屏蔽的 tag（保留未屏蔽内容）"),
+                title: magicT("删除所有已隐藏的 Tag"),
             },
             { key: "copy", label: magicT("📋 复制"), action: "copy" },
         ];
@@ -7442,7 +7492,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         hint.innerHTML = `
             <b>${h1}</b><code style="background:${THEME.bg3};padding:2px 5px;border-radius:3px;">,</code>${h2}
             ${h3}<b>${h4}</b>${h5}
-            ${magicT("双击芯片可切换屏蔽；屏蔽 Tag 会从提示词区移除，但仍保留在 Tag 区以便恢复。")}
+            ${magicT("双击芯片可切换隐藏／显示；隐藏 Tag 会从提示词区移除，但仍保留在 Tag 区以便恢复。")}
         `;
         content.appendChild(hint);
         content.appendChild(danbooruConnBar);
@@ -7761,7 +7811,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             { key: "format", label: magicT("💫 格式化") },
             { key: "dedup", label: magicT("🔄 去重") },
             { key: "clear_all", label: magicT("🗑️ 清空全部") },
-            { key: "clear_disabled", label: magicT("🚫 清空屏蔽") },
+            { key: "clear_disabled", label: magicT("🚫 清空隐藏") },
             { key: "copy", label: magicT("📋 复制") },
             { key: "edit_tags", label: magicT("🏷️ 编辑标签") },
             { key: "translate_all", label: magicT("🌐 一键翻译所有Tag") },

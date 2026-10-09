@@ -141,6 +141,76 @@ const loraLoaderTranslations = {
     "会覆盖所选模型的已有信息文件，节点权重和自定义触发词保持不变。": { zh: "会覆盖所选模型的已有信息文件，节点权重和自定义触发词保持不变。", en: "Existing information files for the selected models will be replaced. Node weights and custom trigger words remain unchanged." },
     "选中项包含共享信息文件的同名模型，请每组只选择一个。": { zh: "选中项包含共享信息文件的同名模型，请每组只选择一个。", en: "Selected models share information files. Select only one model from each group." },
     "已有信息更新原位置，新信息按保存位置保存。": { zh: "已有信息更新原位置，新信息按保存位置保存。", en: "Existing information is updated in its original location; new files use the selected save location." },
+    "信息状态筛选": { zh: "信息状态筛选", en: "Information Status Filter" },
+    "仅看待处理": { zh: "仅看待处理", en: "Needs Attention" },
+    "所有本地缺项": { zh: "所有本地缺项", en: "All Local Gaps" },
+    "全部状态": { zh: "全部状态", en: "All Statuses" },
+    "补全所选信息": { zh: "补全所选信息", en: "Fill Selected Information" },
+    "重新检查来源": { zh: "重新检查来源", en: "Recheck Source" },
+    "将处理": { zh: "将处理", en: "To Process" },
+    "无需获取": { zh: "无需获取", en: "No Fetch Needed" },
+    "本地异常": { zh: "本地异常", en: "Local Issues" },
+    "已补充": { zh: "已补充", en: "Information Saved" },
+    "检查完成": { zh: "检查完成", en: "Checked" },
+    "未找到来源": { zh: "未找到来源", en: "Source Not Found" },
+    "仅重试当前可见且勾选的失败项，沿用上次处理方式和失败字段。": { zh: "仅重试当前可见且勾选的失败项，沿用上次处理方式和失败字段。", en: "Retry only checked failures in the current visible results, using the previous mode and failed fields." },
+    "已检查，来源无可用信息": { zh: "已检查，来源无可用信息", en: "Checked; Source Provided No Usable Information" },
+    "已检查，暂无可用信息": { zh: "已检查，暂无可用信息", en: "Checked; No Usable Information Available" },
+    "共享信息文件：": { zh: "共享信息文件：", en: "Shared Information Files: " },
+    "待获取": { zh: "待获取", en: "Pending Fetch" },
+    "未提供": { zh: "未提供", en: "No Data" },
+    "未匹配": { zh: "未匹配", en: "No Match" },
+    "不可用": { zh: "不可用", en: "Invalid" },
+    "不支持": { zh: "不支持", en: "Unsupported" },
+    "未提取": { zh: "未提取", en: "Unresolved" },
+    "读取异常": { zh: "读取异常", en: "Read Error" },
+    "本次来源未返回可用预览": { zh: "本次来源未返回可用预览", en: "The Source Returned No Usable Preview in This Check" },
+    "未找到来源，可重新检查或手动补充。": { zh: "未找到来源，可重新检查或手动补充。", en: "Source not found. Recheck or add information manually." },
+    "本地文件不可用；更新已有信息可修复，普通补全不会覆盖。": { zh: "本地文件不可用；更新已有信息可修复，普通补全不会覆盖。", en: "Local file is invalid. Update existing information to repair it; regular fill preserves it." },
+    "本地信息读取失败，请检查目录访问权限后刷新列表。": { zh: "本地信息读取失败，请检查目录访问权限后刷新列表。", en: "Local information could not be read. Check directory access and refresh the list." },
+    "未提取到可用内容，可重新检查或手动补充。": { zh: "未提取到可用内容，可重新检查或手动补充。", en: "No usable content could be extracted. Recheck or add it manually." },
+    "来源内容暂无法在本机处理，可重新检查或手动补充。": { zh: "来源内容暂无法在本机处理，可重新检查或手动补充。", en: "The source content cannot currently be processed on this machine. Recheck or add it manually." },
+    "上次检查：": { zh: "上次检查：", en: "Last Check: " },
+    "最近重查失败：": { zh: "最近重查失败：", en: "Latest Recheck Failed: " },
+    "重查未提供、未匹配或未提取的所选字段，保留已有文件和节点设置。": { zh: "重查未提供、未匹配或未提取的所选字段，保留已有文件和节点设置。", en: "Recheck selected fields without source data, matches or extracted content. Keep existing files and node settings." },
+    "重查缺项，保留已有内容。": { zh: "重查缺项，保留已有内容。", en: "Recheck gaps and keep existing content." },
+    "补全未检查或获取失败的所选字段；已确认无内容的字段跳过，保留已有文件和节点设置。": { zh: "补全未检查或获取失败的所选字段；已确认无内容的字段跳过，保留已有文件和节点设置。", en: "Fill selected unchecked or failed fields. Skip confirmed empty results and keep existing files and node settings." },
+    "补全待处理项，已确认空值不重复获取。": { zh: "补全待处理项，已确认空值不重复获取。", en: "Fill pending information; skip confirmed empty results." },
+    "检查记录未保存：": { zh: "检查记录未保存：", en: "Check Record Not Saved: " },
+    "来源请求受限，已暂停后续处理：": { zh: "来源请求受限，已暂停后续处理：", en: "Source Requests Restricted; Remaining Items Paused: " },
+    "重试等待秒数：": { zh: "重试等待秒数：", en: "Retry After Seconds: " },
+    "建议重试时间：": { zh: "建议重试时间：", en: "Suggested Retry Time: " },
+    "信息检查与补全完成": { zh: "信息检查与补全完成", en: "Information Check and Fill Completed" },
+    "所选信息无需处理。": { zh: "所选信息无需处理。", en: "No Processing Needed for Selected Information." },
+    "已检查，未新增信息。": { zh: "已检查，未新增信息。", en: "Checked; No New Information Added." },
+    "重新检查缺项，保留已有文件和编辑内容。": { zh: "重新检查缺项，保留已有文件和编辑内容。", en: "Recheck gaps while keeping existing files and editor content." },
+    "标记已整理（离线）": { zh: "标记已整理（离线）", en: "Mark as Organized (Offline)" },
+    "恢复自动补全（离线）": { zh: "恢复自动补全（离线）", en: "Restore Automatic Fill (Offline)" },
+    "保存整理标记": { zh: "保存整理标记", en: "Save Organization Mark" },
+    "恢复自动补全": { zh: "恢复自动补全", en: "Restore Automatic Fill" },
+    "标记内容": { zh: "标记内容", en: "Information to Mark" },
+    "处理结果": { zh: "处理结果", en: "Processing Results" },
+    "已整理": { zh: "已整理", en: "Organized" },
+    "已恢复": { zh: "已恢复", en: "Restored" },
+    "用户已确认整理，普通补全跳过；可恢复自动补全或重新检查来源。": { zh: "用户已确认整理，普通补全跳过；可恢复自动补全或重新检查来源。", en: "Marked as organized by the user. Regular fill skips it; restore automatic fill or recheck the source." },
+    "整理时间：": { zh: "整理时间：", en: "Organization Mark Time: " },
+    "来源检查结果：": { zh: "来源检查结果：", en: "Source Check Result: " },
+    "将所选字段标记为用户已整理，普通补全跳过；不检查在线来源，可随时撤销。": { zh: "将所选字段标记为用户已整理，普通补全跳过；不检查在线来源，可随时撤销。", en: "Mark selected information as organized by the user so regular fill skips it. No source check; the mark can be removed." },
+    "人工标记已整理，不联网。": { zh: "人工标记已整理，不联网。", en: "Mark as organized without contacting the source." },
+    "仅撤销所选字段的人工整理标记，恢复原来的补全判断；不会立即获取在线信息。": { zh: "仅撤销所选字段的人工整理标记，恢复原来的补全判断；不会立即获取在线信息。", en: "Remove organization marks from selected fields and restore the original fill rules. No source information is fetched." },
+    "撤销人工标记，不联网。": { zh: "撤销人工标记，不联网。", en: "Remove user marks without contacting the source." },
+    "正在保存整理标记…": { zh: "正在保存整理标记…", en: "Saving Organization Marks…" },
+    "正在恢复自动补全…": { zh: "正在恢复自动补全…", en: "Restoring Automatic Fill…" },
+    "整理标记保存失败": { zh: "整理标记保存失败", en: "Failed to Save Organization Mark" },
+    "未收到此项的处理结果": { zh: "未收到此项的处理结果", en: "No Processing Result Returned for This Item" },
+    "人工整理标记已保存，普通补全跳过所选缺项。": { zh: "人工整理标记已保存，普通补全跳过所选缺项。", en: "Organization mark saved. Regular fill skips the selected gaps." },
+    "人工整理标记已撤销，未获取在线信息。": { zh: "人工整理标记已撤销，未获取在线信息。", en: "Organization mark removed. No source information was fetched." },
+    "部分整理标记处理失败，请查看结果。": { zh: "部分整理标记处理失败，请查看结果。", en: "Some organization marks could not be processed. See the results." },
+    "整理标记未全部完成，请查看结果。": { zh: "整理标记未全部完成，请查看结果。", en: "Organization Marks Were Not Fully Processed. See the Results." },
+    "整理标记已保存。": { zh: "整理标记已保存。", en: "Organization Marks Saved." },
+    "已恢复自动补全，尚未获取在线信息。": { zh: "已恢复自动补全，尚未获取在线信息。", en: "Automatic Fill Restored; No Source Information Fetched." },
+    "整理标记处理失败：": { zh: "整理标记处理失败：", en: "Failed to Process Organization Marks: " },
+    "人工确认所选缺项暂不在线补全，不检查来源。可用“恢复自动补全”撤销。": { zh: "人工确认所选缺项暂不在线补全，不检查来源。可用“恢复自动补全”撤销。", en: "Confirm that selected gaps should be skipped during online fill without checking the source. Undo with Restore Automatic Fill." },
     
     // 添加Lora弹窗
     "添加 Lora": { zh: "添加 Lora", en: "Add Lora" },
@@ -854,8 +924,8 @@ const magicPromptBoxTranslations = {
     "💫 格式化": { zh: "💫 格式化", en: "💫 Format" },
     "🔄 去重": { zh: "🔄 去重", en: "🔄 Dedup" },
     "🗑️ 清空全部": { zh: "🗑️ 清空全部", en: "🗑️ Clear All" },
-    "🚫 清空屏蔽": { zh: "🚫 清空屏蔽", en: "🚫 Clear Disabled" },
-    "删除所有以 * 屏蔽的 tag（保留未屏蔽内容）": { zh: "删除所有以 * 屏蔽的 tag（保留未屏蔽内容）", en: "Remove all *-disabled tags (keep enabled content)" },
+    "🚫 清空隐藏": { zh: "🚫 清空隐藏", en: "🚫 Clear Hidden" },
+    "删除所有已隐藏的 Tag": { zh: "删除所有已隐藏的 Tag", en: "Remove all hidden Tags" },
     "📋 复制": { zh: "📋 复制", en: "📋 Copy" },
     "🏷️ 编辑标签": { zh: "🏷️ 编辑标签", en: "🏷️ Edit Tags" },
     "🌐 一键翻译所有Tag": { zh: "🌐 一键翻译所有Tag", en: "🌐 Translate All Tags" },
@@ -868,16 +938,16 @@ const magicPromptBoxTranslations = {
 
     // Tag预览区
     "Tag 预览": { zh: "Tag 预览", en: "Tag Preview" },
-    " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（*），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）": { zh: " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：屏蔽（*），避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）", en: " · Shows when main box has content · ↵ Newline chip · Click tag: lock & show weight bar (click top English area → inline edit; click bottom Chinese area → unlock) · Double-click bottom area only: toggle disable (*), avoids conflict with edit above · Click main input or blank: unlock · Drag on blank or margins: rubber-band select (no toolbar, live blue preview) · Hover chip: faint outline · Selected group draggable (blue line shows drop point)" },
+    " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：隐藏／显示，避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）": { zh: " · 主框有内容才显示 · ↵ 换行芯片 · 单击 tag：锁定并显示权重条（点上方英文区才进入行内编辑；点下方中文区取消锁定） · 仅下方区域双击：隐藏／显示，避免与上方编辑冲突 · 点主输入框或空白处取消锁定 · 在芯片外侧留白或四周边距处拖拽：框选（过程中不弹工具条，实时蓝框预览） · 悬停芯片浅描边 · 框选后可整组拖拽（蓝线示落点）", en: " · Shows when main box has content · ↵ Newline chip · Click tag: lock & show weight bar (click top English area → inline edit; click bottom Chinese area → unlock) · Double-click bottom area only: hide/show, avoids conflict with edit above · Click main input or blank: unlock · Drag on blank or margins: rubber-band select (no toolbar, live blue preview) · Hover chip: faint outline · Selected group draggable (blue line shows drop point)" },
     "锁定后仅在此区域点击进入文字编辑": { zh: "锁定后仅在此区域点击进入文字编辑", en: "Click here to edit text after locking" },
-    "双击此区域切换屏蔽（*）；锁定后单击下方取消锁定": { zh: "双击此区域切换屏蔽（*）；锁定后单击下方取消锁定", en: "Double-click to toggle disable (*); click here when locked to unlock" },
+    "双击此区域切换隐藏／显示；锁定后单击下方取消锁定": { zh: "双击此区域切换隐藏／显示；锁定后单击下方取消锁定", en: "Double-click to hide/show; click here when locked to unlock" },
     "解析结果为空": { zh: "解析结果为空", en: "No tags to parse" },
     "字符数: ": { zh: "字符数: ", en: "Chars: " },
     "Tag: ": { zh: "Tag: ", en: "Tag: " },
     "（启用 ": { zh: "（启用 ", en: "(Active " },
     "）": { zh: "）", en: ")" },
     " · 换行 ": { zh: " · 换行 ", en: " · Newline " },
-    "双击芯片可切换屏蔽；屏蔽 Tag 会从提示词区移除，但仍保留在 Tag 区以便恢复。": { zh: "双击芯片可切换屏蔽；屏蔽 Tag 会从提示词区移除，但仍保留在 Tag 区以便恢复。", en: "Double-click a chip to toggle disable; disabled tags leave the prompt box but stay in the Tag strip for recovery." },
+    "双击芯片可切换隐藏／显示；隐藏 Tag 会从提示词区移除，但仍保留在 Tag 区以便恢复。": { zh: "双击芯片可切换隐藏／显示；隐藏 Tag 会从提示词区移除，但仍保留在 Tag 区以便恢复。", en: "Double-click a chip to hide/show; hidden Tags leave the prompt box but stay in the Tag strip for recovery." },
 
     // Tag悬浮工具栏
     "权重": { zh: "权重", en: "Weight" },
@@ -907,7 +977,7 @@ const magicPromptBoxTranslations = {
     "选中 ": { zh: "选中 ", en: "Selected " },
     " 个标签": { zh: " 个标签", en: " tags selected" },
     "一键复制": { zh: "一键复制", en: "Copy All" },
-    "一键屏蔽（*）": { zh: "一键屏蔽（*）", en: "Disable All (*)" },
+    "一键隐藏": { zh: "一键隐藏", en: "Hide All" },
     "一键启用": { zh: "一键启用", en: "Enable All" },
     "一键删除": { zh: "一键删除", en: "Delete All" },
 
@@ -1211,7 +1281,7 @@ const magicPromptBoxTranslations = {
     "💫 格式化": { zh: "💫 格式化", en: "💫 Format" },
     "🔄 去重": { zh: "🔄 去重", en: "🔄 Dedupe" },
     "🗑️ 清空全部": { zh: "🗑️ 清空全部", en: "🗑️ Clear All" },
-    "🚫 清空屏蔽": { zh: "🚫 清空屏蔽", en: "🚫 Clear Disabled" },
+    "🚫 清空隐藏": { zh: "🚫 清空隐藏", en: "🚫 Clear Hidden" },
     "📋 复制": { zh: "📋 复制", en: "📋 Copy" },
     "🏷️ 编辑标签": { zh: "🏷️ 编辑标签", en: "🏷️ Edit Tags" },
     "🌐 一键翻译所有Tag": { zh: "🌐 一键翻译所有Tag", en: "🌐 Translate All Tags" },
@@ -2292,6 +2362,8 @@ function updateLanguage(lang) {
     if (app && app.graph && app.graph.setDirtyCanvas) {
         app.graph.setDirtyCanvas(true, true);
     }
+
+    window.dispatchEvent(new CustomEvent("magic-language-change", { detail: { language: lang } }));
 }
 
 // 监听节点创建事件，自动应用当前语言
@@ -2334,6 +2406,10 @@ let translationObserver = null;
 let translationInterceptorActive = false;
 const TRANSLATED_MARKER = 'data-magic-translated'; // 翻译标记，避免重复翻译
 
+function isManagedTranslation(element) {
+    return Boolean(element?.closest?.('[data-magic-i18n="manual"]'));
+}
+
 // 拦截原生对话框
 let nativeDialogIntercepted = false;
 const originalAlert = window.alert;
@@ -2368,7 +2444,7 @@ function interceptNativeDialogs() {
 
 // 立即翻译元素（供外部调用）
 function translateElementImmediately(element) {
-    if (!element) return;
+    if (!element || isManagedTranslation(element)) return;
     const currentLang = getCurrentLanguage();
     
     // 清除翻译标记，强制重新翻译
@@ -2399,6 +2475,7 @@ function interceptAppendChild() {
     const originalAppendChild = Node.prototype.appendChild;
     Node.prototype.appendChild = function(child) {
         const result = originalAppendChild.call(this, child);
+        if (isManagedTranslation(this) || isManagedTranslation(child)) return result;
         
         // 检查是否是添加到body的固定定位元素（通常是弹窗）
         if (this === document.body && child && child.nodeType === Node.ELEMENT_NODE) {
@@ -2416,6 +2493,7 @@ function interceptAppendChild() {
                             const translateLabels = () => {
                                 const labels = child.querySelectorAll('label');
                                 labels.forEach(label => {
+                                    if (isManagedTranslation(label)) return;
                                     const currentLang = getCurrentLanguage();
                                     let detectedNodeType = "MagicPowerLoraLoader";
                                     const parentText = label.textContent || '';
@@ -2763,7 +2841,7 @@ function setupTranslationInterceptor() {
 
 // 检查元素是否属于需要翻译的节点（LoRA或Logic等）
 function isLoraNodeElement(element) {
-    if (!element) return false;
+    if (!element || isManagedTranslation(element)) return false;
     
     // 检查元素本身是否有 mpl- 类名（LoRA节点）
     if (element.classList) {
@@ -2841,7 +2919,7 @@ function isLoraNodeElement(element) {
 
 // 递归翻译元素及其子元素
 function translateElementRecursive(element, lang, nodeType = null) {
-    if (!element || element.nodeType !== Node.ELEMENT_NODE) return;
+    if (!element || element.nodeType !== Node.ELEMENT_NODE || isManagedTranslation(element)) return;
     
     // 检查是否属于需要翻译的节点（LoRA或Logic等）
     const isTranslatableNode = isLoraNodeElement(element);
@@ -3627,6 +3705,7 @@ function updateAllUITexts(lang) {
     // 特别处理LABEL元素（checkbox/radio标签）
     const labels = document.querySelectorAll('label');
     labels.forEach(label => {
+        if (isManagedTranslation(label)) return;
         // 检查是否是相关元素
         let isRelevant = false;
         if (isLoraNodeElement(label)) {

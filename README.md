@@ -1,4 +1,4 @@
-# ✨ Magic Assistant for ComfyUI
+<img width="2" height="1" alt="image" src="https://github.com/user-attachments/assets/044e31f8-3bd9-4ecc-9d93-668d8d0ce35b" /># ✨ Magic Assistant for ComfyUI
 
 **A powerful 12-in-1 suite designed to simplify your workflow.**
 **一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
@@ -16,7 +16,30 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-10-07**
+> Latest Update / 最新更新：**2026-10-09**
+>
+> **V1.4.6 版本介绍 / Version Introduction** 2026-10-09
+>
+> 1. **✨ 新增节点**: Magic Mask Edit - 统一遮罩裁切、缩放与回贴
+>    * 新增统一的 `MagicMaskEdit` 节点，通过「设置与模板」切换 `crop` 裁切与 `merge` 回贴模式；原有 `Magic Mask Crop & Resize` 与 `Magic Resize & Merge` 保留兼容
+>    * 裁切支持目标尺寸、长边、缩放倍率和保持原尺寸四种等比缩放方式，并提供目标宽高比、正方形、紧贴遮罩等裁切形状
+>    * 支持边缘安全裁切、空遮罩时保留原图或编辑整图、二值／软遮罩、尺寸对齐、多图批次与候选图排列
+>    * 回贴自动使用 `crop_info` 保存的原图、源遮罩、坐标和缩放信息；支持完整画布／去补边内容、仅遮罩区域／整个裁切框、羽化和融合强度
+>    * **New Node**: Added the unified `MagicMaskEdit` node, with `crop` and `merge` modes switched through the Settings & Presets dialog; the legacy crop and merge nodes remain compatible
+>    * Crop mode supports proportional target-size, longest-side, scale-factor, and original-size workflows, with target-ratio, square, and tight-mask shapes
+>    * Added edge-safe crops, preserve-source or full-image handling for empty masks, binary or soft masks, size alignment, batched images, and candidate ordering
+>    * Merge mode restores the original image from `crop_info`, with canvas/content layouts, mask or full-crop blending, feathering, opacity, and saved source-mask coordinates
+>      <img width="951" height="413" alt="Image" src="https://github.com/user-attachments/assets/0f620a92-186f-4787-8b86-55550a31d192" />
+>
+> 2. **🔧 更新**: Magic Power LoRA Loader - 信息检查、批量补全与本地状态管理
+>    * 批量信息窗口新增状态筛选、缺项重查、已有信息更新，以及「标记已整理／恢复自动补全」离线操作；已确认的无来源字段不会被重复请求
+>    * 使用本地检查记录保存 Civitai 来源状态，区分本地文件、来源结果、无效文件、未找到、未匹配和不支持等情况；已有文件默认保留
+>    * 更新过程增加精确版本／哈希匹配、原子写入和文件变化保护；不会覆盖节点中已编辑的触发词、标签、权重、启用状态或排序
+>    * 遇到 Civitai 限流或权限限制时会暂停后续队列并显示重试提示，失败字段可单独重试
+>    * **Improved**: Magic Power LoRA Loader now provides status filters, missing-field rechecks, existing-information updates, and offline “Mark as Organized / Restore Automatic Fill” actions
+>    * Persistent local records distinguish usable local files from source results, invalid files, not-found data, unresolved matches, and unsupported content; confirmed empty results are not fetched repeatedly
+>    * Updates use exact version/hash matching, atomic writes, and file-change guards; edited trigger words, tags, weights, enabled states, and ordering are preserved
+>    * Civitai rate-limit or permission failures pause the remaining queue with retry guidance, and failed fields can be retried independently
 >
 > **V1.4.5 版本介绍 / Version Introduction** 2026-10-07
 >
@@ -35,6 +58,12 @@
 > 2. **🔧 优化**: Magic Cache - 重复运行后的缓存清理
 >    * 多次运行工作流或切换缓存设置后，会更可靠地清理上一次运行留下的缓存状态，减少旧缓存影响后续生成的情况
 >    * **Improved**: Magic Cache now cleans up cache state more reliably after repeated workflow runs or cache-setting changes, reducing stale state from affecting later generations
+>
+> 3. **🐛 修复**: Magic Multi-Function Prompt Box - 隐藏 Tag 状态保存与恢复
+>    * 提示词编辑器现在会持久化完整的 Tag 模型：隐藏 Tag 会从主提示词编辑区移除，但继续保留在下方芯片区，不会进入节点文本、`final_text` 或 conditioning 编码输出
+>    * 关闭编辑弹窗、保存／加载工作流或加入运行队列后，隐藏 Tag、换行和全隐藏状态仍可正确恢复；文本编辑与芯片编辑同步时不再轻易丢失隐藏 Tag
+>    * **Bugfix**: Magic Multi-Function Prompt Box now persists the complete Tag model; hidden Tags are removed from the main prompt editor but remain in the chip area, staying out of node text, `final_text`, and conditioning encoding
+>    * Hidden Tags, line breaks, and fully hidden prompts survive closing the editor, saving/loading workflows, and queue serialization without being dropped during text/chip synchronization
 >
 > **V1.4.4 版本介绍 / Version Introduction** 2026-09-30
 >
@@ -57,6 +86,9 @@
 >    * Remote Danbooru is mainly used for online search in **Edit Tags**; inline autocomplete keeps working when the remote service is temporarily unavailable
 >    * User tag groups are cached to avoid repeated loading, and suggestions are shown in separate **Custom Tags → Danbooru Local Presets** sections
 >    * Improved autocomplete positioning, long-text scrolling, settings collapsing, number inputs, and tag-toolbar interactions for a more stable editing experience
+
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.4.3 版本介绍 / Version Introduction** 2026-09-29
 >
@@ -83,9 +115,6 @@
 >    * 遮罩为空时会自动处理整张图；裁切区域外的原图内容保持不变
 >    * **New Node**: Magic Resize & Merge maps the processed crop back to its original position using `CROP_INFO`
 >    * An optional crop mask enables soft blending, while pixels outside the crop remain unchanged; empty masks fall back to full-image resizing
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.4.2 版本介绍 / Version Introduction** 2026-09-04
 >
@@ -870,20 +899,22 @@
 
 #### 节点概览 / Node Overview
 
-点击节点底部的 **「📝 编辑提示词」** 按钮，打开 **Magic 提示词编辑器** 弹窗。节点支持 `prepend_text` 前置文本接口、`clip` 输入，直接输出 `final_text`、`conditioning` 和 `clip`。以 `*` 开头的段为「屏蔽」：保留在节点内但不参与编码与输出。
+点击节点底部的 **「📝 编辑提示词」** 按钮，打开 **Magic 提示词编辑器** 弹窗。节点支持 `prepend_text` 前置文本接口、`clip` 输入，直接输出 `final_text`、`conditioning` 和 `clip`。在 Tag 芯片区双击即可隐藏／显示 Tag：隐藏后会从主提示词编辑区移除，但仍保留在芯片区以便恢复，也不会参与编码与输出。
 
-Click the **"📝 编辑提示词"** button at the bottom of the node to open the **Magic Prompt Editor** modal. The node supports `prepend_text` input, `clip` input, and outputs `final_text`, `conditioning`, and `clip`. Segments starting with `*` are "masked": kept in the node but excluded from encoding and output.
+Click the **"📝 编辑提示词"** button at the bottom of the node to open the **Magic Prompt Editor** modal. The node supports `prepend_text`, `clip`, and outputs `final_text`, `conditioning`, and `clip`. Double-click a Tag chip to hide or show it; hidden Tags are removed from the main prompt editor while remaining in the chip area for recovery, and are excluded from encoding and output.
 
 #### 编辑 Tab / Edit Tab
 
-* **工具栏**: 格式化、去重、清空全部、清空屏蔽、复制、编辑标签、一键翻译所有 Tag
+* **工具栏**: 格式化、去重、清空全部、清空隐藏、复制、编辑标签、一键翻译所有 Tag
 * **主编辑区**: 支持任意语言输入；Enter 可将短词转为 tag；**WeiLin 风格补全**：输入时显示下拉列表，左侧英文 tag、右侧中文释义，浮层跟随光标；切换 Danbooru 模式后补全列表显示 tag **分类**与**热度**，按热度排序
-* **Tag 卡片区**: 将文本解析为可拖拽卡片，支持修改权重、加 `()` / `[]` / `{}` 括号、删除、排序、双击翻译区域屏蔽、翻译成中文
+* **Tag 卡片区**: 将文本解析为可拖拽卡片，支持修改权重、加 `()` / `[]` / `{}` 括号、删除、排序、双击翻译区域隐藏／显示、翻译成中文
+* **隐藏 Tag 持久化（V1.4.5）**: 隐藏 Tag 保留在完整芯片模型中，但会从主提示词编辑区移除，不进入节点文本、`final_text` 或 conditioning；关闭弹窗、保存／加载工作流和加入运行队列后仍可恢复隐藏状态、换行和全隐藏提示词
 * **单行翻译**: 输入中文或短概念，按 Enter 调用 LLM 译为英文 tag 并插入
 
-* **Toolbar**: Format, Deduplicate, Clear All, Clear Masked, Copy, Edit Tags, One-click Translate All Tags
+* **Toolbar**: Format, Deduplicate, Clear All, Clear Hidden, Copy, Edit Tags, One-click Translate All Tags
 * **Main Editor**: Input any language; Enter converts short words to tags; **WeiLin-style autocomplete**: dropdown with EN tag + CN description, follows cursor; Danbooru mode shows tag **category** and **popularity**, sorted by popularity
-* **Tag Chips**: Parsed into draggable cards; adjust weight, add `()` / `[]` / `{}`, delete, sort, double-click translate area to mask, translate to Chinese
+* **Tag Chips**: Parsed into draggable cards; adjust weight, add `()` / `[]` / `{}`, delete, sort, double-click the translation area to hide/show, translate to Chinese
+* **Hidden-tag persistence (V1.4.5)**: Hidden Tags remain in the complete chip model but are removed from the main prompt editor and stay out of node text, `final_text`, and conditioning; hidden states, line breaks, and fully hidden prompts survive closing the editor, workflow save/load, and queue serialization
 * **Inline Translate**: Type Chinese or concepts, press Enter to LLM-translate to English tags and insert
 
 #### 编辑标签 / Edit Tags Modal
@@ -943,7 +974,8 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 | **格式化 / 去重** | 清理逗号、修复括号、移除重复 tag |
 | **LLM 翻译** | 一键翻译所有 Tag，或单行翻译输入；共享 LLM 配置 |
 | **运行历史** | 工作流成功后自动保存，支持收藏与复用 |
-| **屏蔽机制** | 以 `*` 开头的段不参与输出，便于临时禁用 |
+| **隐藏机制** | 在 Tag 芯片区双击隐藏／显示；隐藏 Tag 从主提示词区移除且不参与输出 |
+| **隐藏状态保存** | 隐藏 Tag、换行和全隐藏提示词可在工作流与运行队列中恢复 |
 | **Danbooru 模式** | 使用本地 Danbooru 预设补全；「编辑标签」可查询远端分类与热度 |
 | **补全开关** | 可在设置中关闭/开启编辑区补全弹窗 |
 
@@ -965,8 +997,9 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **文件夹开关**: 文件夹开关按钮，一键启用/禁用文件夹下所有 lora。
 * **自动权重**: 添加 lora 时自动读取 .log 文件中的 preferred weight 并设置权重。
 * **设置缓存**: 爬取设置自动保存和恢复，方便重复使用。
-* **LoRA 信息批量管理**: 节点底部打开独立弹窗，浏览本地 LoRA 库，按目录、子目录、搜索或手动勾选批量获取触发词、介绍、预览和推荐权重，也可选择当前节点或节点文件夹。显示已有／缺失状态，默认只补缺失；可确认后主动更新已有信息。支持进度、停止及失败重试，不自动修改工作流权重或标签。详见 [需求与使用说明](docs/lora_metadata_batch.md)。
-* **批量信息筛选与安全更新**: 批量窗口支持真实目录、递归子目录、文件名或路径搜索、只看缺失项和手动多选；已有信息默认保留，更新时会写回原位置，并在下载完成后刷新节点中的信息状态。
+* **LoRA 信息批量管理**: 节点底部打开独立弹窗，浏览本地 LoRA 库，按目录、子目录、搜索或手动勾选批量获取触发词、介绍、预览和推荐权重，也可选择当前节点或节点文件夹。显示本地文件与来源检查状态，默认只补待处理项；可确认后更新已有信息。支持进度、停止、失败字段重试，以及离线「标记已整理／恢复自动补全」，不自动修改工作流权重或标签。
+* **批量信息筛选与安全更新**: 批量窗口支持真实目录、递归子目录、文件名或路径搜索、待处理／本地缺项筛选和手动多选；本地已有文件默认保留，更新时写回原位置，并使用本地检查记录避免重复请求已确认的空结果。
+* **来源与写入保护**: Civitai 信息按模型版本与哈希精确匹配；下载使用原子写入并检查 LoRA 或目标文件是否在处理期间发生变化，限流或权限错误会暂停后续队列并提示重试。
 * **LoRA 检测功能**: LoRA 添加窗口新增 LoRA 检测功能，可以根据路径选择全部 LoRA 进行 LoRA 的查重和检测更新。
 * **工作流缺失 LoRA 检测**: 打开工作流或刷新 LoRA 列表时，自动检查已启用的 LoRA 文件是否存在；缺失文件会被 ComfyUI 标记，避免运行时悄悄跳过 LoRA。编辑列表、删除文件或恢复旧工作流后会自动重新检查。
 * **缺失状态即时同步**: 编辑 LoRA 节点设置或刷新列表后，立即同步缺失 LoRA 状态并触发 ComfyUI 官方模型缺失检查。
@@ -987,8 +1020,9 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **Smart Preview Detection**: Automatically finds preview images in `magicloradate` subdirectory or same directory as LoRA files.
 * **Folder Toggle**: One-click toggle button to enable/disable all LoRAs in a folder.
 * **Auto Weight from Log**: Automatically reads preferred weight from .log files when adding LoRAs.
-* **Batch LoRA Information**: Open an independent library dialog from the node footer. Filter by directory, subdirectories or search, select individual files, or use the current node or a node folder. View existing/missing information and fetch trigger words, descriptions, previews and recommended weights. Missing-only is the default; updating existing information requires confirmation. Progress, stopping and retrying failures are supported without changing workflow weights or tags. Stopping finishes the current file before ending the queue.
-* **Filtered and safe batch updates**: The batch dialog supports real directories, recursive subfolders, filename/path search, missing-only filtering, and manual multi-selection. Existing information is preserved by default; updates write back to the original location and refresh the node's information state when downloads finish.
+* **Batch LoRA Information**: Open an independent library dialog from the node footer. Filter by directory, subdirectories or search, select individual files, or use the current node or a node folder. View local-file and source-check states, fetch trigger words, descriptions, previews, and recommended weights, or mark fields as organized offline and restore automatic fill later. Missing or pending information is processed by default; existing files and edited node content are preserved.
+* **Filtered and safe batch updates**: The batch dialog supports real directories, recursive subfolders, filename/path search, pending/local-gap status filters, and manual multi-selection. Confirmed empty source results are cached locally to avoid repeated requests; updates write back to the original location and refresh the node's information state.
+* **Source and write guards**: Civitai metadata is matched by exact model-version or hash identity, written atomically, and protected against LoRA or destination changes during processing. Rate-limit or permission failures pause the remaining queue with retry guidance.
 * **Settings Cache**: Crawl settings are automatically saved and restored for convenient reuse.
 * **LoRA Detection**: New LoRA detection feature in the LoRA adding window; can detect duplicates and check for updates based on paths or select all LoRAs.
 * **Workflow missing-LoRA detection**: When a workflow is opened or the LoRA list is refreshed, enabled LoRA files are checked automatically. Missing files are marked by ComfyUI instead of being silently skipped, and the check refreshes after editing the list, deleting files, or restoring an older workflow.
@@ -1274,51 +1308,63 @@ You can download the image and import into ComfyUI.
 
 </details>
 
-### 12. ✂️ Magic Mask Edit (遮罩裁切、放大与回贴)
-> **Mask-aware crop, edit, resize, and merge workflow.** / **面向局部重绘的遮罩裁切、放大与回贴工作流。**
+### 12. ✂️ Magic Mask Edit (遮罩裁切、缩放与回贴)
+> **Mask-aware crop, edit, resize, and merge workflow.** / **面向局部重绘的遮罩裁切、缩放与回贴工作流。**
 
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
 #### 节点组成 / Nodes
 
-* **Magic Mask Crop & Resize（遮罩裁切并放大）**: 根据输入遮罩的有效区域自动计算正方形裁切范围，并将图像与遮罩缩放到指定尺寸。支持 `padding`、遮罩阈值和多种缩放算法，输出 `cropped_image`、`cropped_mask`、`CROP_INFO` 与 `mask_empty`。
-* **Magic Resize & Merge（裁切缩回并合并）**: 使用上一个节点输出的 `CROP_INFO`，将编辑模型生成的局部结果缩回原图对应位置。可选连接 `cropped_mask` 进行柔和融合，输出最终图像。
+* **Magic Mask Edit（统一节点）**: 同一个节点通过「设置与模板」切换 `crop` 裁切与 `merge` 回贴模式。两个实例即可组成“裁切 → 局部编辑 → 回贴”流程。
+* **裁切模式输出**: `image` 为供编辑模型使用的裁图画布，`mask` 为与画布对齐的模型遮罩，`crop_info` 保存原图、源遮罩、每张图的裁切框与缩放布局，`mask_empty` 表示输入批次是否全部低于检测阈值。
+* **回贴模式输出**: `image` 为恢复原尺寸后的结果，`mask` 为原图坐标中的实际融合强度，`crop_info` 与 `mask_empty` 继续透传，便于后续节点判断和串联。
+* **兼容节点**: **Magic Mask Crop & Resize** 与 **Magic Resize & Merge** 已标记为弃用，仅用于打开旧工作流；它们仍保留注册和旧接口兼容，新流程请使用两个 `MagicMaskEdit` 实例。
 
-* **Magic Mask Crop & Resize**: Automatically computes a square crop around the active mask area and resizes the image and mask to the requested dimensions. Supports `padding`, mask threshold, and multiple upscale methods, and outputs `cropped_image`, `cropped_mask`, `CROP_INFO`, and `mask_empty`.
-* **Magic Resize & Merge**: Uses `CROP_INFO` from the crop node to place the edited result back into its original position. Connect `cropped_mask` optionally for soft blending, then receive the final image.
+* **Magic Mask Edit (unified node)**: Switch one node between `crop` and `merge` in Settings & Presets. Two instances form the complete crop → edit → merge workflow.
+* **Crop outputs**: `image` is the edit-model crop canvas, `mask` is the canvas-aligned model mask, `crop_info` stores the source image, source mask, per-image crop bounds, and resize layout, and `mask_empty` reports whether the whole input batch is below the detection threshold.
+* **Merge outputs**: `image` is restored to the original size, `mask` is the actual blend strength in original-image coordinates, while `crop_info` and `mask_empty` remain available for downstream nodes.
+* **Compatibility nodes**: **Magic Mask Crop & Resize** and **Magic Resize & Merge** are deprecated compatibility interfaces for older workflows. Use two `MagicMaskEdit` instances for new workflows.
 
 #### 核心特性 / Key Features
 
-* **自动定位**: 按整个批次的有效遮罩区域计算共享裁切框，保持同一批图像的裁切元数据一致
-* **正方形裁切**: 自动取包围盒长边并加入 `padding`，适合需要固定宽高输入的局部编辑模型
-* **边缘安全补齐**: 裁切框超出原图时自动补零，靠近边缘的遮罩区域也能完整保留
-* **空遮罩处理**: 没有有效遮罩时，裁切节点改为缩放整图并输出空遮罩；合并节点直接返回整图缩放结果
-* **柔和回贴**: 合并节点可将 `cropped_mask` 作为 alpha 遮罩，平滑融合局部结果并保留裁切范围外的原图
-* **批次兼容**: 支持批次图像与单张遮罩自动匹配，输出尺寸和元数据保持可追踪
+* **裁切定位**: 每张图像独立计算遮罩有效区域和裁切框；支持单张遮罩广播到图像批次，也支持多图逐张裁切。
+* **裁切形状**: `target_ratio` 按目标宽高比扩展，`square` 使用正方形，`tight` 紧贴遮罩包围区域；`padding` 在原图像素中提供上下文留白。
+* **缩放方式**: `target` 按目标宽高范围等比缩放，`longest_side` 按长边缩放，`scale` 按 `scale_factor` 缩放，`none` 保持裁切内容原尺寸；`scale_policy` 可限制仅放大或仅缩小，`size_multiple` 只对齐画布尺寸，不拉伸图像。
+* **插值方法**: `auto` 会按放大或缩小自动选择插值，也可手动选择最近邻、双线性、区域平均、双三次、Lanczos 或 Bislerp。
+* **边缘与遮罩**: 裁切框靠近边缘时向图内移动，不对原图做黑色补边；`binary` 模式缩小时使用细节保留策略，`soft` 模式保留软遮罩渐变。
+* **空遮罩策略**: `preserve` 保留原图并跳过编辑分支，`full_image` 将空遮罩视为整图编辑；`mask_empty` 只报告源遮罩检测结果，整图编辑时仍可能为 `True`。
+* **回贴融合**: 自动使用 `crop_info` 保存的原图、源遮罩、裁切框和缩放布局；`blend_mode=mask` 只融合遮罩区域，`blend_mode=crop` 替换整个裁切框。
+* **输入布局与遮罩**: `input_layout=canvas` 适用于保留补边的完整编辑画布，`content` 适用于已去掉补边的内容；可选外接融合遮罩必须与编辑图使用同一坐标。
+* **羽化与强度**: `feather` 按原图像素向融合区域内渐变并按区域自适应，`blend_opacity=0` 保留原图，`1` 完整应用编辑。
+* **候选批次**: 支持一个编辑结果广播到多个原图，或多个候选结果按 `repeat_batch` 的 `A B A B`、`repeat_each` 的 `A A B B` 顺序对应。
 
-* **Automatic localization**: Computes one shared crop box from the active mask area across the image batch
-* **Square crop**: Uses the longer side of the mask bounding box plus `padding`, which suits edit models that require fixed dimensions
-* **Edge-safe padding**: Pads out-of-bounds crop regions so masks near image edges are not clipped
-* **Empty-mask fallback**: Resizes the full image and returns an empty mask; the merge node then returns the resized full image directly
-* **Soft reintegration**: Uses `cropped_mask` as an alpha mask to blend the edited crop while preserving pixels outside the crop
-* **Batch support**: Matches single-image and batched mask inputs while keeping output dimensions and metadata traceable
+* **Crop localization**: Computes an independent mask region and crop box per image; one mask can be broadcast to an image batch, or each image can use its own mask.
+* **Crop shapes**: `target_ratio` expands to the target aspect ratio, `square` makes a square, and `tight` follows the mask bounds; `padding` keeps source-image context in pixels.
+* **Resize modes**: `target` fits proportionally within target bounds, `longest_side` scales by the longest side, `scale` uses `scale_factor`, and `none` keeps the crop size; `scale_policy` can restrict upscaling or downscaling, while `size_multiple` aligns the canvas without stretching the image.
+* **Interpolation**: `auto` chooses an enlargement or reduction method automatically; manual choices include nearest-exact, bilinear, area, bicubic, Lanczos, and Bislerp.
+* **Edges and masks**: Crop windows move inward at image edges instead of adding black borders; `binary` preserves small selections during reduction, while `soft` preserves mask gradients.
+* **Empty-mask policy**: `preserve` keeps the source and skips the edit branch; `full_image` treats an empty mask as a full-image edit. `mask_empty` reports only source-mask detection and may still be `True` in full-image mode.
+* **Merge blending**: Automatically uses the source image, source mask, crop bounds, and resize layout saved in `crop_info`; `blend_mode=mask` changes only the mask region, while `blend_mode=crop` replaces the entire crop box.
+* **Input layout and masks**: `input_layout=canvas` expects the padded full edit canvas, while `content` expects padding-removed content; an external blend mask must use the same coordinates as the edited input.
+* **Feathering and opacity**: `feather` fades inward in original-image pixels with region-aware adaptation; `blend_opacity=0` preserves the source and `1` fully applies the edit.
+* **Candidate batches**: One edited result can broadcast to multiple originals, or multiple candidates can map as `A B A B` with `repeat_batch` or `A A B B` with `repeat_each`.
 
 #### 使用方法 / How to Use
 
-1. 将原图连接到 **Magic Mask Crop & Resize** 的 `image`，将遮罩连接到可选的 `mask`
-2. 将 `cropped_image` 与 `cropped_mask` 连接到局部重绘或图像编辑模型；保留原图的一条分线
-3. 将采样/编辑结果连接到 **Magic Resize & Merge** 的 `processed_image`
-4. 将原图连接到 `original_image`，并把 `crop_info` 连接到 `crop_info`
-5. 如需柔和融合，将 `cropped_mask` 连接到合并节点的可选输入；最后使用 `image` 输出
+1. 放置两个 **Magic Mask Edit** 节点：前一个设为 `crop`，后一个设为 `merge`
+2. 将原图连接到 `crop` 节点的 `image`，将原图遮罩连接到可选的 `mask`
+3. 将 `crop` 节点输出的 `image` 与 `mask` 接入局部重绘或图像编辑模型；将编辑结果接到 `merge` 节点的 `image`
+4. 将 `crop` 节点的 `crop_info` 直接连接到 `merge` 节点的 `crop_info`；回贴节点会自动取回裁切时保存的原图与坐标
+5. 默认使用 `crop_info` 中保存的源软遮罩回贴；如需整块替换、外接融合遮罩、去补边输入或多候选结果，可在「设置与模板」中切换对应选项
 
-1. Connect the original image to `image` on **Magic Mask Crop & Resize**, then connect the mask to the optional `mask` input
-2. Feed `cropped_image` and `cropped_mask` into your inpainting or image-editing model, while keeping a separate line from the original image
-3. Connect the sampler or editor result to `processed_image` on **Magic Resize & Merge**
-4. Connect the original image to `original_image`, and connect `crop_info` to `crop_info`
-5. For soft blending, connect `cropped_mask` to the merge node's optional input, then use the `image` output
+1. Place two **Magic Mask Edit** nodes: set the first to `crop` and the second to `merge`
+2. Connect the original image to the crop node's `image`, and connect the source mask to its optional `mask`
+3. Feed the crop node's `image` and `mask` outputs into the inpainting or image-editing model, then connect the edited result to the merge node's `image`
+4. Connect the crop node's `crop_info` directly to the merge node's `crop_info`; merge restores the saved source image and geometry automatically
+5. The default blend uses the saved source mask; use Settings & Presets to choose full-crop replacement, an external blend mask, content-only input, or candidate batch ordering
 
-<img width="778" height="452" alt="Image" src="https://github.com/user-attachments/assets/0f6140ce-0c00-473a-a3f4-8c14f9076cc6" />
+<img width="951" height="413" alt="Image" src="https://github.com/user-attachments/assets/0f620a92-186f-4787-8b86-55550a31d192" />
 
 </details>
 
