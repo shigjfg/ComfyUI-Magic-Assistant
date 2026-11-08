@@ -91,7 +91,7 @@ if _SDNQ_SAMPLER_NODE is not None:
 WEB_DIRECTORY = "./web"
 
 print("\n" + "\033[36m" + "="*60 + "\033[0m")
-print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.4.6)\033[0m")
+print(f"\033[36m🔮 [Magic Assistant] 已加载 (V1.4.7)\033[0m")
 print(f"\033[36m   👉 Nodes: {list(NODE_CLASS_MAPPINGS.keys())}\033[0m")
 print("\033[36m" + "="*60 + "\033[0m" + "\n")
 

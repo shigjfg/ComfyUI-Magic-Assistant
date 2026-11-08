@@ -79,6 +79,9 @@ SUPPORTED_MODELS_COEFFICIENTS = {
     # NOTE: These coefficients are a conservative fallback; they still enable TeaCache-style gating on UNet.
     "sdxl": [0.0, 0.0, 0.0, 1.0, 0.0],  # y = x
     "sd15": [0.0, 0.0, 0.0, 1.0, 0.0],  # y = x
+    # Krea2 has no published TeaCache calibration yet. Keep the same
+    # conservative identity fallback used for UNet models.
+    "krea2": [0.0, 0.0, 0.0, 1.0, 0.0],
 }
 
 def poly1d(coefficients, x):
@@ -394,6 +397,193 @@ def teacache_flux_forward(
     img = self.final_layer(img, vec_orig)
     
     return img
+
+def _krea2_original_blocks(blocks):
+    """Return the unwrapped Krea2 block list when FBCache is also active."""
+    if len(blocks) == 0:
+        return blocks
+    first = blocks[0]
+    inner = getattr(first, "transformer_blocks", None)
+    if inner is not None and hasattr(first, "residual_diff_threshold"):
+        return inner
+    return blocks
+
+
+def teacache_krea2_forward(
+        self,
+        x,
+        timesteps,
+        context,
+        attention_mask=None,
+        ref_latents=None,
+        transformer_options={},
+        **kwargs
+    ):
+    """TeaCache forward for ComfyUI's Krea2 SingleStreamDiT model."""
+    transformer_options = (transformer_options or {}).copy()
+    rel_l1_thresh = transformer_options.get("rel_l1_thresh")
+    coefficients = transformer_options.get(
+        "coefficients", [0.0, 0.0, 0.0, 1.0, 0.0])
+    enable_teacache = transformer_options.get("enable_teacache", True)
+    cache_device = transformer_options.get("cache_device", x.device)
+    if rel_l1_thresh is None:
+        enable_teacache = False
+
+    temporal = x.ndim == 5
+    if temporal:
+        b5, c5, t5, h5, w5 = x.shape
+        x = x.reshape(b5 * t5, c5, h5, w5)
+    bs, _, h_orig, w_orig = x.shape
+    patch = self.patch
+
+    context = self._unpack_context(context)
+    img, imgpos, h_, w_ = self.process_img(x)
+    img_tokens = img.shape[1]
+    timestep_zero_index = None
+    ref_method = kwargs.get("ref_latents_method", self.default_ref_method)
+    if ref_method is not None and ref_latents is not None and len(ref_latents) > 0:
+        ref_tokens = []
+        ref_pos = []
+        ref_num_tokens = []
+        for index, ref in enumerate(ref_latents, 1):
+            if ref.ndim == 5:
+                rb, rc, rt, rh5, rw5 = ref.shape
+                ref = ref.reshape(rb * rt, rc, rh5, rw5)
+            ref = comfy.utils.repeat_to_batch_size(ref, bs)
+            kontext, kontext_ids, _, _ = self.process_img(ref, index=index)
+            ref_tokens.append(kontext)
+            ref_pos.append(kontext_ids)
+            ref_num_tokens.append(kontext.shape[1])
+        img = torch.cat([img] + ref_tokens, dim=1)
+        imgpos = torch.cat([imgpos] + ref_pos, dim=1)
+        del ref_tokens, ref_pos
+        if ref_method == "index_timestep_zero":
+            timestep_zero_index = img_tokens
+        transformer_options["reference_image_num_tokens"] = ref_num_tokens
+
+    img = self.first(img)
+    t = self.tmlp(timestep_embedding(
+        timesteps, self.tdim).unsqueeze(1).to(img.dtype))
+    tvec = self.tproj(t)
+    if timestep_zero_index is not None:
+        t0 = self.tmlp(timestep_embedding(
+            torch.zeros_like(timesteps), self.tdim).unsqueeze(1).to(img.dtype))
+        tvec = torch.cat((tvec, self.tproj(t0)), dim=0)
+
+    context = self.txtfusion(
+        context, mask=None, transformer_options=transformer_options)
+    context = self.txtmlp(context)
+    txtlen = context.shape[1]
+    device = context.device
+    txtpos = torch.zeros(bs, txtlen, 3, device=device, dtype=torch.float32)
+
+    patches = transformer_options.get("patches", {})
+    if "post_input" in patches:
+        for p in patches["post_input"]:
+            out = p({
+                "img": img,
+                "txt": context,
+                "img_ids": imgpos,
+                "txt_ids": txtpos,
+                "transformer_options": transformer_options,
+            })
+            img, context = out["img"], out["txt"]
+            imgpos, txtpos = out["img_ids"], out["txt_ids"]
+
+    combined = torch.cat((context, img), dim=1)
+    del context, img
+    if timestep_zero_index is not None:
+        timestep_zero_index += txtlen
+
+    pos = torch.cat((txtpos, imgpos), dim=1)
+    del txtpos, imgpos
+    freqs = self.pe_embedder(pos)
+    del pos
+
+    blocks = self.blocks
+    original_blocks = _krea2_original_blocks(blocks)
+    transformer_options["total_blocks"] = len(original_blocks)
+    transformer_options["block_type"] = "single"
+    transformer_options["img_slice"] = [txtlen, combined.shape[1]]
+
+    # Match the first block's actual modulated input so TeaCache gates on the
+    # same representation the transformer sees.
+    first_block = original_blocks[0]
+    prescale, preshift, _, _, _, _ = first_block.mod(tvec)
+    modulated_inp = first_block.prenorm(combined)
+    if timestep_zero_index is not None:
+        ref_prescale = prescale[bs:]
+        ref_preshift = preshift[bs:]
+        prescale = prescale[:bs]
+        preshift = preshift[:bs]
+        modulated_inp[:, :timestep_zero_index].mul_(1 + prescale).add_(preshift)
+        modulated_inp[:, timestep_zero_index:].mul_(
+            1 + ref_prescale).add_(ref_preshift)
+    else:
+        modulated_inp = (1 + prescale) * modulated_inp + preshift
+    modulated_inp = modulated_inp.to(cache_device)
+
+    if not hasattr(self, 'teacache_state') or 0 not in self.teacache_state:
+        self.teacache_state = {
+            0: {
+                'should_calc': True,
+                'accumulated_rel_l1_distance': 0,
+                'previous_modulated_input': None,
+                'previous_residual': None,
+            }
+        }
+    state = self.teacache_state[0]
+    if state['previous_modulated_input'] is not None:
+        try:
+            denom = state['previous_modulated_input'].abs().mean().clamp_min(1e-8)
+            rel = (modulated_inp - state['previous_modulated_input']).abs().mean() / denom
+            state['accumulated_rel_l1_distance'] += poly1d(
+                coefficients, rel).abs()
+            if state['accumulated_rel_l1_distance'] < rel_l1_thresh:
+                state['should_calc'] = False
+            else:
+                state['should_calc'] = True
+                state['accumulated_rel_l1_distance'] = 0
+        except Exception:
+            state['should_calc'] = True
+            state['accumulated_rel_l1_distance'] = 0
+    state['previous_modulated_input'] = modulated_inp
+
+    should_calc = state['should_calc'] if enable_teacache else True
+    if not should_calc and state['previous_residual'] is not None:
+        combined = combined + state['previous_residual'].to(combined.device)
+    else:
+        ori_combined = combined.to(cache_device)
+        for i, block in enumerate(blocks):
+            transformer_options["block_index"] = i
+            combined = block(
+                combined,
+                tvec,
+                freqs,
+                None,
+                timestep_zero_index=timestep_zero_index,
+                transformer_options=transformer_options,
+            )
+        state['previous_residual'] = combined.to(cache_device) - ori_combined
+
+    final = self.last(combined, t)
+    del combined
+    out = final[:, txtlen:txtlen + img_tokens, :]
+    out = rearrange(
+        out,
+        "b (h w) (c ph pw) -> b c (h ph) (w pw)",
+        h=h_,
+        w=w_,
+        ph=patch,
+        pw=patch,
+        c=self.channels,
+    )
+    out = out[:, :, :h_orig, :w_orig]
+    if temporal:
+        out = out.reshape(
+            b5, t5, self.channels, h_orig, w_orig).movedim(1, 2)
+    return out
+
 
 # 其他TeaCache forward函数（简化，只包含关键部分）
 def teacache_hidream_forward(self, x, t, y=None, context=None, encoder_hidden_states_llama3=None, image_cond=None, control=None, transformer_options={}):
@@ -1388,6 +1578,7 @@ class CachedTransformerBlocks(torch.nn.Module):
         return_hidden_states_only=False,
         clone_original_hidden_states=False,
         has_timestep_embedding_arg=False,
+        update_block_index=False,
     ):
         super().__init__()
         self.transformer_blocks = transformer_blocks
@@ -1400,8 +1591,21 @@ class CachedTransformerBlocks(torch.nn.Module):
         self.return_hidden_states_only = return_hidden_states_only
         self.clone_original_hidden_states = clone_original_hidden_states
         self.has_timestep_embedding_arg = has_timestep_embedding_arg
+        self.update_block_index = update_block_index
+
+    def _set_block_index(self, index, kwargs):
+        if not self.update_block_index:
+            return
+        transformer_options = kwargs.get("transformer_options")
+        if isinstance(transformer_options, dict):
+            transformer_options["block_index"] = index
 
     def forward(self, *args, **kwargs):
+        if self.update_block_index:
+            transformer_options = kwargs.get("transformer_options")
+            if isinstance(transformer_options, dict):
+                transformer_options["total_blocks"] = len(self.transformer_blocks)
+
         img_arg_name = None
         if "img" in kwargs:
             img_arg_name = "img"
@@ -1464,7 +1668,8 @@ class CachedTransformerBlocks(torch.nn.Module):
             timestep_embedding = None
         
         if self.residual_diff_threshold <= 0.0:
-            for block in self.transformer_blocks:
+            for index, block in enumerate(self.transformer_blocks):
+                self._set_block_index(index, kwargs)
                 if self.has_timestep_embedding_arg:
                     hidden_states = block(hidden_states, timestep_embedding, encoder_hidden_states, *args, **kwargs)
                 elif txt_arg_name == "encoder_hidden_states":
@@ -1494,6 +1699,7 @@ class CachedTransformerBlocks(torch.nn.Module):
         if self.clone_original_hidden_states:
             original_hidden_states = original_hidden_states.clone()
         first_transformer_block = self.transformer_blocks[0]
+        self._set_block_index(0, kwargs)
         if self.has_timestep_embedding_arg:
             hidden_states = first_transformer_block(hidden_states, timestep_embedding, encoder_hidden_states, *args, **kwargs)
         elif txt_arg_name == "encoder_hidden_states":
@@ -1541,7 +1747,8 @@ class CachedTransformerBlocks(torch.nn.Module):
         if self.clone_original_hidden_states:
             original_hidden_states = original_hidden_states.clone()
             original_encoder_hidden_states = original_encoder_hidden_states.clone()
-        for block in self.transformer_blocks[1:]:
+        for index, block in enumerate(self.transformer_blocks[1:], start=1):
+            self._set_block_index(index, kwargs)
             if self.has_timestep_embedding_arg:
                 hidden_states = block(hidden_states, timestep_embedding, encoder_hidden_states, *args, **kwargs)
             elif txt_arg_name == "encoder_hidden_states":
@@ -2390,6 +2597,10 @@ class MagicCache:
             self.log(f"检测到 UNetModel，TeaCache model_type 从 '{model_type}' 自动切换为 'sdxl'（可在UI选择 sd15/SDXL）", "warning")
             model_type = "sdxl"
 
+        if diffusion_model.__class__.__name__ == "SingleStreamDiT" and model_type != "krea2":
+            self.log(f"检测到 Krea2 SingleStreamDiT，TeaCache model_type 从 '{model_type}' 自动切换为 'krea2'", "warning")
+            model_type = "krea2"
+
         if model_type not in SUPPORTED_MODELS_COEFFICIENTS:
             supported_types = ", ".join(SUPPORTED_MODELS_COEFFICIENTS.keys())
             error_msg = f"不支持的模型类型: {model_type}。支持的类型: {supported_types}"
@@ -2422,6 +2633,19 @@ class MagicCache:
                 return patch.multiple(
                     current_model,
                     forward=teacache_flux_forward.__get__(
+                        current_model, current_model.__class__)
+                )
+        elif "krea2" in model_type or diffusion_model.__class__.__name__ == "SingleStreamDiT":
+            is_cfg = False
+            # Patch _forward instead of forward so Krea2's WrapperExecutor
+            # keeps DIFFUSION_MODEL wrappers intact.
+            def context_factory(model_ref=diffusion_model_ref):
+                current_model = model_ref()
+                if current_model is None:
+                    return contextlib.nullcontext()
+                return patch.multiple(
+                    current_model,
+                    _forward=teacache_krea2_forward.__get__(
                         current_model, current_model.__class__)
                 )
         elif "lumina_2" in model_type:
@@ -2777,9 +3001,16 @@ class MagicCache:
 
             # Check if this is an Anima model (or similar model that uses three positional args)
             model_class_name = diffusion_model.__class__.__name__
+            is_krea2 = model_class_name == "SingleStreamDiT"
             has_timestep_embedding_arg = is_anima or model_class_name in ["Anima", "CosmosPredict2"]
             # Anima models return only hidden_states (single tensor), not a tuple
             is_anima_model = has_timestep_embedding_arg
+            returns_hidden_states_only = (
+                model_class_name == "LTXVModel" or
+                is_non_native_ltxv or
+                is_anima_model or
+                is_krea2
+            )
             
             cached_transformer_blocks = torch.nn.ModuleList([
                 CachedTransformerBlocks(
@@ -2790,11 +3021,12 @@ class MagicCache:
                     residual_diff_threshold=residual_diff_threshold,
                     validate_can_use_cache_function=validate_use_cache,
                     cat_hidden_states_first=model_class_name == "HunyuanVideo",
-                    return_hidden_states_only=model_class_name == "LTXVModel" or is_non_native_ltxv or is_anima_model,
+                    return_hidden_states_only=returns_hidden_states_only,
                     clone_original_hidden_states=model_class_name == "LTXVModel",
                     return_hidden_states_first=model_class_name != "OpenAISignatureMMDITWrapper",
                     accept_hidden_states_first=model_class_name != "OpenAISignatureMMDITWrapper",
                     has_timestep_embedding_arg=has_timestep_embedding_arg,
+                    update_block_index=is_krea2,
                 )
             ])
             dummy_single_transformer_blocks = torch.nn.ModuleList()
@@ -2910,8 +3142,14 @@ class MagicCache:
                     single_blocks_name = "single_blocks"
                 
                 is_anima = model_class_name == "Anima"
+                is_krea2 = model_class_name == "SingleStreamDiT"
                 has_timestep_embedding_arg = is_anima or model_class_name in ["Anima", "CosmosPredict2"]
                 is_anima_model = has_timestep_embedding_arg
+                returns_hidden_states_only = (
+                    model_class_name == "LTXVModel" or
+                    is_anima_model or
+                    is_krea2
+                )
                 
                 cached_transformer_blocks = torch.nn.ModuleList([
                     CachedTransformerBlocks(
@@ -2922,11 +3160,12 @@ class MagicCache:
                         residual_diff_threshold=residual_diff_threshold,
                         validate_can_use_cache_function=validate_use_cache,
                         cat_hidden_states_first=model_class_name == "HunyuanVideo",
-                        return_hidden_states_only=model_class_name == "LTXVModel" or is_anima_model,
+                        return_hidden_states_only=returns_hidden_states_only,
                         clone_original_hidden_states=model_class_name == "LTXVModel",
                         return_hidden_states_first=model_class_name != "OpenAISignatureMMDITWrapper",
                         accept_hidden_states_first=model_class_name != "OpenAISignatureMMDITWrapper",
                         has_timestep_embedding_arg=has_timestep_embedding_arg,
+                        update_block_index=is_krea2,
                     )
                 ])
                 dummy_single_transformer_blocks = torch.nn.ModuleList()

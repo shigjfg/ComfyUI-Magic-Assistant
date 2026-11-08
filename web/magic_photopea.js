@@ -484,7 +484,7 @@ function showPhotopeaModal(node) {
     win = document.createElement("div");
     win.id = WIN_ID;
     win.dataset.currentNodeId = node.id;
-    win.style.cssText = `position: fixed; top: 5%; left: 5%; width: 90%; height: 85%; min-width: 800px; min-height: 600px; background: #1e1e1e; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,0.9); z-index: 9000; display: flex; flex-direction: column; border-radius: 8px; resize: both; overflow: hidden;`;
+    win.style.cssText = `position: fixed; top: 5vh; left: 5vw; width: 90vw; height: 85vh; min-width: min(800px, calc(90vw - 16px)); min-height: min(600px, calc(85vh - 16px)); max-width: calc(100vw - var(--mp-left, 5vw) - 8px); max-height: calc(100vh - var(--mp-top, 5vh) - 8px); box-sizing: border-box; background: #1e1e1e; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,0.9); z-index: 9000; display: flex; flex-direction: column; border-radius: 8px; resize: both; overflow: hidden;`;
 
     // Header
     const header = document.createElement("div");
@@ -499,7 +499,7 @@ function showPhotopeaModal(node) {
         if (win.dataset.isMaximized !== "true") {
             win.dataset.prevStyle = win.style.cssText; win.dataset.isMaximized = "true";
             win.style.top = "0"; win.style.left = "0"; win.style.width = "100vw"; win.style.height = "100vh";
-            win.style.resize = "none"; maxBtn.textContent = "❐";
+            win.style.resize = "none"; win.style.maxWidth = "none"; win.style.maxHeight = "none"; maxBtn.textContent = "❐";
         } else {
             win.style.cssText = win.dataset.prevStyle; win.dataset.isMaximized = "false"; maxBtn.textContent = "⬜";
         }
@@ -517,7 +517,7 @@ function showPhotopeaModal(node) {
     const ppConfig = { "files": [], "environment": { "theme": 2, "lang": "zh", "vmode": 0, "intro": false, "menus": [1,1,1,1,1,1,1,1,1] } };
     const hash = encodeURIComponent(JSON.stringify(ppConfig));
     iframe.src = `https://www.photopea.com#${hash}`;
-    iframe.style.cssText = "flex: 1; border: none; background: #181818; width: 100%;";
+    iframe.style.cssText = "flex: 1 1 0%; min-width: 0; min-height: 0; border: none; background: #181818; width: 100%; display: block;";
     
     // Auto-Load
     iframe.onload = async () => {
@@ -585,17 +585,30 @@ function showPhotopeaModal(node) {
     });
 
     let isDragging = false; let startX, startY, startLeft, startTop;
-    win.addEventListener("pointerdown", (e) => {
-        if (["BUTTON","INPUT","IFRAME","SELECT"].includes(e.target.tagName)) return;
+    header.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || e.target.closest("button")) return;
         if (win.dataset.isMaximized === "true") return;
-        isDragging = true; startX = e.clientX; startY = e.clientY; startLeft = win.offsetLeft; startTop = win.offsetTop;
-        win.setPointerCapture(e.pointerId);
+        const rect = win.getBoundingClientRect();
+        isDragging = true; startX = e.clientX; startY = e.clientY; startLeft = rect.left; startTop = rect.top;
+        e.preventDefault();
+        header.setPointerCapture(e.pointerId);
     });
-    win.addEventListener("pointermove", (e) => {
+    header.addEventListener("pointermove", (e) => {
         if (!isDragging) return;
-        win.style.left = (startLeft + (e.clientX - startX)) + "px"; win.style.top = (startTop + (e.clientY - startY)) + "px";
+        const rect = win.getBoundingClientRect();
+        const maxLeft = Math.max(0, window.innerWidth - rect.width);
+        const maxTop = Math.max(0, window.innerHeight - rect.height);
+        const left = Math.min(maxLeft, Math.max(0, startLeft + e.clientX - startX));
+        const top = Math.min(maxTop, Math.max(0, startTop + e.clientY - startY));
+        win.style.left = `${left}px`; win.style.top = `${top}px`;
+        win.style.setProperty("--mp-left", `${left}px`); win.style.setProperty("--mp-top", `${top}px`);
     });
-    win.addEventListener("pointerup", (e) => { isDragging = false; win.releasePointerCapture(e.pointerId); });
+    const stopDragging = (e) => {
+        isDragging = false;
+        if (header.hasPointerCapture(e.pointerId)) header.releasePointerCapture(e.pointerId);
+    };
+    header.addEventListener("pointerup", stopDragging);
+    header.addEventListener("pointercancel", stopDragging);
 }
 
 // ============================================================

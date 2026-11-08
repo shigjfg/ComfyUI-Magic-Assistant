@@ -209,7 +209,7 @@ app.registerExtension({
                 
                 // TeaCache设置区域
                 const teacacheSection = this.createSettingsSection(content, t("TeaCache 设置"), this.properties["teacache_params"], [
-                    { key: "model_type", label: t("模型类型"), type: "select", options: ["flux", "flux-kontext", "flux-klein-9b", "flux-klein-4b", "flux-klein-9b-sdnq", "flux-klein-4b-sdnq", "anima", "sdxl", "sd15", "ltxv", "lumina_2", "hunyuan_video", "hidream_i1_full", "hidream_i1_dev", "hidream_i1_fast", "wan2.1_t2v_1.3B", "wan2.1_t2v_14B", "wan2.1_i2v_480p_14B", "wan2.1_i2v_720p_14B", "wan2.1_t2v_1.3B_ret_mode", "wan2.1_t2v_14B_ret_mode", "wan2.1_i2v_480p_14B_ret_mode", "wan2.1_i2v_720p_14B_ret_mode"] },
+                    { key: "model_type", label: t("模型类型"), type: "select", options: ["flux", "flux-kontext", "flux-klein-9b", "flux-klein-4b", "flux-klein-9b-sdnq", "flux-klein-4b-sdnq", "anima", "krea2", "sdxl", "sd15", "ltxv", "lumina_2", "hunyuan_video", "hidream_i1_full", "hidream_i1_dev", "hidream_i1_fast", "wan2.1_t2v_1.3B", "wan2.1_t2v_14B", "wan2.1_i2v_480p_14B", "wan2.1_i2v_720p_14B", "wan2.1_t2v_1.3B_ret_mode", "wan2.1_t2v_14B_ret_mode", "wan2.1_i2v_480p_14B_ret_mode", "wan2.1_i2v_720p_14B_ret_mode"] },
                     { key: "rel_l1_thresh", label: t("缓存强度阈值"), type: "number", min: 0.0, max: 10.0, step: 0.01 },
                     { key: "start_percent", label: t("开始百分比"), type: "number", min: 0.0, max: 1.0, step: 0.01 },
                     { key: "end_percent", label: t("结束百分比"), type: "number", min: 0.0, max: 1.0, step: 0.01 },
@@ -613,7 +613,7 @@ app.registerExtension({
                                 
                                 <h3 style="color: #6ab7ff; margin-top: 20px;">${t("支持的模型")}</h3>
                                 <p style="color: #ddd; margin: 10px 0;">
-                                    ${t("FLUX、PuLID-FLUX、FLUX-Kontext、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、SDXL、SD1.5 等。")}
+                                    ${t("FLUX、PuLID-FLUX、FLUX-Kontext、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、Krea2、SDXL、SD1.5 等。")}
                                 </p>
                                 
                                 <div style="margin-top: 15px; padding: 12px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #ff9800;">
@@ -623,6 +623,7 @@ app.registerExtension({
                                     <ul style="margin: 0; padding-left: 20px; color: #ddd; font-size: 14px;">
                                         <li><strong style="color: #4CAF50;">${t("flux2klein")}</strong> - ${t("已支持")}</li>
                                         <li><strong style="color: #4CAF50;">${t("最新 Anima 模型")}</strong> - ${t("已支持")}</li>
+                                        <li><strong style="color: #4CAF50;">${t("Krea2")}</strong> - ${t("已支持")}</li>
                                         <li><strong style="color: #4CAF50;">${t("SDXL 模型")}</strong> - ${t(" - 已支持（原项目不支持）")}</li>
                                     </ul>
                                 </div>
@@ -673,7 +674,7 @@ app.registerExtension({
                                 
                                 <h3 style="color: #6ab7ff; margin-top: 20px;">${t("支持的模型")}</h3>
                                 <p style="color: #ddd; margin: 10px 0;">
-                                    ${t("支持 UNetModel（SDXL、SD3.5 等）、Flux、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。")}
+                                    ${t("支持 UNetModel（SDXL、SD3.5 等）、Flux、Krea2、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。")}
                                 </p>
                                 
                                 <div style="margin-top: 15px; padding: 12px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #ff9800;">
@@ -683,6 +684,7 @@ app.registerExtension({
                                     <ul style="margin: 0; padding-left: 20px; color: #ddd; font-size: 14px;">
                                         <li><strong style="color: #4CAF50;">${t("flux2klein")}</strong> - ${t("已支持")}</li>
                                         <li><strong style="color: #4CAF50;">${t("最新 Anima 模型")}</strong> - ${t("已支持")}</li>
+                                        <li><strong style="color: #4CAF50;">${t("Krea2")}</strong> - ${t("已支持")}</li>
                                     </ul>
                                 </div>
                                 

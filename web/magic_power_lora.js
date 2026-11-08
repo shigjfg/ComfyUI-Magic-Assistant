@@ -470,6 +470,41 @@ function mplGetSubfolderNames(folderTree, pathParts) {
     return Object.keys(map).sort();
 }
 
+// 「添加 Lora」/「LoRA 检测」弹窗的浏览状态：记住上次打开的文件夹、全部模式与自动添加触发词开关
+const MPL_BROWSER_STATE_KEY = "magic_power_lora_browser_state";
+
+function mplLoadBrowserState() {
+    let saved = {};
+    try {
+        saved = JSON.parse(localStorage.getItem(MPL_BROWSER_STATE_KEY) || "{}") || {};
+    } catch (error) { saved = {}; }
+    return {
+        path: Array.isArray(saved.path) ? saved.path.filter(p => typeof p === "string" && p) : [],
+        showAll: saved.showAll === true,
+        // 默认开启：未保存过时为 true，用户手动关闭后记住关闭状态
+        autoAddTag: saved.autoAddTag !== false,
+    };
+}
+
+function mplSaveBrowserState(patch) {
+    try {
+        const next = Object.assign({}, mplLoadBrowserState(), patch || {});
+        localStorage.setItem(MPL_BROWSER_STATE_KEY, JSON.stringify(next));
+    } catch (error) { /* localStorage 不可用时忽略 */ }
+}
+
+/** 截断到目录树中仍存在的最深路径（文件夹被删除/改名时自动回退） */
+function mplSanitizeFolderPath(folderTree, pathParts) {
+    const valid = [];
+    let map = folderTree || {};
+    for (const p of pathParts || []) {
+        if (!map || !Object.prototype.hasOwnProperty.call(map, p)) break;
+        valid.push(p);
+        map = map[p].folders || {};
+    }
+    return valid;
+}
+
 app.registerExtension({
     name: "Magic.Power.Lora",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
@@ -4724,11 +4759,12 @@ app.registerExtension({
                         }
                     });
                     
-                    // 当前路径状态
-                    let currentPath = [];
+                    // 当前路径状态（恢复上次打开的文件夹 / 全部模式 / 自动添加触发词开关）
+                    const savedBrowserState = mplLoadBrowserState();
+                    let currentPath = mplSanitizeFolderPath(folderTree, savedBrowserState.path);
                     let selectedFiles = new Set();
-                    let autoAddTag = false;
-                    let showAllMode = false; // 全部模式：显示所有lora，不按路径分类
+                    let autoAddTag = savedBrowserState.autoAddTag;
+                    let showAllMode = savedBrowserState.showAll; // 全部模式：显示所有lora，不按路径分类
                     
                     const dialog = document.createElement("div");
                     // 初始居中定位，拖拽后会改为transform定位
@@ -4778,6 +4814,11 @@ app.registerExtension({
                             renderContent();
                         }
                     };
+                    // 恢复上次的「全部」模式时同步按钮外观
+                    if (showAllMode) {
+                        allTab.textContent = "取消全部";
+                        allTab.style.cssText = "padding:4px 8px;background:#f44336;border:1px solid #f44336;border-radius:4px;color:#fff;cursor:pointer;font-size:12px;";
+                    }
                     pathBar.appendChild(allTab);
                     
                     const pathDisplay = document.createElement("div");
@@ -4926,6 +4967,7 @@ app.registerExtension({
                     
                     toggleInput.onchange = (e) => {
                         autoAddTag = e.target.checked;
+                        mplSaveBrowserState({ autoAddTag });
                         if (autoAddTag) {
                             toggleSlider.style.backgroundColor = "#4CAF50";
                             toggleKnob.style.transform = "translateX(20px)";
@@ -5200,6 +5242,9 @@ app.registerExtension({
                     const renderContent = () => {
                         content.innerHTML = "";
                         const filter = search.value.toLowerCase();
+                        
+                        // 记住当前文件夹 / 全部模式，下次打开弹窗时恢复
+                        mplSaveBrowserState({ path: currentPath.slice(), showAll: showAllMode });
                         
                         // 更新路径显示
                         updatePathDisplay();
@@ -5477,8 +5522,10 @@ app.registerExtension({
 
             nodeType.prototype.showLoraDetectModal = async function(opts) {
                 opts = opts || {};
-                let currentPath = Array.isArray(opts.initialPath) ? opts.initialPath.slice() : [];
-                let showAllMode = !!opts.initialShowAll;
+                const savedBrowserState = mplLoadBrowserState();
+                // 从「添加 Lora」打开时沿用其当前路径，否则恢复上次记住的文件夹
+                let currentPath = Array.isArray(opts.initialPath) ? opts.initialPath.slice() : savedBrowserState.path;
+                let showAllMode = typeof opts.initialShowAll === "boolean" ? opts.initialShowAll : savedBrowserState.showAll;
                 let allFiles = opts.allFiles;
                 let folderTree = opts.folderTree;
                 try {
@@ -5489,6 +5536,7 @@ app.registerExtension({
                         const built = buildMplFolderTree(allFiles);
                         folderTree = built.folderTree;
                     }
+                    currentPath = mplSanitizeFolderPath(folderTree, currentPath);
 
                     // 直接挂 body，不用 overlay（参考 magic_resolution.js 的做法）
                     const dialog = document.createElement("div");
@@ -5546,6 +5594,8 @@ app.registerExtension({
                     };
 
                     const updateScopeUI = () => {
+                        // 与「添加 Lora」共用同一份记忆：检测弹窗里切换的文件夹下次也会恢复
+                        mplSaveBrowserState({ path: currentPath.slice(), showAll: showAllMode });
                         if (showAllMode) {
                             scopeHint.textContent = "检测范围：全部 LoRA 文件（可能较慢）";
                             allTab.textContent = "取消全部";

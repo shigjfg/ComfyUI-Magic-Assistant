@@ -3,16 +3,8 @@ import math
 import os
 import sys
 
-# --- 引用 utils ---
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
-try:
-    from utils import MagicUtils
-except ImportError:
-    from ..utils import MagicUtils
+# --- 引用 utils（包内相对导入，避免与其他插件的顶层 utils 包冲突）---
+from ..utils import MagicUtils
 
 class MagicLogicCompute:
     @classmethod

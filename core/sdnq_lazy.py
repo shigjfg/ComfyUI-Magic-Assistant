@@ -27,13 +27,17 @@ _SDNQ_SUBMODULES = (
 
 
 def _load_sdnq_submodule(name: str):
-    """Lazily import and cache a core.sdnq_* submodule."""
+    """Lazily import and cache a core.sdnq_* submodule.
+
+    Always resolves relative to this plugin's own ``core`` package
+    (``__package__``), never the global top-level ``core`` name, which other
+    custom nodes (e.g. ComfyUI-DanbooruSearcher) may already occupy.
+    """
     if name in _SDNQ_SUBMODULES:
-        full = f"core.{name}"
+        full = f"{__package__}.{name}" if __package__ else name
     else:
         full = name
     if full not in sys.modules:
-        import core
         importlib.import_module(full)
     return sys.modules[full]
 

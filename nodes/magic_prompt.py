@@ -10,26 +10,11 @@ from urllib.parse import urlsplit
 
 import requests
 
-# --- 关键修复：正确引用上级目录的 utils ---
-# 获取当前文件所在目录 (custom_nodes/magic_assistant/nodes)
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 获取父级目录 (custom_nodes/magic_assistant)
-parent_dir = os.path.dirname(current_dir)
-
-# 将父级目录临时加入系统路径，以便可以 import utils
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
-try:
-    from utils import MagicUtils
-except ImportError:
-    # 如果还是失败，尝试相对导入 (虽然在动态加载中不稳定，但作为备选)
-    from ..utils import MagicUtils
-
-try:
-    from core.local_prompt import generate_local_prompt, llama_cpp_backend_available, unload_local_prompt_models
-except ImportError:
-    from ..core.local_prompt import generate_local_prompt, llama_cpp_backend_available, unload_local_prompt_models
+# 始终使用包内相对导入：顶层 core / utils 是常见包名，其他插件
+# （如 ComfyUI-DanbooruSearcher）可能已在 sys.modules 中注册同名模块，
+# 使用 `from core...` / `from utils...` 会加载到错误的包。
+from ..utils import MagicUtils
+from ..core.local_prompt import generate_local_prompt, llama_cpp_backend_available, unload_local_prompt_models
 
 
 class MagicPromptReplace:

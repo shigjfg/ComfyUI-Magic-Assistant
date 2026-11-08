@@ -33,10 +33,8 @@ try:
 except ImportError:
     CV2_AVAILABLE = False
 
-try:
-    from utils import MagicUtils
-except ImportError:
-    from ..utils import MagicUtils
+# 包内相对导入，避免与其他插件的顶层 utils 包冲突
+from ..utils import MagicUtils
 
 # Load the independent standard-library helper without executing core's SDNQ exports.
 # ComfyUI may import this plugin under a generated package name, with no root on sys.path.

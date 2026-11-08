@@ -34,7 +34,7 @@ _ENVIRONMENT_CHECKED = False
 
 @PromptServer.instance.routes.get("/ma/klein/check_env")
 async def ma_klein_check_env(request):
-    from core.klein_wrapper import check_environment
+    from ..core.klein_wrapper import check_environment
 
     try:
         env = check_environment()
@@ -46,7 +46,7 @@ async def ma_klein_check_env(request):
 
 @PromptServer.instance.routes.post("/ma/klein/patch_env")
 async def ma_klein_patch_env(request):
-    from core.klein_wrapper import install_wrapper_to_nunchaku, check_environment
+    from ..core.klein_wrapper import install_wrapper_to_nunchaku, check_environment
 
     try:
         body = await request.json() if request.can_read_body else {}
@@ -81,7 +81,7 @@ def _ensure_nunchaku_environment() -> bool:
     if _ENVIRONMENT_CHECKED:
         return True
 
-    from core.klein_wrapper import check_environment, install_wrapper_to_nunchaku
+    from ..core.klein_wrapper import check_environment, install_wrapper_to_nunchaku
 
     env = check_environment()
 

@@ -3,15 +3,8 @@ import sys
 
 import comfy.utils
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
-try:
-    from utils import MagicUtils
-except ImportError:
-    from ..utils import MagicUtils
+# 包内相对导入，避免与其他插件的顶层 utils 包冲突
+from ..utils import MagicUtils
 
 class MagicResolutionResize:
     @classmethod

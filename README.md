@@ -16,7 +16,32 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-10-09**
+> Latest Update / 最新更新：**2026-11-08**
+>
+> **V1.4.7 版本介绍 / Version Introduction** 2026-11-08
+>
+> 1. **🛡️ 稳定性提升**: 彻底解决与其他插件冲突报错（全节点兼容性增强）
+>    * 彻底改进了底层模块的加载机制，不再改写 ComfyUI 全局运行路径
+>    * 解决了与 `ComfyUI-DanbooruSearcher` 等常见插件同时安装时可能出现的冲突、报错或启动失败问题，无论安装多少扩展都能和平稳定共存
+>    * **Stability**: Completely refactored internal module loading to avoid interfering with the global environment
+>    * Fixes startup and import conflicts when installed alongside third-party custom nodes (such as `ComfyUI-DanbooruSearcher`)
+>
+> 2. **⚡ 性能加速**: Magic Cache - 新增 Krea2 模型极速缓存支持
+>    * 多功能缓存加速节点现已正式适配最新的 **Krea2** 模型架构
+>    * 在几乎不损失画面质量的前提下，智能跳过冗余计算步骤，大幅缩短生成等待时间、提高出图速度
+>    * **New Support**: Magic Cache now officially supports the new **Krea2** model architecture
+>    * Enjoy substantially faster generation speeds with intelligent step caching while maintaining pristine output quality
+>
+> 3. **💡 体验优化**: Magic Power LoRA Loader - 弹窗增加「浏览状态记忆」
+>    * 打开「添加 LoRA」和「LoRA 检测」弹窗时，会自动记住您上次浏览的**文件夹路径**、是否处于**全部模式**，以及**自动添加触发词**开关
+>    * 重新打开弹窗时直接停留在上次常用的目录，不必每次从根目录一层层翻找；若目录被移动或删除，会自动安全回退到有效目录，绝不报错
+>    * **Improved**: Magic Power LoRA Loader now remembers your last opened folder, "Show All" view mode, and the "Auto-add Trigger Words" toggle
+>    * Reopening the dialog lands you straight back where you left off; deleted or renamed folders automatically fall back safely
+>
+> 4. **🎨 界面优化**: Magic Photopea - 画板弹窗自适应与拖拽保护
+>    * 内置修图画板弹窗现在会根据屏幕分辨率自适应弹性缩放，并在不同窗口尺寸下均能居中显示
+>    * 增加拖拽边界碰撞保护，防止窗口不小心被拖到屏幕外找不到
+>    * **UI Polish**: Magic Photopea modal now features adaptive viewport scaling and drag boundary constraints, preventing the dialog from being dragged offscreen
 >
 > **V1.4.6 版本介绍 / Version Introduction** 2026-10-09
 >
@@ -65,6 +90,9 @@
 >    * **Bugfix**: Magic Multi-Function Prompt Box now persists the complete Tag model; hidden Tags are removed from the main prompt editor but remain in the chip area, staying out of node text, `final_text`, and conditioning encoding
 >    * Hidden Tags, line breaks, and fully hidden prompts survive closing the editor, saving/loading workflows, and queue serialization without being dropped during text/chip synchronization
 >
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.4.4 版本介绍 / Version Introduction** 2026-09-30
 >
 > 1. **✨ 新增**: Magic Multi-Function AI Prompt Replace - 图像参考与本地提示词优化
@@ -86,10 +114,7 @@
 >    * Remote Danbooru is mainly used for online search in **Edit Tags**; inline autocomplete keeps working when the remote service is temporarily unavailable
 >    * User tag groups are cached to avoid repeated loading, and suggestions are shown in separate **Custom Tags → Danbooru Local Presets** sections
 >    * Improved autocomplete positioning, long-text scrolling, settings collapsing, number inputs, and tag-toolbar interactions for a more stable editing experience
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
-
+>
 > **V1.4.3 版本介绍 / Version Introduction** 2026-09-29
 >
 > 1. **🐛 修复**: Magic Photopea - 官方 Mask Editor 文件读取
@@ -1067,13 +1092,13 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 >
 >* **三种优化模式**: 可选择 TeaCache、FBCache 或 Both 模式来加速图片生成。Both 模式同时使用两种技术，速度最快。
 >* **简单配置**: 通过设置弹窗轻松调整缓存参数，无需修改复杂代码。
->* **广泛支持**: 支持 FLUX、SDXL、SD1.5、Anima 等多种主流模型。
+>* **广泛支持**: 支持 FLUX、SDXL、SD1.5、Anima、Krea2 等多种主流模型。
 >* **性能提升**: 通常可实现 1.5 倍到 3 倍的生成加速，同时保持图片质量。
 >* **智能缓存**: 自动跳过重复计算，在合适的时候复用缓存结果，节省时间。
 >
 >* **Three Optimization Modes**: Choose from TeaCache, FBCache, or Both modes to accelerate your image generation. Both mode combines both techniques for maximum speed.
 >* **Easy Configuration**: Simple settings dialog to adjust cache parameters without diving into complex code.
->* **Wide Model Support**: Works with FLUX, SDXL, SD1.5, Anima, and many other popular models.
+>* **Wide Model Support**: Works with FLUX, SDXL, SD1.5, Anima, Krea2, and many other popular models.
 >* **Performance Boost**: Typically achieves 1.5x to 3x faster generation speed while maintaining image quality.
 >* **Smart Caching**: Automatically skips redundant calculations by reusing cached results when appropriate.
 >
@@ -1095,11 +1120,11 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 >
 >#### 支持的模型 / Supported Models
 >
->**TeaCache 支持**：FLUX、FLUX-Kontext、FLUX-Klein、PuLID-FLUX、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、SDXL、SD1.5 等。
+>**TeaCache 支持**：FLUX、FLUX-Kontext、FLUX-Klein、PuLID-FLUX、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、Krea2、SDXL、SD1.5 等。
 >
->**FBCache 支持**：UNetModel（SDXL、SD3.5 等）、Flux、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。
+>**FBCache 支持**：UNetModel（SDXL、SD3.5 等）、Flux、Krea2、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。
 >
->**本节点新增支持**：flux2klein、最新 Anima 模型、SDXL 模型（FBCache 原项目不支持）。
+>**本节点新增支持**：flux2klein、最新 Anima 模型、Krea2、SDXL 模型（FBCache 原项目不支持）。
 >
 >#### 性能参考 / Performance Reference
 >

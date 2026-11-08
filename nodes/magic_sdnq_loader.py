@@ -11,13 +11,9 @@ import torch
 import gc
 from typing import Tuple, Optional
 
-# Add parent for core imports
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-_parent_dir = os.path.dirname(_current_dir)
-if _parent_dir not in sys.path:
-    sys.path.insert(0, _parent_dir)
-
-from core.sdnq_lazy import (
+# 包内相对导入：不要把插件根目录塞进 sys.path，也不要使用顶层 `core`，
+# 否则会与其他同样使用顶层 core 包的插件（如 ComfyUI-DanbooruSearcher）冲突。
+from ..core.sdnq_lazy import (
     get_dtype_from_string,
     get_model_names_for_dropdown,
     get_repo_id_from_name,
@@ -27,7 +23,7 @@ from core.sdnq_lazy import (
     get_cached_model_path,
     wrap_pipeline_components,
 )
-from core.sdnq_lazy import load_body_only_pipeline, DiffusersVAEFromComfy
+from ..core.sdnq_lazy import load_body_only_pipeline, DiffusersVAEFromComfy
 
 
 def _cleanup_resources(pipeline=None, force=True):
@@ -133,7 +129,7 @@ class MagicSDNQLoader:
             elif auto_download:
                 model_path = download_model(repo_id)
             else:
-                from core.sdnq_config import get_sdnq_models_dir
+                from ..core.sdnq_config import get_sdnq_models_dir
                 sdnq_dir = get_sdnq_models_dir()
                 raise ValueError(
                     f"Model not cached. Enable 'auto_download' to download from HuggingFace, "
