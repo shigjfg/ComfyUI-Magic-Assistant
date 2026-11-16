@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import "./magic_ui_shared.js";
 
 const NODE_NAME = "MagicResolutionResize";
 console.log("🔮 Magic Resize JS: Loaded! (Version 3.1 - Clean Mode)"); 
@@ -273,21 +274,20 @@ function makeDialogDraggable(dialog, titleBar) {
 
 function showResModal(node) {
     const dialog = document.createElement("div");
+    dialog.className = "ma-modal";
     dialog.style.cssText = `
         position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        width: 450px; height: 600px; background: #222; color: #ddd;
-        border: 1px solid #444; box-shadow: 0 0 20px rgba(0,0,0,0.8);
-        z-index: 10000; display: flex; flex-direction: column; font-family: sans-serif;
-        border-radius: 8px; overflow: hidden;
+        width: 460px; max-width: 92vw; height: 580px; max-height: 88vh;
+        z-index: 10000;
     `;
 
     const header = document.createElement("div");
-    header.style.cssText = "padding: 10px; background: #333; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; cursor: move; user-select: none;";
-    header.innerHTML = `<b>📏 预设管理中心</b>`;
+    header.className = "ma-modal-header";
+    header.innerHTML = `<b class="ma-modal-title">📏 预设管理中心</b>`;
 
     const closeBtn = document.createElement("button"); 
     closeBtn.textContent="✕";
-    closeBtn.style.cssText="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;padding:0 10px;";
+    closeBtn.className="ma-modal-close";
     preventConflict(closeBtn); 
     closeBtn.onclick=()=>document.body.removeChild(dialog);
     header.appendChild(closeBtn); 
@@ -297,19 +297,18 @@ function showResModal(node) {
     makeDialogDraggable(dialog, header);
 
     const tabContainer = document.createElement("div");
-    tabContainer.style.cssText = "display: flex; background: #111;";
-    const btnStyle = "flex: 1; padding: 10px; border: none; background: #111; color: #888; cursor: pointer; border-bottom: 2px solid transparent;";
-    const activeStyle = "background: #2a2a2a; color: #fff; border-bottom: 2px solid #2196F3;";
+    tabContainer.className = "ma-tabs";
     
-    const tab1 = document.createElement("button"); tab1.textContent = "长边数值 (Long Edge)"; tab1.style.cssText = btnStyle;
-    const tab2 = document.createElement("button"); tab2.textContent = "尺寸组合 (Dimensions)"; tab2.style.cssText = btnStyle;
+    const tab1 = document.createElement("button"); tab1.textContent = "长边数值 (Long Edge)"; tab1.className = "ma-tab-btn active"; tab1.style.flex = "1";
+    const tab2 = document.createElement("button"); tab2.textContent = "尺寸组合 (Dimensions)"; tab2.className = "ma-tab-btn"; tab2.style.flex = "1";
     
     preventConflict(tab1); preventConflict(tab2);
     tabContainer.appendChild(tab1); tabContainer.appendChild(tab2);
     dialog.appendChild(tabContainer);
 
     const content = document.createElement("div");
-    content.style.cssText = "flex: 1; padding: 15px; overflow-y: auto; background: #222;";
+    content.className = "ma-modal-body";
+    content.style.padding = "16px";
     preventConflict(content); dialog.appendChild(content);
 
     let currentTab = "preset";
@@ -318,10 +317,11 @@ function showResModal(node) {
         content.innerHTML = "";
         
         const inputDiv = document.createElement("div");
-        inputDiv.style.cssText = "display: flex; gap: 10px; margin-bottom: 20px;";
+        inputDiv.style.cssText = "display: flex; gap: 8px; margin-bottom: 14px;";
         
         const input = document.createElement("input");
-        input.style.cssText = "flex: 1; padding: 8px; background: #111; color: #fff; border: 1px solid #444; border-radius: 4px;";
+        input.className = "ma-input";
+        input.style.flex = "1";
         
         if (currentTab === "preset") {
             input.type = "number"; input.placeholder = "输入数值 (e.g. 1280)";
@@ -332,23 +332,23 @@ function showResModal(node) {
 
         const addBtn = document.createElement("button");
         addBtn.textContent = "➕ 添加";
-        addBtn.style.cssText = "padding: 8px 15px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;";
+        addBtn.className = "ma-btn ma-btn-primary";
         preventConflict(addBtn);
 
         inputDiv.appendChild(input); inputDiv.appendChild(addBtn); content.appendChild(inputDiv);
 
         const listDiv = document.createElement("div");
-        listDiv.style.cssText = "display: flex; flex-direction: column; gap: 5px;";
+        listDiv.style.cssText = "display: flex; flex-direction: column; gap: 6px;";
         
         const dataList = currentTab === "preset" ? node.res_config.presets : node.res_config.dimensions;
         const sorted = currentTab === "preset" ? [...dataList].sort((a,b)=>a-b) : [...dataList].sort();
 
         sorted.forEach(val => {
             const row = document.createElement("div");
-            row.style.cssText = "display: flex; justify-content: space-between; align-items: center; padding: 8px; background: #333; border-radius: 4px;";
+            row.className = "ma-list-row";
             const label = document.createElement("span");
             label.textContent = currentTab === "preset" ? `${val} px` : val;
-            label.style.cssText = "flex: 1; cursor: pointer; padding: 2px 5px; border-radius: 3px;";
+            label.style.cssText = "flex: 1; cursor: pointer; padding: 2px 4px; border-radius: 4px; font-family: var(--ma-font-mono); font-size: 12.5px;";
             label.title = "双击编辑";
             preventConflict(label);
 
@@ -359,9 +359,10 @@ function showResModal(node) {
                 isEditing = true;
 
                 const input = document.createElement("input");
+                input.className = "ma-input";
                 input.type = currentTab === "preset" ? "number" : "text";
                 input.value = currentTab === "preset" ? val : val;
-                input.style.cssText = "flex: 1; padding: 4px 5px; background: #111; color: #fff; border: 1px solid #2196F3; border-radius: 3px; font-size: 13px;";
+                input.style.cssText = "flex: 1; padding: 4px 8px; font-size: 12.5px;";
 
                 const finishEdit = (save) => {
                     if (!isEditing) return;
@@ -408,7 +409,8 @@ function showResModal(node) {
             label.addEventListener("dblclick", startEdit);
 
             const delBtn = document.createElement("button"); delBtn.textContent = "🗑️";
-            delBtn.style.cssText = "background: none; border: none; cursor: pointer; color: #f44336;";
+            delBtn.className = "ma-btn ma-btn-ghost";
+            delBtn.style.cssText = "padding: 4px 8px; color: #f87171;";
             preventConflict(delBtn);
 
             delBtn.onclick = () => {
@@ -447,8 +449,8 @@ function showResModal(node) {
         };
     };
 
-    tab1.onclick = () => { currentTab = "preset"; tab1.style.cssText=btnStyle+activeStyle; tab2.style.cssText=btnStyle; renderContent(); };
-    tab2.onclick = () => { currentTab = "dimension"; tab2.style.cssText=btnStyle+activeStyle; tab1.style.cssText=btnStyle; renderContent(); };
+    tab1.onclick = () => { currentTab = "preset"; tab1.className="ma-tab-btn active"; tab2.className="ma-tab-btn"; renderContent(); };
+    tab2.onclick = () => { currentTab = "dimension"; tab2.className="ma-tab-btn active"; tab1.className="ma-tab-btn"; renderContent(); };
     
     tab1.click();
     document.body.appendChild(dialog);

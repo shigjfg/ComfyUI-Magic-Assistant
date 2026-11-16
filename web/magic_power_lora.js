@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import "./magic_ui_shared.js";
 
 const NODE_NAME = "MagicPowerLoraLoader";
 
@@ -43,17 +44,288 @@ let loraNamesCache = null;
 let loraNamesOptionsCache = [];
 let loraNamesLoadPromise = null;
 
+// 统一的线性 SVG 图标库（stroke=currentColor，跟随文字色，风格统一）
+const MPL_ICONS = {
+    plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    download: '<path d="M12 3v12"/><polyline points="6 11 12 17 18 11"/><line x1="4" y1="21" x2="20" y2="21"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    folderPlus: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>',
+    folder: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+    save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+    close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/>',
+    refresh: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    palette: '<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
+    grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+    sort: '<polyline points="7 4 7 20"/><polyline points="3 8 7 4 11 8"/><polyline points="17 20 17 4"/><polyline points="21 16 17 20 13 16"/>',
+    chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"/>',
+    layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    paste: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>'
+};
+function mplIcon(name, size) {
+    const body = MPL_ICONS[name];
+    if (!body) return "";
+    const s = size || 16;
+    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;flex:0 0 auto;">${body}</svg>`;
+}
+
+// 颜色来源模式：跟随全局（global）/ 独立固定（custom）。切换只改 UI，确定时写入对象持久化
+function mplColorModeSwitch(parent, initial, onChange) {
+    let mode = initial === "custom" ? "custom" : "global";
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:10px;";
+    const lab = document.createElement("span");
+    lab.textContent = "颜色来源";
+    lab.style.cssText = "font-size:12px;color:#a1a1aa;min-width:100px;";
+    row.appendChild(lab);
+    const mk = (key, text, tip) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = text;
+        b.title = tip;
+        b.style.cssText = "padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid rgba(255,255,255,0.12);transition:all 0.14s ease;";
+        b.onclick = () => {
+            if (mode === key) return;
+            mode = key; paint(); onChange(mode);
+        };
+        row.appendChild(b);
+        return b;
+    };
+    const bGlobal = mk("global", "跟随全局", "改动全局默认颜色时，本条会一起变化");
+    const bCustom = mk("custom", "独立固定", "本条使用自己的颜色，不受全局改动影响");
+    function paint() {
+        const follow = mode === "global";
+        bGlobal.style.background = follow ? "#6366f1" : "#18181c";
+        bGlobal.style.color = follow ? "#fff" : "#a1a1aa";
+        bGlobal.style.borderColor = follow ? "#6366f1" : "rgba(255,255,255,0.12)";
+        bCustom.style.background = follow ? "#18181c" : "#6366f1";
+        bCustom.style.color = follow ? "#a1a1aa" : "#fff";
+        bCustom.style.borderColor = follow ? "rgba(255,255,255,0.12)" : "#6366f1";
+    }
+    paint();
+    parent.appendChild(row);
+    return { getMode: () => mode };
+}
+
 function mplNormalizeLoraName(name) {
     return String(name || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+}
+
+// 唯一的「是否启用」判定：只有显式 false / 0 / "false" 等才算停用，缺省一律启用。
+function mplLoraEnabled(item) {
+    if (!item) return false;
+    const v = item.enabled;
+    if (v === undefined || v === null) return true;
+    if (typeof v === "string") return !["false", "0", "no", "off", ""].includes(v.trim().toLowerCase());
+    return v !== false && v !== 0;
+}
+
+let MPL_LAST_REPAIRS = 0;
+function mplNormalizeLoraData(data) {
+    MPL_LAST_REPAIRS = 0;
+    if (!data || typeof data !== "object") return data;
+    const fix = (l) => {
+        if (!l || typeof l !== "object") return;
+        if (typeof l.enabled !== "boolean") MPL_LAST_REPAIRS++;
+        l.enabled = mplLoraEnabled(l);
+        if (l.note === undefined) l.note = "";
+        if (l.triggerWords === undefined) l.triggerWords = "";
+    };
+    (Array.isArray(data.loras) ? data.loras : []).forEach(fix);
+    (Array.isArray(data.folders) ? data.folders : []).forEach(f => {
+        if (!f) return;
+        if (!Array.isArray(f.loras)) f.loras = [];
+        f.loras.forEach(fix);
+    });
+    return data;
+}
+
+// 预览图按需刷新：爬取到新图后给这张卡片/行加时间戳，绕过浏览器缓存
+const MPL_IMG_BUST = new Map();
+function mplBumpImage(name) {
+    if (name) MPL_IMG_BUST.set(String(name), Date.now());
+}
+function mplBustSuffix(name) {
+    const t = MPL_IMG_BUST.get(String(name || ""));
+    return t ? "&t=" + t : "";
+}
+
+// 预设分类 + 收藏夹的全局数据（所有节点共享同一份，界面在「📂预设」弹窗里）
+const MPL_SIDEBAR = {
+    loaded: false,
+    loading: null,
+    presets: {},
+    categories: [],
+    assignments: {},
+    preset_order: [],
+    favorites: [],
+};
+
+// 打开中的「📂预设」弹窗刷新回调（节点内不再有侧栏，改为弹窗自刷新）
+const MPL_PRESET_MODAL_REFRESHERS = new Set();
+
+async function mplLoadSidebar(force) {
+    if (!force && MPL_SIDEBAR.loaded) return MPL_SIDEBAR;
+    if (MPL_SIDEBAR.loading) return MPL_SIDEBAR.loading;
+    MPL_SIDEBAR.loading = (async () => {
+        try {
+            const [pRes, mRes, fRes] = await Promise.all([
+                api.fetchApi("/ma/lora/get_presets").then(r => r.json()).catch(() => ({})),
+                api.fetchApi("/ma/lora/preset_meta").then(r => r.json()).catch(() => ({})),
+                api.fetchApi("/ma/lora/favorites").then(r => r.json()).catch(() => ({})),
+            ]);
+            MPL_SIDEBAR.presets = (pRes && pRes.presets) || {};
+            MPL_SIDEBAR.categories = Array.isArray(mRes && mRes.categories) ? mRes.categories : [];
+            MPL_SIDEBAR.assignments = (mRes && mRes.assignments) || {};
+            MPL_SIDEBAR.preset_order = Array.isArray(mRes && mRes.preset_order) ? mRes.preset_order : [];
+            MPL_SIDEBAR.favorites = Array.isArray(fRes && fRes.collections) ? fRes.collections : [];
+            MPL_SIDEBAR.loaded = true;
+        } catch (e) {
+            console.warn("[MagicPowerLora] 侧栏数据加载失败:", e);
+        } finally {
+            MPL_SIDEBAR.loading = null;
+        }
+        return MPL_SIDEBAR;
+    })();
+    return MPL_SIDEBAR.loading;
+}
+async function mplSavePresetMeta() {
+    try {
+        await api.fetchApi("/ma/lora/preset_meta", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                categories: MPL_SIDEBAR.categories,
+                assignments: MPL_SIDEBAR.assignments,
+                preset_order: MPL_SIDEBAR.preset_order,
+            }),
+        });
+    } catch (e) { console.warn("[MagicPowerLora] 保存预设分类失败:", e); }
+}
+async function mplSaveFavorites() {
+    try {
+        await api.fetchApi("/ma/lora/favorites", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ collections: MPL_SIDEBAR.favorites }),
+        });
+    } catch (e) { console.warn("[MagicPowerLora] 保存收藏夹失败:", e); }
+}
+function mplRefreshAllSidebars() {
+    MPL_PRESET_MODAL_REFRESHERS.forEach(fn => {
+        try { fn(); } catch (e) {}
+    });
+}
+
+// ---------- Lora-Manager 标题/备注 + 按文件名记忆的备注 ----------
+const MPL_LM = { info: {}, notes: {}, paths: {}, loaded: false, loading: null };
+async function mplLoadExtraInfo(force) {
+    if (!force && MPL_LM.loaded) return MPL_LM;
+    if (MPL_LM.loading) return MPL_LM.loading;
+    MPL_LM.loading = (async () => {
+        try {
+            const [iRes, nRes, pRes] = await Promise.all([
+                api.fetchApi("/ma/lora/lm_info").then(r => r.json()).catch(() => ({})),
+                api.fetchApi("/ma/lora/notes").then(r => r.json()).catch(() => ({})),
+                api.fetchApi("/ma/lora/paths").then(r => r.json()).catch(() => ({})),
+            ]);
+            MPL_LM.info = (iRes && iRes.info) || {};
+            MPL_LM.notes = (nRes && nRes.notes) || {};
+            MPL_LM.paths = (pRes && pRes.paths) || {};
+            MPL_LM.loaded = true;
+            mplDecorateAllNames();
+        } catch (e) { console.warn("[MagicPowerLora] 读取 LoRA 标题/备注失败:", e); }
+        finally { MPL_LM.loading = null; }
+        return MPL_LM;
+    })();
+    return MPL_LM.loading;
+}
+function mplPathFor(name) {
+    if (!name) return "";
+    const variants = [String(name), String(name).replace(/\\/g, "/"), String(name).replace(/\//g, "\\")];
+    for (const v of variants) if (MPL_LM.paths[v]) return MPL_LM.paths[v];
+    return "";
+}
+function mplLmEntry(name) {
+    if (!name) return {};
+    const variants = [String(name), String(name).replace(/\\/g, "/"), String(name).replace(/\//g, "\\")];
+    for (const v of variants) if (MPL_LM.info[v]) return MPL_LM.info[v];
+    return {};
+}
+function mplTitleFor(name) {
+    return String(mplLmEntry(name).title || "").trim();
+}
+function mplLoraMatchesText(name, query) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return true;
+    const raw = `${name}\n${mplTitleFor(name)}`.toLowerCase();
+    if (raw.includes(q)) return true;
+    const hay = raw.replace(/[_\-\\/.]+/g, " ");
+    return q.split(/\s+/).filter(Boolean).every(tok => hay.includes(tok));
+}
+function mplNoteFor(name) {
+    const variants = [String(name || ""), String(name || "").replace(/\\/g, "/"), String(name || "").replace(/\//g, "\\")];
+    for (const v of variants) {
+        const own = MPL_LM.notes[v];
+        if (own !== undefined && String(own).trim()) return String(own);
+    }
+    return String(mplLmEntry(name).notes || "").trim();
+}
+async function mplSetNote(name, note, previous) {
+    if (!name) return;
+    const value = String(note || "");
+    if (!value.trim() && !(previous && String(previous).trim())) return;
+    if (value.trim()) MPL_LM.notes[name] = value;
+    else delete MPL_LM.notes[name];
+    try {
+        await api.fetchApi("/ma/lora/notes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, note: value }),
+        });
+    } catch (e) { console.warn("[MagicPowerLora] 保存备注失败:", e); }
+}
+function mplDecorateName(el, name) {
+    if (!el) return;
+    const t = mplTitleFor(name);
+    el.title = t ? `${name}\n标题：${t}` : name;
+}
+function mplDecorateAllNames() {
+    document.querySelectorAll(".mpl-lora-name[data-lora]").forEach(el => mplDecorateName(el, el.dataset.lora));
+}
+function mplDecorateNewLora(l) {
+    if (!l) return l;
+    if (!l.note) l.note = mplNoteFor(l.name) || "";
+    if (String(l.tags || "").trim()) l.triggerWords = l.tags;
+    else if (String(l.triggerWords || "").trim()) l.tags = l.triggerWords;
+    return l;
+}
+void mplLoadExtraInfo();
+
+function mplPresetFolders(content) {
+    if (!content) return [];
+    if (Array.isArray(content)) return content.filter(f => f && Array.isArray(f.loras));
+    if (Array.isArray(content.folders)) return content.folders.filter(f => f && Array.isArray(f.loras));
+    if (Array.isArray(content.loras)) return [{ name: "预设", loras: content.loras }];
+    return [];
 }
 
 function mplCollectConfiguredLoraNames(node) {
     const names = [];
     const collect = (items) => (items || []).forEach(item => {
-        if (item && item.enabled !== false && item.name) names.push(String(item.name));
+        if (item && mplLoraEnabled(item) && item.name) names.push(String(item.name));
     });
     collect(node?.loraData?.loras);
-    (node?.loraData?.folders || []).forEach(folder => collect(folder?.loras));
+    (node?.loraData?.folders || []).forEach(folder => {
+        if (folder && !folder.ignored) collect(folder.loras);
+    });
 
     // Old workflows may not have lora_data_state yet; read the hidden widget
     // as a compatibility fallback.
@@ -169,6 +441,101 @@ loadLoraImageList();
 loadLoraNameList();
 
 // ---------------------------------------------------------------------------
+// 全局单例 LoRA 悬停预览浮层（彻底防止浮层残留）
+// ---------------------------------------------------------------------------
+const MA_LoraPreview = (() => {
+    let div = null;
+    let timer = null;
+    let activeRow = null;
+    let boundDocMove = false;
+    let guardTimer = null;
+
+    function stopGuard() {
+        if (guardTimer) { clearInterval(guardTimer); guardTimer = null; }
+    }
+
+    function teardown() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (div) { div.remove(); div = null; }
+        activeRow = null;
+        stopGuard();
+    }
+
+    function startGuard(row) {
+        stopGuard();
+        guardTimer = setInterval(() => {
+            if (!div) { stopGuard(); return; }
+            if (activeRow !== row || !row.isConnected) { teardown(); return; }
+        }, 250);
+    }
+
+    function installGlobalGuards() {
+        if (boundDocMove) return;
+        boundDocMove = true;
+        window.addEventListener("scroll", teardown, true);
+        window.addEventListener("resize", teardown, true);
+        document.addEventListener("pointerleave", teardown, true);
+        document.addEventListener("visibilitychange", () => { if (document.hidden) teardown(); });
+    }
+
+    function place(rect) {
+        if (!div) return;
+        const pw = 300, ph = 300, margin = 10;
+        let left = rect.right + margin;
+        let top = rect.top;
+        if (left + pw > window.innerWidth) left = rect.left - pw - margin;
+        if (top + ph > window.innerHeight) top = window.innerHeight - ph - margin;
+        left = Math.max(margin, left);
+        top = Math.max(margin, top);
+        div.style.left = left + "px";
+        div.style.top = top + "px";
+    }
+
+    function bindRowHover(row, lora) {
+        installGlobalGuards();
+        row.onmouseenter = () => {
+            if (timer) { clearTimeout(timer); timer = null; }
+            teardown();
+            activeRow = row;
+            const rect0 = row.getBoundingClientRect();
+            timer = setTimeout(() => {
+                timer = null;
+                if (activeRow !== row || !document.body.contains(row)) { activeRow = null; return; }
+                document.querySelectorAll(".mpl-lora-preview").forEach(p => p.remove());
+                div = document.createElement("div");
+                div.className = "mpl-lora-preview";
+                div.style.cssText =
+                    "position:fixed;z-index:10000;background:#111114;border:1px solid rgba(255,255,255,0.16);" +
+                    "border-radius:10px;padding:8px;box-shadow:0 16px 40px rgba(0,0,0,0.85);" +
+                    "pointer-events:none;max-width:300px;max-height:300px;display:block;";
+                const img = document.createElement("img");
+                img.style.cssText = "max-width:284px;max-height:284px;object-fit:contain;display:block;border-radius:6px;";
+                const safeName = encodeURIComponent(lora.name);
+                img.src = api.apiURL(`/ma/lora/image?name=${safeName}&t=${Date.now()}`);
+                img.onerror = () => {
+                    if (div) div.innerHTML = `<div style="padding:20px;color:#71717a;text-align:center;">${mplT("无预览图")}</div>`;
+                };
+                div.appendChild(img);
+                document.body.appendChild(div);
+                place(rect0);
+                startGuard(row);
+            }, 300);
+        };
+        row.onmouseleave = () => {
+            if (timer) { clearTimeout(timer); timer = null; }
+            teardown();
+        };
+    }
+
+    return { bindRowHover, teardown, _getDiv: () => div };
+})();
+
+function mplClearLoraPreview() {
+    try { MA_LoraPreview.teardown(); } catch (e) {}
+    try { document.querySelectorAll(".mpl-lora-preview").forEach(p => p.remove()); } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
 // i18n helpers
 // ---------------------------------------------------------------------------
 function mplGetCurrentLanguage() {
@@ -239,6 +606,13 @@ function mplCollectMetadataNames(node, scope = "node", localFiles = []) {
     }, []);
 }
 
+function mplSetTriggerWords(item, words) {
+    if (!item || typeof item !== "object") return;
+    const text = String(words || "").trim();
+    item.tags = text;
+    item.triggerWords = text;
+}
+
 function mplApplyMetadataData(node, name, data) {
     const key = mplMetadataNameKey(name);
     let changed = false;
@@ -249,8 +623,15 @@ function mplApplyMetadataData(node, name, data) {
     for (const item of items) {
         if (mplMetadataNameKey(item?.name) !== key) continue;
         for (const field of ["triggerWords", "jsonInfo", "logInfo"]) {
-            // A batch download must not replace trigger words edited in a node.
-            if (field === "triggerWords" && String(item[field] || "").trim()) continue;
+            if (field === "triggerWords") {
+                const existing = String(item.tags || item.triggerWords || "").trim();
+                const incoming = String(data?.triggerWords || "").trim();
+                if (!existing && incoming) {
+                    mplSetTriggerWords(item, incoming);
+                    changed = true;
+                }
+                continue;
+            }
             if (typeof data?.[field] === "string" && item[field] !== data[field]) {
                 item[field] = data[field];
                 changed = true;
@@ -275,6 +656,24 @@ function mplMetadataFieldState(name, type, metadata = {}, fieldStates = {}) {
     return { state: "missing", needs_fetch: true };
 }
 
+const MPL_METADATA_SETTLED_STATES = ["not_found", "unavailable", "unresolved", "unsupported", "user_skipped"];
+
+function mplMetadataAllSettled(name, settings, metadata = {}, fieldStates = {}) {
+    const types = mplMetadataTypes(settings);
+    if (!types.length) return false;
+    let hasSettled = false;
+    const done = types.every(type => {
+        const state = mplMetadataFieldState(name, type, metadata, fieldStates).state;
+        if (MPL_METADATA_SETTLED_STATES.includes(state)) { hasSettled = true; return true; }
+        return state === "present";
+    });
+    return done && hasSettled;
+}
+
+function mplMetadataHasLm(name, metadata) {
+    return !!(metadata && metadata[mplMetadataNameKey(name)]?.lm);
+}
+
 function mplMetadataRequestedTypes(name, settings, metadata = null, fieldStates = {}) {
     const types = mplMetadataTypes(settings);
     if (settings.local_action) {
@@ -289,10 +688,13 @@ function mplMetadataRequestedTypes(name, settings, metadata = null, fieldStates 
     const retry = settings.retry_types?.[mplMetadataNameKey(name)];
     const requested = Array.isArray(retry) ? types.filter(type => retry.includes(type)) : types;
     if (!metadata) return requested;
+    const retrySettled = settings.force_refresh === true || settings.update_existing === true;
+    if (!retrySettled && mplMetadataAllSettled(name, settings, metadata || {}, fieldStates)) return [];
     return requested.filter(type => {
         const field = mplMetadataFieldState(name, type, metadata, fieldStates);
         if (settings.update_existing) return field.state !== "local_error";
         if (["present", "invalid", "local_error"].includes(field.state)) return false;
+        if (MPL_METADATA_SETTLED_STATES.includes(field.state)) return retrySettled;
         return settings.force_refresh === true || field.needs_fetch === true;
     });
 }
@@ -351,8 +753,10 @@ function mplFilterMetadataNames(names, filters, settings, metadata, fieldStates 
         if (filters.directory && filters.directory !== ".") {
             if (directory !== filters.directory && !(filters.recursive && directory.startsWith(filters.directory + "/"))) return false;
         }
-        if (search && !key.toLowerCase().includes(search)) return false;
+        if (search && !mplLoraMatchesText(name, search)) return false;
+        if (search) return true;
         const mode = filters.status || (filters.onlyMissing ? "pending" : "all");
+        if (mode === "not_found") return mplMetadataAllSettled(name, settings, metadata, fieldStates);
         if (mode === "local_missing") return mplMetadataTypes(settings).some(type => mplMetadataFieldState(name, type, metadata, fieldStates).state !== "present");
         if (mode === "pending" && settings.local_action) return mplMetadataNeeds(name, settings, metadata, fieldStates);
         return mode !== "pending" || mplMetadataNeeds(name, settings, metadata, fieldStates) || mplMetadataLocalIssues(name, settings, metadata, fieldStates);
@@ -363,8 +767,9 @@ function mplMetadataPreflight(names, selected, settings, metadata, fieldStates =
     const selectedNames = names.filter(name => selected.has(mplMetadataNameKey(name)));
     const actionableNames = selectedNames.filter(name => mplMetadataNeeds(name, settings, metadata, fieldStates));
     const issues = selectedNames.filter(name => mplMetadataLocalIssues(name, settings, metadata, fieldStates)).length;
-    const complete = selectedNames.filter(name => !mplMetadataNeeds(name, settings, metadata, fieldStates) && !mplMetadataLocalIssues(name, settings, metadata, fieldStates)).length;
-    return { scoped: names.length, selected: selectedNames.length, need: actionableNames.length, complete, issues, names: selectedNames, actionableNames };
+    const notFound = selectedNames.filter(name => mplMetadataAllSettled(name, settings, metadata, fieldStates)).length;
+    const complete = selectedNames.filter(name => !mplMetadataNeeds(name, settings, metadata, fieldStates) && !mplMetadataLocalIssues(name, settings, metadata, fieldStates) && !mplMetadataAllSettled(name, settings, metadata, fieldStates)).length;
+    return { scoped: names.length, selected: selectedNames.length, need: actionableNames.length, complete, issues, notFound, names: selectedNames, actionableNames };
 }
 
 function mplMetadataHasSharedSelection(names, sharedInfo) {
@@ -384,13 +789,15 @@ async function mplRunMetadataQueue(names, settings, state, onProgress, metadata 
     const results = [];
     state.running = true;
     state.pauseResult = null;
+    let stopped = false;
+    let completed = 0;
     try {
-        for (const name of names) {
-            if (state.cancelRequested) break;
-            onProgress({ current: name, completed: results.length, total: names.length });
+        const runOne = async (name) => {
+            if (state.cancelRequested || stopped) return;
+            onProgress({ current: name, completed, total: names.length });
             let result;
             const requestedTypes = mplMetadataRequestedTypes(name, settings, metadata, fieldStates);
-            if (!requestedTypes.length) continue;
+            if (!requestedTypes.length) { completed++; return; }
             try {
                 const response = await api.fetchApi("/ma/lora/fetch_metadata", {
                     method: "POST",
@@ -420,12 +827,21 @@ async function mplRunMetadataQueue(names, settings, state, onProgress, metadata 
             }
             const entry = { ...result, status, name, requested_types: requestedTypes };
             results.push(entry);
-            onProgress({ current: name, completed: results.length, total: names.length, result: entry });
+            completed++;
+            onProgress({ current: name, completed, total: names.length, result: entry });
             if (entry.stop_queue) {
                 state.pauseResult = entry;
-                break;
+                stopped = true;
             }
-        }
+        };
+        let cursor = 0;
+        const worker = async () => {
+            while (!state.cancelRequested && !stopped && cursor < names.length) {
+                const name = names[cursor++];
+                await runOne(name);
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(3, names.length) }, () => worker()));
         return results;
     } finally {
         state.running = false;
@@ -639,6 +1055,24 @@ app.registerExtension({
                         : defaults;
                 }
 
+                // 初始化颜色设置（选中态颜色）
+                if (!this.colorSettings) {
+                    const savedColors = this.properties["color_settings"];
+                    const colorDefaults = { selectBg: "#2b3b5e", selectBar: "#6366f1", selectText: "#eef1ff" };
+                    this.colorSettings = (savedColors && typeof savedColors === "object")
+                        ? Object.assign({}, colorDefaults, savedColors)
+                        : colorDefaults;
+                }
+
+                // 初始化文件夹全局默认颜色（外卡片背景 / 里标题栏 / 左侧色条）
+                if (!this.folderColorSettings) {
+                    const savedFolderColors = this.properties["folder_color_settings"];
+                    const folderColorDefaults = { outer: "", inner: "", bar: "" };
+                    this.folderColorSettings = (savedFolderColors && typeof savedFolderColors === "object")
+                        ? Object.assign({}, folderColorDefaults, savedFolderColors)
+                        : folderColorDefaults;
+                }
+
                 this._stackWidget = stackWidget;
 
                 // 根据 layoutSettings 计算最小宽度（滑条模式需要更宽）
@@ -662,11 +1096,11 @@ app.registerExtension({
                         const curMinW = computeMinWidth(this.layoutSettings);
                         size[0] = Math.max(size[0], curMinW);
                         size[1] = Math.max(size[1], MPL_MIN_H);
-                        // ComfyUI's DOM widget layout keeps an optional fixed
-                        // width. Clear the stale first-layout width so the
-                        // embedded UI always follows the actual node width.
+                        // ComfyUI 的 DomWidget 布局会优先使用 widget.width（存在即固定），
+                        // 一旦被写成具体数值，节点拉宽后嵌入 UI 仍停留在初始窄宽度。
+                        // 因此这里始终保持「未设置」，让它每帧跟随 node.size[0] 动态计算。
                         if (this._mplDomWidget) {
-                            this._mplDomWidget.width = size[0];
+                            try { delete this._mplDomWidget.width; } catch (e) {}
                         }
                     }
                 };
@@ -676,6 +1110,7 @@ app.registerExtension({
                 // hook. Calling it once here keeps the DOM widget aligned
                 // when a saved workflow restores a different node size.
                 this._mplSyncDOMLayout?.();
+                this._mplScheduleLayoutSync?.();
                 return r;
             };
 
@@ -692,11 +1127,9 @@ app.registerExtension({
                 // A. 拦截滚轮 (防止缩放画布)
                 this.embeddedDiv.addEventListener("wheel", (e) => { 
                     e.stopPropagation(); 
-                    // 如果列表滚到底了，也不要传给画布
                 }, { passive: false });
 
                 // B. 拦截点击 (防止移动画布)
-                // 注意：pointermove 和 pointerup 不能 stopPropagation，否则会阻止 document 上的滑块拖动监听器
                 const stopProp = (e) => { e.stopPropagation(); };
                 this.embeddedDiv.addEventListener("pointerdown", stopProp);
                 this.embeddedDiv.addEventListener("mousedown", stopProp);
@@ -713,18 +1146,80 @@ app.registerExtension({
                     e.preventDefault();
                     try {
                         const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-                        if (data.type === 'folder') {
-                            // 检查索引有效性
-                            if (data.fIdx >= 0 && data.fIdx < this.loraData.folders.length) {
-                            const srcFolder = this.loraData.folders[data.fIdx];
-                                if (data.lIdx >= 0 && data.lIdx < srcFolder.loras.length) {
-                                    // 深拷贝避免引用问题
-                                    const loraItem = JSON.parse(JSON.stringify(srcFolder.loras[data.lIdx]));
-                            srcFolder.loras.splice(data.lIdx, 1);
-                            this.loraData.loras.push(loraItem);
-                            this.renderEmbeddedList();
-                            this.updateWidget(); 
+                        // 从左栏拖入：预设 → 新建文件夹；收藏 → 添加 LoRA
+                        if (data && (data.kind === 'mpl-preset' || data.kind === 'mpl-favorite')) {
+                            this._mplNativeDropAt = Date.now();
+                            this._mplApplySidePayload(data, this._mplComputeDropTarget(e.clientX, e.clientY));
+                            return;
                         }
+                        // 拖到列表空白处：把该 LoRA 放到根列表末尾（保持“拖出文件夹”可用）
+                        if (data && (data.type === 'sort' || data.type === 'top')) {
+                            e.stopPropagation();
+                            if (data.type === 'top' && typeof data.tok === 'string' && data.tok.startsWith('f:')) {
+                                const drop = this._mplComputeTopDropTarget(e.clientX, e.clientY);
+                                if (drop && drop.tok && drop.tok !== data.tok) {
+                                    this._mplPlaceToken(data.tok, drop.tok, drop.after);
+                                } else {
+                                    const tl = this._topLayout || [];
+                                    const ti = tl.indexOf(data.tok);
+                                    if (ti >= 0) tl.splice(ti, 1);
+                                    tl.push(data.tok);
+                                }
+                                this._currentTopDrag = null;
+                                this.renderEmbeddedList();
+                                this.updateWidget();
+                                return;
+                            }
+                            let item = null;
+                            if (data.type === 'top' && typeof data.tok === 'string' && data.tok.startsWith('l:')) {
+                                const uid = data.tok.slice(2);
+                                item = (this.loraData.loras || []).find(l => this._uidFor(l) === uid) || null;
+                                if (!item) {
+                                    for (const f of (this.loraData.folders || [])) {
+                                        item = (f.loras || []).find(l => this._uidFor(l) === uid) || null;
+                                        if (item) break;
+                                    }
+                                }
+                            } else if (data.type === 'sort' && data.sourceLIdx !== undefined) {
+                                if (data.sourceType === 'root') item = (this.loraData.loras || [])[data.sourceLIdx] || null;
+                                else if (data.sourceType === 'folder') {
+                                    const f = (this.loraData.folders || [])[data.sourceFIdx];
+                                    item = f ? (f.loras || [])[data.sourceLIdx] : null;
+                                }
+                            }
+                            if (!item) return;
+                            const inRoot = (this.loraData.loras || []).includes(item);
+                            if (!inRoot) {
+                                for (const f of (this.loraData.folders || [])) {
+                                    const i = (f.loras || []).indexOf(item);
+                                    if (i >= 0) { f.loras.splice(i, 1); break; }
+                                }
+                                this.loraData.loras.push(item);
+                                const tl = this._topLayout || [];
+                                tl.push("l:" + this._uidFor(item));
+                            } else {
+                                const tl = this._topLayout || [];
+                                const tok = "l:" + this._uidFor(item);
+                                const i = tl.indexOf(tok);
+                                if (i >= 0) tl.splice(i, 1);
+                                tl.push(tok);
+                            }
+                            this._currentTopDrag = null;
+                            this._currentSortDrag = null;
+                            this.renderEmbeddedList();
+                            this.updateWidget();
+                            return;
+                        }
+                        if (data.type === 'folder') {
+                            if (data.fIdx >= 0 && data.fIdx < this.loraData.folders.length) {
+                                const srcFolder = this.loraData.folders[data.fIdx];
+                                if (data.lIdx >= 0 && data.lIdx < srcFolder.loras.length) {
+                                    const loraItem = JSON.parse(JSON.stringify(srcFolder.loras[data.lIdx]));
+                                    srcFolder.loras.splice(data.lIdx, 1);
+                                    this.loraData.loras.push(loraItem);
+                                    this.renderEmbeddedList();
+                                    this.updateWidget(); 
+                                }
                             }
                         }
                     } catch(err) {
@@ -732,11 +1227,12 @@ app.registerExtension({
                     }
                 };
 
+                // 节点内不再保留左侧栏（预设分类 / 收藏夹已经整合进「📂预设」弹窗），
+                // 只保留 LoRA 列表 + 底栏，节点更紧凑、宽度也能完整铺满。
                 this.embeddedDiv.appendChild(this.listContainer);
 
                 // --- Klein 模式提示 Banner（检测到 Klein 模型但未启用对应模式时显示）---
                 this._kleinBannerEl = null;
-                this._updateKleinBanner();
 
                 // --- 底部按钮区 ---
                 const footer = document.createElement("div");
@@ -749,11 +1245,12 @@ app.registerExtension({
                 footer.append(
                     createBtn("➕ 添加 Lora", "mpl-btn-add", () => this.showAddLoraModal()),
                     createBtn("📥 一键下载信息", "mpl-btn-metadata", () => this.showBatchMetadataModal()),
-                    createBtn("⚙️设置", "mpl-btn-icon", () => this.showSettingsModal()),
                     createBtn("📁+", "mpl-btn-icon", () => this.addFolder()),
-                    createBtn("📂预设", "mpl-btn-icon", () => this.loadPresetModal())
+                    createBtn("📂预设", "mpl-btn-icon", () => this.loadPresetModal()),
+                    createBtn("⚙️设置", "mpl-btn-icon", () => this.showSettingsModal())
                 );
                 this.embeddedDiv.appendChild(footer);
+                this._updateKleinBanner();
 
                 // 使用 addDOMWidget 将 UI 添加到节点内部，自动跟随节点缩放
                 this._mplDomWidget = this.addDOMWidget("mpl_ui", "div", this.embeddedDiv, {
@@ -771,237 +1268,684 @@ app.registerExtension({
                 this.embeddedDiv.style.width = "100%";
                 this.embeddedDiv.style.maxWidth = "none";
                 this.embeddedDiv.style.boxSizing = "border-box";
-                if (this._mplDomWidget && this.size?.[0]) {
-                    this._mplDomWidget.width = this.size[0];
+                // 不给 _mplDomWidget.width 赋值：保持“跟随节点宽度”的默认行为，
+                // 否则工作流载入 / 手动缩放后会残留旧宽度，UI 被挤成窄条。
+                if (this._mplDomWidget && this._mplDomWidget.width !== undefined) {
+                    try { delete this._mplDomWidget.width; } catch (e) {}
                 }
-                // The frontend positions DOM widgets from node.size during
-                // the resize callback; saved workflows do not always invoke
-                // that callback after configure().
                 if (this._mplDomWidget?.options?.afterResize) {
                     this._mplDomWidget.options.afterResize.call(this._mplDomWidget, this);
                 }
                 this.onResize?.(this.size);
                 this.setDirtyCanvas?.(true, true);
             };
+            nodeType.prototype._mplScheduleLayoutSync = function() {
+                if (this._mplLayoutSyncTimers) {
+                    this._mplLayoutSyncTimers.forEach(t => clearTimeout(t));
+                }
+                this._mplLayoutSyncTimers = [];
+                const run = () => {
+                    try { this._mplSyncDOMLayout(); } catch (e) {}
+                    try { this._mplRefreshStatusBar(); } catch (e) {}
+                };
+                [0, 50, 150, 350, 800].forEach(ms => {
+                    this._mplLayoutSyncTimers.push(setTimeout(run, ms));
+                });
+                if (!this._mplResizeObserver && typeof ResizeObserver !== "undefined" && this.embeddedDiv) {
+                    try {
+                        this._mplResizeObserver = new ResizeObserver(() => {
+                            const w = this.embeddedDiv ? this.embeddedDiv.clientWidth : 0;
+                            if (this.size?.[0] && w !== this.size[0]) {
+                                this.setDirtyCanvas?.(true, true);
+                            }
+                        });
+                        this._mplResizeObserver.observe(this.embeddedDiv);
+                    } catch (e) {}
+                }
+            };
 
-            // 🌟 2. 使用 addDOMWidget 后，不需要手动计算位置和大小，UI会自动跟随节点缩放
+            nodeType.prototype._mplComputeDropTarget = function(x, y) {
+                const el = document.elementFromPoint(x, y);
+                if (!el || !el.closest(".mpl-list-scroll")) return null;
+                const rowEl = el.closest(".mpl-lora-row");
+                const folderEl = el.closest(".mpl-folder-row");
+                if (rowEl) {
+                    if (folderEl) {
+                        const fIdx = parseInt(folderEl.dataset.fidx, 10);
+                        const folder = (this.loraData.folders || [])[fIdx];
+                        if (!folder) return null;
+                        const rows = Array.from(folderEl.querySelectorAll(":scope > .mpl-lora-row"));
+                        const lIdx = rows.indexOf(rowEl);
+                        const r = rowEl.getBoundingClientRect();
+                        return { kind: "folder", fIdx, lIdx: lIdx < 0 ? (folder.loras || []).length : lIdx, after: y > r.top + r.height / 2, token: "f:" + this._uidFor(folder) };
+                    }
+                    const rows = Array.from(this.listContainer.querySelectorAll(":scope > .mpl-lora-row"));
+                    const idx = rows.indexOf(rowEl);
+                    const lTokens = (this._topLayout || []).filter(t => String(t).startsWith("l:"));
+                    const token = idx >= 0 ? lTokens[idx] : null;
+                    const r = rowEl.getBoundingClientRect();
+                    return { kind: "root", idx: idx < 0 ? 0 : idx, after: y > r.top + r.height / 2, token: token || null };
+                }
+                if (folderEl) {
+                    const fIdx = parseInt(folderEl.dataset.fidx, 10);
+                    const folder = (this.loraData.folders || [])[fIdx];
+                    if (!folder) return null;
+                    return { kind: "folder", fIdx, lIdx: (folder.loras || []).length, after: false, token: "f:" + this._uidFor(folder) };
+                }
+                return { kind: "end" };
+            };
 
-            // 🌟 3. 注入 CSS (修复的重点)
+            nodeType.prototype._mplTopTokenForEl = function(el) {
+                if (!el) return null;
+                if (el.classList.contains("mpl-folder-row")) {
+                    const f = (this.loraData.folders || [])[parseInt(el.dataset.fidx, 10)];
+                    return f ? "f:" + this._uidFor(f) : null;
+                }
+                if (el.classList.contains("mpl-lora-row") && this.listContainer && el.parentElement === this.listContainer) {
+                    const rows = Array.from(this.listContainer.querySelectorAll(":scope > .mpl-lora-row"));
+                    const lTokens = (this._topLayout || []).filter(t => String(t).startsWith("l:"));
+                    const idx = rows.indexOf(el);
+                    return idx >= 0 && lTokens[idx] ? lTokens[idx] : null;
+                }
+                return null;
+            };
+
+            nodeType.prototype._mplComputeTopDropTarget = function(x, y) {
+                const el = document.elementFromPoint(x, y);
+                if (!el || !el.closest(".mpl-list-scroll")) return null;
+                const folderEl = el.closest(".mpl-folder-row");
+                if (folderEl) {
+                    const tok = this._mplTopTokenForEl(folderEl);
+                    if (tok) {
+                        const r = folderEl.getBoundingClientRect();
+                        return { tok, after: y > r.top + r.height / 2 };
+                    }
+                }
+                const rowEl = el.closest(".mpl-lora-row");
+                if (rowEl && rowEl.parentElement === this.listContainer) {
+                    const tok = this._mplTopTokenForEl(rowEl);
+                    if (tok) {
+                        const r = rowEl.getBoundingClientRect();
+                        return { tok, after: y > r.top + r.height / 2 };
+                    }
+                }
+                const kids = Array.from(this.listContainer.children).filter(k =>
+                    k.classList.contains("mpl-folder-row") || k.classList.contains("mpl-lora-row"));
+                for (const k of kids) {
+                    const r = k.getBoundingClientRect();
+                    if (y < r.top) {
+                        const tok = this._mplTopTokenForEl(k);
+                        if (tok) return { tok, after: false };
+                    } else if (y <= r.bottom) {
+                        const tok = this._mplTopTokenForEl(k);
+                        if (tok) return { tok, after: y > r.top + r.height / 2 };
+                    }
+                }
+                return null;
+            };
+
+            nodeType.prototype._mplApplySidePayload = function(payload, drop) {
+                if (!payload) return;
+                if (payload.kind === "mpl-preset") this._mplApplyPreset(payload.name, drop);
+                else if (payload.kind === "mpl-favorite") this._mplAddLoraByName(payload.name, drop);
+            };
+
+            nodeType.prototype._mplSideMenu = function(x, y, items) {
+                const old = document.querySelector(".mpl-ctx-menu");
+                if (old) old.remove();
+                const menu = document.createElement("div");
+                menu.className = "mpl-ctx-menu";
+                menu.style.cssText = "position:fixed;z-index:10030;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.72);padding:5px;min-width:150px;font-size:12.5px;color:#f4f4f5;";
+                menu.style.left = x + "px";
+                menu.style.top = y + "px";
+                const close = () => { menu.remove(); document.removeEventListener("mousedown", onDown, true); };
+                const onDown = (ev) => { if (!menu.contains(ev.target)) close(); };
+                items.forEach(it => {
+                    const row = document.createElement("div");
+                    row.style.cssText = "padding:7px 11px;border-radius:7px;cursor:pointer;white-space:nowrap;" + (it.danger ? "color:#f87171;" : "color:#d4d4d8;");
+                    row.textContent = it.label;
+                    row.onmouseenter = () => row.style.background = it.danger ? "rgba(239,68,68,0.14)" : "rgba(99,102,241,0.16)";
+                    row.onmouseleave = () => row.style.background = "transparent";
+                    row.onclick = (ev) => { ev.stopPropagation(); close(); it.fn(); };
+                    menu.appendChild(row);
+                });
+                document.body.appendChild(menu);
+                const r = menu.getBoundingClientRect();
+                if (r.right > window.innerWidth) menu.style.left = (window.innerWidth - r.width - 6) + "px";
+                if (r.bottom > window.innerHeight) menu.style.top = (window.innerHeight - r.height - 6) + "px";
+                setTimeout(() => document.addEventListener("mousedown", onDown, true), 0);
+            };
+
+            // ---------- 预设操作 ----------
+            nodeType.prototype._mplApplyPreset = function(name, drop) {
+                const folders = mplPresetFolders(MPL_SIDEBAR.presets[name]);
+                if (!folders.length) { alert("该预设没有可用的 LoRA"); return; }
+                const added = [];
+                folders.forEach(f => {
+                    const copy = JSON.parse(JSON.stringify(f));
+                    delete copy._uid;
+                    copy.name = copy.name || name;
+                    (copy.loras || []).forEach(l => { delete l._uid; l.enabled = mplLoraEnabled(l); });
+                    this.loraData.folders.push(copy);
+                    added.push(copy);
+                });
+                const refTok = drop && drop.token;
+                if (refTok && Array.isArray(this._topLayout) && added.length) {
+                    let ref = refTok, after = !!drop.after;
+                    added.forEach(f => {
+                        const tok = "f:" + this._uidFor(f);
+                        this._mplPlaceToken(tok, ref, after);
+                        ref = tok; after = true;
+                    });
+                }
+                this.renderEmbeddedList();
+                this.updateWidget();
+            };
+
+            nodeType.prototype._mplPresetMenu = function(name, x, y) {
+                this._mplSideMenu(x || 200, y || 200, [{
+                    label: "重命名预设", fn: async () => {
+                        const nn = prompt("预设新名称：", name);
+                        if (!nn || !nn.trim() || nn.trim() === name) return;
+                        const newName = nn.trim();
+                        try {
+                            const resp = await api.fetchApi("/ma/lora/rename_preset", {
+                                method: "POST", headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ old: name, new: newName }),
+                            });
+                            const rj = await resp.json();
+                            if (!rj || rj.status !== "success") {
+                                alert("重命名失败：" + ((rj && rj.message) || "未知错误"));
+                                return;
+                            }
+                            await mplLoadSidebar(true);
+                            mplRefreshAllSidebars();
+                        } catch (e) {
+                            alert("重命名失败：" + e);
+                        }
+                    }
+                }, {
+                    label: "删除预设：" + name, danger: true, fn: async () => {
+                        if (!confirm(`确定要删除预设 "${name}" 吗？`)) return;
+                        await api.fetchApi("/ma/lora/delete_preset", {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ name }),
+                        }).catch(() => {});
+                        delete MPL_SIDEBAR.presets[name];
+                        delete MPL_SIDEBAR.assignments[name];
+                        await mplLoadSidebar(true);
+                        mplRefreshAllSidebars();
+                    }
+                }]);
+            };
+
+            nodeType.prototype._mplDropFolderAsPreset = function(e, category) {
+                let presetName = "";
+                try {
+                    const rawPreset = e.dataTransfer.getData("text/plain");
+                    if (rawPreset) {
+                        const pj = JSON.parse(rawPreset);
+                        if (pj && pj.kind === "mpl-preset") presetName = pj.name || "";
+                    }
+                } catch (_) {}
+                if (presetName) {
+                    if (category) MPL_SIDEBAR.assignments[presetName] = category;
+                    else delete MPL_SIDEBAR.assignments[presetName];
+                    mplSavePresetMeta().then(() => mplRefreshAllSidebars());
+                    return;
+                }
+
+                let tok = "";
+                try {
+                    const raw = e.dataTransfer.getData("application/x-mpl-folder");
+                    if (raw) tok = JSON.parse(raw).tok || "";
+                } catch (_) {}
+                if (!tok) return;
+                const uid = String(tok).slice(2);
+                const folder = (this.loraData.folders || []).find(f => this._uidFor(f) === uid);
+                if (!folder) return;
+                const def = folder.name || "预设";
+                const name = prompt(category ? `保存到「${category}」，预设名称：` : "预设名称：", def);
+                if (!name) return;
+                const content = { folders: [JSON.parse(JSON.stringify(folder))] };
+                delete content.folders[0]._uid;
+                (content.folders[0].loras || []).forEach(l => delete l._uid);
+                api.fetchApi("/ma/lora/save_preset", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, content, category }),
+                }).then(() => mplLoadSidebar(true)).then(() => mplRefreshAllSidebars())
+                  .catch((err) => alert("保存预设失败: " + err));
+            };
+
+            nodeType.prototype._mplNewPresetCategory = function() {
+                const name = prompt("新建预设分类名称：", "");
+                if (!name || !name.trim()) return;
+                const n = name.trim();
+                if (!MPL_SIDEBAR.categories.includes(n)) MPL_SIDEBAR.categories.push(n);
+                mplSavePresetMeta().then(() => mplRefreshAllSidebars());
+            };
+
+            nodeType.prototype._mplCategoryMenu = function(e, name, isCat) {
+                const idx = MPL_SIDEBAR.categories.indexOf(name);
+                const items = [{
+                    label: "重命名分类", fn: () => {
+                        const nn = prompt("分类新名称：", name);
+                        if (!nn || !nn.trim()) return;
+                        const v = nn.trim();
+                        MPL_SIDEBAR.categories[idx] = v;
+                        Object.keys(MPL_SIDEBAR.assignments).forEach(k => {
+                            if (MPL_SIDEBAR.assignments[k] === name) MPL_SIDEBAR.assignments[k] = v;
+                        });
+                        mplSavePresetMeta().then(() => mplRefreshAllSidebars());
+                    }
+                }, {
+                    label: "删除分类（预设保留在未分类）", danger: true, fn: () => {
+                        if (!confirm(`删除分类 "${name}"？分类里的预设会移到「未分类」。`)) return;
+                        MPL_SIDEBAR.categories.splice(idx, 1);
+                        Object.keys(MPL_SIDEBAR.assignments).forEach(k => {
+                            if (MPL_SIDEBAR.assignments[k] === name) delete MPL_SIDEBAR.assignments[k];
+                        });
+                        mplSavePresetMeta().then(() => mplRefreshAllSidebars());
+                    }
+                }];
+                this._mplSideMenu(e.clientX, e.clientY, items);
+            };
+
+            // ---------- 收藏夹操作 ----------
+            // 右键菜单「加入收藏夹」：选一个已有收藏夹，或者现场新建一个
+            nodeType.prototype._mplAddLoraToFavoriteMenu = async function(name, x, y) {
+                if (!name) return;
+                // 先确保收藏夹数据已从服务端载入，否则会把已有收藏夹覆盖掉
+                try { await mplLoadSidebar(); } catch (e) {}
+                const cols = Array.isArray(MPL_SIDEBAR.favorites) ? MPL_SIDEBAR.favorites : (MPL_SIDEBAR.favorites = []);
+                const addTo = async (colName) => {
+                    let col = cols.find(c => c.name === colName);
+                    if (!col) {
+                        col = { name: colName, items: [] };
+                        cols.push(col);
+                    }
+                    col.items = col.items || [];
+                    if (col.items.includes(name)) return;
+                    col.items.push(name);
+                    await mplSaveFavorites();
+                    mplRefreshAllSidebars();
+                };
+                if (!cols.length) {
+                    const nn = prompt("新建收藏夹名称：", "我的收藏");
+                    if (nn && nn.trim()) void addTo(nn.trim());
+                    return;
+                }
+                const items = cols.map(c => ({
+                    label: "收藏到：" + c.name,
+                    fn: () => { void addTo(c.name); },
+                }));
+                items.push({
+                    label: "＋ 新建收藏夹…",
+                    fn: () => {
+                        const nn = prompt("新建收藏夹名称：", "");
+                        if (nn && nn.trim()) void addTo(nn.trim());
+                    },
+                });
+                this._mplSideMenu(x || 240, y || 240, items);
+            };
+
+            nodeType.prototype._mplAddLoraByName = function(name, drop) {
+                if (!name) return;
+                const lora = mplDecorateNewLora({
+                    name, weight: 1.0, enabled: true, tags: "", note: "", triggerWords: "", jsonInfo: "", logInfo: "",
+                });
+                if (drop && drop.kind === "folder") {
+                    const folder = (this.loraData.folders || [])[drop.fIdx];
+                    if (folder) {
+                        folder.loras = folder.loras || [];
+                        const at = Math.max(0, Math.min(folder.loras.length, (drop.lIdx || 0) + (drop.after ? 1 : 0)));
+                        folder.loras.splice(at, 0, lora);
+                        folder.collapsed = false;
+                        this.renderEmbeddedList();
+                        this.updateWidget();
+                        return;
+                    }
+                }
+                this.loraData.loras.push(lora);
+                if (drop && drop.token && Array.isArray(this._topLayout)) {
+                    this._mplPlaceToken("l:" + this._uidFor(lora), drop.token, !!drop.after);
+                }
+                this.renderEmbeddedList();
+                this.updateWidget();
+            };
+
+            nodeType.prototype._mplDropLoraIntoFavorite = function(e, collectionName) {
+                let name = "";
+                try {
+                    const raw = e.dataTransfer.getData("application/x-mpl-lora");
+                    if (raw) name = JSON.parse(raw).name || "";
+                } catch (_) {}
+                if (!name) return;
+                const col = MPL_SIDEBAR.favorites.find(c => c.name === collectionName);
+                if (!col) return;
+                col.items = col.items || [];
+                if (!col.items.includes(name)) {
+                    col.items.push(name);
+                    mplSaveFavorites().then(() => mplRefreshAllSidebars());
+                }
+            };
+
+            nodeType.prototype._mplRemoveFavorite = function(name, collectionName) {
+                const col = MPL_SIDEBAR.favorites.find(c => c.name === collectionName);
+                if (!col) return;
+                col.items = (col.items || []).filter(n => n !== name);
+                mplSaveFavorites().then(() => mplRefreshAllSidebars());
+            };
+
+            nodeType.prototype._mplDropLoraLoose = function(e) {
+                let name = "";
+                try {
+                    const raw = e.dataTransfer.getData("application/x-mpl-lora");
+                    if (raw) name = JSON.parse(raw).name || "";
+                } catch (_) {}
+                if (!name) return;
+                const addTo = (col) => {
+                    col.items = col.items || [];
+                    if (!col.items.includes(name)) {
+                        col.items.push(name);
+                        mplSaveFavorites().then(() => mplRefreshAllSidebars());
+                    }
+                };
+                const cols = MPL_SIDEBAR.favorites;
+                if (cols.length === 0) {
+                    const col = { name: "我的收藏", items: [] };
+                    MPL_SIDEBAR.favorites.push(col);
+                    addTo(col);
+                } else if (cols.length === 1) {
+                    addTo(cols[0]);
+                } else {
+                    this._mplSideMenu(e.clientX, e.clientY, cols.map(c => ({
+                        label: "收藏到：" + c.name,
+                        fn: () => addTo(c),
+                    })));
+                }
+            };
+
+            nodeType.prototype._mplNewFavoriteCollection = function() {
+                const name = prompt("新建收藏夹名称：", "");
+                if (!name || !name.trim()) return;
+                const n = name.trim();
+                if (!MPL_SIDEBAR.favorites.some(c => c.name === n)) {
+                    MPL_SIDEBAR.favorites.push({ name: n, items: [] });
+                }
+                mplSaveFavorites().then(() => mplRefreshAllSidebars());
+            };
+
+            nodeType.prototype._mplFavoriteMenu = function(e, name) {
+                const items = [{
+                    label: "重命名收藏夹", fn: () => {
+                        const nn = prompt("收藏夹新名称：", name);
+                        if (!nn || !nn.trim()) return;
+                        const col = MPL_SIDEBAR.favorites.find(c => c.name === name);
+                        if (col) col.name = nn.trim();
+                        mplSaveFavorites().then(() => mplRefreshAllSidebars());
+                    }
+                }, {
+                    label: "删除收藏夹", danger: true, fn: () => {
+                        if (!confirm(`删除收藏夹 "${name}"？`)) return;
+                        MPL_SIDEBAR.favorites = MPL_SIDEBAR.favorites.filter(c => c.name !== name);
+                        mplSaveFavorites().then(() => mplRefreshAllSidebars());
+                    }
+                }];
+                this._mplSideMenu(e.clientX, e.clientY, items);
+            };
+
+            // 🌟 3. 注入 CSS (保留原有 Linear/Vercel 暗黑主题色盘，融合双栏与卡片细节)
             nodeType.prototype.injectStyles = function() {
                 if(document.getElementById("mpl-styles")) return;
                 const s = document.createElement("style");
                 s.id = "mpl-styles";
                 s.innerHTML = `
-                    /* 🛑 关键修改：pointer-events 必须为 auto，否则鼠标事件会直接穿透到底下的画布 */
-                    .mpl-embedded-container { 
-                        display: flex; 
-                        flex-direction: column; 
-                        background: #2a2a2a; 
-                        border-radius: 0 0 8px 8px; 
-                        border: 1px solid #444; 
-                        border-top: 1px solid #555; 
-                        pointer-events: auto;  /* 👈 改这里：之前是 none，导致无法拦截事件 */
-                        overflow: hidden; 
-                        box-sizing: border-box; 
-                        font-family: sans-serif; 
-                        font-size: 12px; 
-                        width: 100%;
-                        min-height: 200px;
-                    }
-                    .mpl-list-scroll { flex: 1; overflow-y: auto; padding: 5px; background: #222; pointer-events: auto; }
-                    .mpl-footer { height: 36px; background: #2e2e2e; border-top: 1px solid #333; display: flex; align-items: center; padding: 0 5px; gap: 5px; pointer-events: auto; }
-                    .mpl-folder-row { background: #383838; margin-bottom: 4px; border-radius: 4px; overflow: hidden; border: 1px solid #444; }
-                    .mpl-folder-row.drag-over { border: 2px dashed #2196F3; }
-                    .mpl-folder-header { 
-                        padding: 4px 6px; 
-                        color: #eee; 
-                        cursor: pointer; 
-                        display: flex; 
-                        align-items: center; 
-                        font-weight: bold; 
-                        background: #404040; 
-                        font-size: 13px;
-                        min-height: 28px;
-                    }
-                    .mpl-folder-title { margin-left: 5px; border-bottom: 1px dashed transparent; flex: 1; }
-                    .mpl-folder-title:hover { color: #64b5f6; border-color: #666; }
-                    .mpl-folder-controls { 
-                        display: flex; 
-                        align-items: center; 
-                        gap: 4px; 
-                        margin-left: auto; 
-                    }
-                    .mpl-lora-row { display: flex; align-items: center; gap: 5px; padding: 4px; background: #2b2b2b; border-bottom: 1px solid #333; cursor: pointer; }
-                    .mpl-lora-row.root-item { background: #222; border: 1px solid #333; margin-bottom: 2px; }
-                    .mpl-sort-handle { 
-                        width: 16px; 
-                        height: 16px; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center; 
-                        cursor: move; 
-                        color: #888; 
-                        font-size: 14px; 
-                        user-select: none; 
-                        margin-right: 4px;
-                        transition: color 0.2s;
-                    }
-                    .mpl-sort-handle:hover { color: #ccc; }
-                    .mpl-lora-name { flex: 1; min-width: 100px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #ccc; }
-                    .mpl-note-input { flex: 1; min-width: 80px; padding: 4px 8px; background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #fff; font-size: 12px; }
-                    .mpl-weight-container { display: flex; align-items: center; background: #333; border-radius: 3px; border: 1px solid #555; overflow: hidden; }
-                    .mpl-weight-display { min-width: 50px; padding: 4px 8px; text-align: center; color: #fff; font-size: 12px; user-select: none; background: #2a2a2a; cursor: pointer; }
-                    .mpl-weight-display:hover { background: #333; }
-                    .mpl-btn-add { flex: 1; background: #2196F3; border: none; color: white; border-radius: 3px; height: 26px; cursor: pointer; font-size: 12px; }
-                    .mpl-btn-metadata { flex: 1; background: #00897b; border: none; color: white; border-radius: 3px; height: 26px; cursor: pointer; font-size: 12px; white-space: nowrap; }
-                    .mpl-btn-metadata:hover { background: #009688; }
-                    .mpl-btn-icon { 
-                        min-width: 40px; 
-                        height: 26px; 
-                        background: #333; 
-                        border: 1px solid #555; 
-                        color: #ccc; 
-                        border-radius: 3px; 
-                        cursor: pointer; 
+                    .mpl-embedded-container {
+                        --ma-panel-bg: #111114;
+                        --ma-surface: #18181c;
+                        --ma-surface-raised: #222228;
+                        --ma-text: #f4f4f5;
+                        --ma-muted: #a1a1aa;
+                        --ma-border: rgba(255,255,255,0.08);
+                        --ma-accent: #6366f1;
+                        --ma-accent-soft: rgba(99,102,241,0.16);
+                        --ma-danger: #ef4444;
+                        --ma-warn: #f59e0b;
+                        --ma-success: #10b981;
+                        display: flex;
+                        flex-direction: column;
+                        background: var(--ma-panel-bg);
+                        border-radius: 10px;
+                        border: 1px solid var(--ma-border);
+                        color: var(--ma-text);
+                        pointer-events: auto;
+                        overflow: hidden;
+                        box-sizing: border-box;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
                         font-size: 12px;
-                        padding: 0 8px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
+                        /* 始终铺满节点：ComfyUI 会按 widget 可用区域给高度 */
+                        width: 100%;
+                        height: 100%;
+                        min-height: 0;
+                        max-height: none;
+                        --comfy-widget-min-height: 220px;
+                        --comfy-widget-height: 100%;
                     }
-                    .mpl-btn-icon:hover {
-                        background: #444;
-                        border-color: #666;
-                        color: white;
+                    .mpl-list-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px; background: #09090b; pointer-events: auto; }
+                    .mpl-list-scroll::-webkit-scrollbar { width: 7px; }
+                    .mpl-list-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 6px; }
+                    .mpl-list-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.24); }
+                    .mpl-empty-hint {
+                        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+                        padding: 26px 10px; color: var(--ma-muted); font-size: 12px; text-align: center;
                     }
-                    .mpl-mini-input { width: 40px; background: #1a1a1a; border: 1px solid #555; color: white; text-align: center; border-radius: 3px; }
-                    .mpl-mini-btn { 
-                        background: #333; 
-                        border: 1px solid #555; 
-                        cursor: pointer; 
-                        color: #ccc; 
-                        padding: 4px 8px; 
-                        border-radius: 4px;
-                        font-size: 14px;
-                        width: 28px;
-                        height: 24px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        transition: all 0.2s;
+                    .mpl-empty-hint b { color: #d4d4d8; font-weight: 600; }
+                    .mpl-footer {
+                        height: 38px; background: #141418; border-top: 1px solid var(--ma-border);
+                        display: flex; align-items: center; padding: 0 6px; gap: 5px; pointer-events: auto;
                     }
-                    .mpl-mini-btn:hover { 
-                        background: #444; 
-                        color: white; 
-                        border-color: #666;
+                    .mpl-folder-row {
+                        background: var(--folder-bg, var(--folder-def-outer, var(--ma-surface)));
+                        margin-bottom: 6px; border-radius: 8px; overflow: hidden;
+                        border: 1px solid var(--ma-border); border-left: 4px solid transparent;
                     }
-                    .mpl-mini-btn.del:hover { 
-                        background: #f44336; 
-                        color: white; 
-                        border-color: #f44336;
+                    .mpl-folder-row.has-sel {
+                        border-left: 4px solid var(--folder-c, var(--folder-def-bar, var(--ma-accent)));
                     }
-                    .mpl-mini-btn.edit { 
-                        background: #2196F3; 
-                        color: white; 
-                        border-color: #2196F3;
+                    .mpl-folder-row.ignored {
+                        border-left: 4px dashed #d9822b !important;
                     }
-                    .mpl-mini-btn.edit:hover { 
-                        background: #42A5F5; 
-                        border-color: #42A5F5;
+                    .mpl-folder-row.ignored .mpl-folder-title { color: #e0a165 !important; }
+                    .mpl-folder-row.ignored .mpl-folder-header input[type="checkbox"] { opacity: .45 !important; }
+                    .mpl-folder-row.ignored .mpl-lora-row { opacity: .5 !important; }
+                    .mpl-folder-row .mpl-lora-row { margin-left: 4px; }
+                    .mpl-folder-row.drag-over { border: 1px dashed var(--ma-accent); box-shadow: 0 0 0 2px var(--ma-accent-soft); }
+                    .mpl-folder-header {
+                        padding: 5px 8px; color: var(--ma-text); cursor: pointer; display: flex; align-items: center; gap: 5px;
+                        font-weight: 600; font-size: 12.5px; min-height: 30px;
+                        background: var(--folder-head-bg, var(--folder-def-inner, linear-gradient(180deg, rgba(255,255,255,0.04), transparent)));
+                        border-bottom: 1px solid rgba(255,255,255,0.04);
                     }
-                    .mpl-mini-btn.tag { 
-                        background: #333; 
-                        color: #888;
+                    .mpl-folder-title { border-bottom: 1px dashed transparent; flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    .mpl-folder-title:hover { color: #818cf8; border-color: var(--ma-border); }
+                    .mpl-folder-controls { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+                    .mpl-lora-row {
+                        display: flex; align-items: center; gap: 5px; padding: 3px 6px; margin: 1px 0;
+                        background: transparent; border: 1px solid transparent; border-left: 3px solid transparent;
+                        border-radius: 7px; cursor: pointer; transition: background .12s, border-color .12s;
                     }
-                    .mpl-mini-btn.tag.active { 
-                        color: #4CAF50; 
+                    .mpl-lora-row.root-item { margin-bottom: 2px; }
+                    .mpl-lora-row:hover { background: var(--ma-surface-raised); border-color: var(--ma-border); }
+                    .mpl-lora-row.mpl-selected {
+                        background: var(--lora-sel-bg, var(--ma-color-select-bg, var(--ma-accent-soft))) !important;
+                        border-color: var(--lora-sel-border, var(--ma-color-select-border, rgba(99,102,241,0.42))) !important;
+                        border-left: 3px solid var(--lora-sel-bar, var(--ma-color-select-bar, var(--ma-accent))) !important;
                     }
-                    .mpl-mini-btn.tag:hover { 
-                        color: #4CAF50; 
+                    .mpl-lora-row.mpl-selected .mpl-lora-name {
+                        color: var(--lora-sel-text, var(--ma-color-select-text, #f4f4f5)) !important;
                     }
+                    .mpl-lora-row.mpl-disabled { opacity: 0.45; }
+                    .mpl-lora-row.mpl-disabled .mpl-lora-name { color: var(--ma-muted); }
+                    /* 清晰的行内元素分布：🖼 缩略图 · ☰ 拖拽 · 勾选 · 名称 · 拖拽区 · 备注 · 权重 · 🏷️ · ✎ · × */
+                    .mpl-lora-thumb {
+                        flex: 0 0 26px; width: 26px; height: 26px; border-radius: 6px; overflow: hidden;
+                        background: linear-gradient(135deg, #27272e, #18181c); border: 1px solid var(--ma-border);
+                        display: flex; align-items: center; justify-content: center; cursor: default;
+                    }
+                    .mpl-lora-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+                    .mpl-lora-thumb.mpl-lora-thumb-empty { background: var(--ma-surface); }
+                    .mpl-sort-handle {
+                        flex: 0 0 14px; width: 14px; height: 20px; display: flex; align-items: center; justify-content: center;
+                        cursor: move; color: #52525b; font-size: 12px; line-height: 1; user-select: none;
+                        border-radius: 4px; transition: color .15s, background .15s;
+                    }
+                    .mpl-sort-handle:hover { color: #d4d4d8; background: rgba(255,255,255,0.06); }
+                    .mpl-lora-row > input[type="checkbox"] { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; accent-color: #6366f1; cursor: pointer; }
+                    .mpl-lora-row .mpl-drag-area { flex: 0 0 10px; width: 10px; min-width: 0; }
+                    .mpl-lora-name { flex: 1 1 auto; min-width: 60px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ma-text); font-size: 12px; font-weight: 500; }
+                    .mpl-lora-row .mpl-note-input { flex: 0 0 84px; width: 84px; max-width: 84px; min-width: 84px; padding: 3px 7px; background: #09090b; border: 1px solid var(--ma-border); border-radius: 6px; color: var(--ma-text); font-size: 11.5px; }
+                    .mpl-lora-row .mpl-note-input:focus { border-color: var(--ma-accent); outline: none; }
+                    .mpl-weight-container { flex: 0 0 auto; min-width: 106px; display: flex; align-items: center; background: #09090b; border-radius: 6px; border: 1px solid var(--ma-border); overflow: hidden; }
+                    .mpl-weight-display { flex: 1 1 auto; min-width: 42px; padding: 2px 6px; text-align: center; color: var(--ma-text); font-size: 11.5px; user-select: none; background: transparent; cursor: pointer; font-variant-numeric: tabular-nums; }
+                    .mpl-weight-display:hover { background: var(--ma-surface-raised); }
+                    .mpl-lora-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 4px; }
+                    .mpl-btn-add { flex: 1.4; background: #6366f1; border: none; color: white; border-radius: 6px; height: 28px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
+                    .mpl-btn-add:hover { background: #818cf8; }
+                    .mpl-btn-metadata { flex: 1.4; background: #18181c; border: 1px solid var(--ma-border); color: var(--ma-text); border-radius: 6px; height: 28px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+                    .mpl-btn-metadata:hover { background: #222228; border-color: rgba(99,102,241,0.45); }
+                    .mpl-btn-icon {
+                        min-width: 38px; height: 28px; background: #18181c; border: 1px solid var(--ma-border);
+                        color: #d4d4d8; border-radius: 6px; cursor: pointer; font-size: 12px; padding: 0 7px;
+                        display: flex; align-items: center; justify-content: center; white-space: nowrap;
+                    }
+                    .mpl-btn-icon:hover { background: #222228; border-color: rgba(99,102,241,0.45); color: white; }
+                    .mpl-mini-input { width: 40px; background: #09090b; border: 1px solid var(--ma-border); color: white; text-align: center; border-radius: 4px; }
+                    .mpl-mini-btn {
+                        background: var(--ma-surface); border: 1px solid var(--ma-border); cursor: pointer; color: var(--ma-muted);
+                        padding: 0; border-radius: 6px; font-size: 13px; width: 24px; height: 22px;
+                        display: flex; align-items: center; justify-content: center; transition: all 0.14s;
+                    }
+                    .mpl-mini-btn:hover { background: var(--ma-surface-raised); color: var(--ma-text); border-color: rgba(99,102,241,0.45); }
+                    .mpl-mini-btn.del:hover { background: rgba(239,68,68,0.16); color: #f87171; border-color: rgba(239,68,68,0.45); }
+                    .mpl-mini-btn.edit { color: #818cf8; }
+                    .mpl-mini-btn.edit:hover { background: rgba(99,102,241,0.18); color: #fff; }
+                    /* 🏷️ 小方按钮：有触发词亮起，右键可临时关闭触发词 */
+                    .mpl-mini-btn.tag { color: #71717a; font-size: 12px; }
+                    .mpl-mini-btn.tag:hover { color: #d4d4d8; }
+                    .mpl-mini-btn.tag.active { color: #a5b4fc; border-color: rgba(99,102,241,0.45); background: rgba(99,102,241,0.14); }
+                    .mpl-mini-btn.tag.active:hover { color: #fff; border-color: rgba(99,102,241,0.7); }
+                    .mpl-mini-btn.tag.mpl-trigger-off { color: #71717a; border-style: dashed; background: transparent; text-decoration: line-through; }
+                    .mpl-multisel-bar {
+                        position: sticky; top: -8px; z-index: 6;
+                        display: none; align-items: center; gap: 8px;
+                        margin: 0 0 6px; padding: 5px 9px; border-radius: 8px;
+                        background: rgba(24,24,28,0.97); border: 1px solid var(--ma-border);
+                        font-size: 11.5px; color: var(--ma-muted); backdrop-filter: blur(6px);
+                    }
+                    .mpl-multisel-bar .mpl-multisel-count { font-weight: 600; color: #f4f4f5; }
+                    .mpl-ms-master {
+                        margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+                        font-size: 11px; padding: 2px 9px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+                        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); color: #a1a1aa;
+                    }
+                    .mpl-ms-master:hover { border-color: rgba(99,102,241,0.55); color: #f4f4f5; }
+                    .mpl-ms-master.on { background: rgba(99,102,241,0.16); border-color: rgba(99,102,241,0.5); color: #c7d2fe; }
+                    .mpl-ms-warn {
+                        flex: 0 0 auto; width: 20px; height: 20px; padding: 0;
+                        display: inline-flex; align-items: center; justify-content: center;
+                        border-radius: 6px; background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.42);
+                        color: #fca5a5; font-size: 11px; line-height: 1; cursor: pointer;
+                    }
+                    .mpl-top-drop-active { box-shadow: 0 0 0 2px rgba(99,102,241,0.75) inset !important; border-radius: 8px; }
+                    .mpl-top-drop-before { box-shadow: inset 0 3px 0 0 #6366f1 !important; }
+                    .mpl-top-drop-after { box-shadow: inset 0 -3px 0 0 #6366f1 !important; }
+                    .mpl-insert-line { height: 2px; background: #6366f1; margin: 2px 4px; border-radius: 2px; }
                     .mpl-lora-preview { display: none; }
                     .mpl-metadata-dialog {
                         position: fixed; z-index: 9999; display: flex; flex-direction: column;
-                        width: 820px; height: 600px; max-width: calc(100vw - 40px); max-height: calc(100vh - 56px);
+                        width: 840px; height: 610px; max-width: calc(100vw - 40px); max-height: calc(100vh - 56px);
                         min-width: min(660px, calc(100vw - 40px)); min-height: min(420px, calc(100vh - 56px));
-                        background: #202328; color: #dce1e7; border: 1px solid #454b54; border-radius: 10px;
-                        box-shadow: 0 12px 36px rgba(0,0,0,.45); overflow: hidden; resize: both;
-                        box-sizing: border-box; font: 12px/1.45 sans-serif; outline: none;
+                        background: #111114; color: #f4f4f5; border: 1px solid rgba(255,255,255,0.11); border-radius: 14px;
+                        box-shadow: 0 24px 64px rgba(0,0,0,.78), 0 4px 16px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07);
+                        overflow: hidden; resize: both;
+                        box-sizing: border-box; font: 12.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif; outline: none;
                     }
                     .mpl-metadata-dialog *, .mpl-metadata-dialog *::before, .mpl-metadata-dialog *::after { box-sizing: border-box; }
-                    .mpl-metadata-header { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: #272b31; border-bottom: 1px solid #373d45; flex-shrink: 0; cursor: move; }
-                    .mpl-metadata-title { font-size: 14px; font-weight: 600; flex: 1; }
-                    .mpl-metadata-header-icon { color: #8cbcf0; font-size: 16px; }
-                    .mpl-metadata-close { width: 25px; height: 25px; padding: 0 !important; font-size: 18px !important; background: transparent !important; border-color: transparent !important; }
+                    .mpl-metadata-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: linear-gradient(180deg, rgba(255,255,255,.03) 0%, rgba(255,255,255,0) 100%), #111114; border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; cursor: move; }
+                    .mpl-metadata-title { font-size: 14px; font-weight: 600; flex: 1; color: #f4f4f5; letter-spacing: -0.01em; }
+                    .mpl-metadata-header-icon { color: #818cf8; font-size: 16px; }
+                    .mpl-metadata-close { width: 26px; height: 26px; padding: 0 !important; font-size: 17px !important; background: transparent !important; border-color: transparent !important; color: #a1a1aa !important; border-radius: 6px !important; }
+                    .mpl-metadata-close:hover { background: #222228 !important; color: #f4f4f5 !important; }
                     .mpl-metadata-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-                    .mpl-metadata-filters { padding: 11px 14px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #373d45; background: #23272d; flex-shrink: 0; }
+                    .mpl-metadata-filters { padding: 11px 16px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.07); background: #0d0d10; flex-shrink: 0; }
                     .mpl-metadata-filter-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
                     .mpl-metadata-field { display: flex; align-items: center; gap: 7px; min-width: 0; }
-                    .mpl-metadata-field > span { color: #929ca9; white-space: nowrap; font-size: 11px; }
+                    .mpl-metadata-field > span { color: #a1a1aa; white-space: nowrap; font-size: 11.5px; font-weight: 500; }
                     .mpl-metadata-scope { width: 230px; flex-shrink: 0; }
                     .mpl-metadata-directory { flex: 1; min-width: 100px; }
                     .mpl-metadata-dialog select, .mpl-metadata-dialog input[type=search] {
-                        min-width: 0; width: 100%; height: 30px; margin: 0; padding: 4px 8px;
-                        color: #dce1e7; background: #191c21; border: 1px solid #424954; border-radius: 5px;
-                        font: inherit; outline: none;
+                        min-width: 0; width: 100%; height: 30px; margin: 0; padding: 4px 9px;
+                        color: #f4f4f5; background: #09090b; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+                        font: inherit; outline: none; transition: border-color 0.14s, box-shadow 0.14s;
                     }
-                    .mpl-metadata-dialog select:focus, .mpl-metadata-dialog input[type=search]:focus { border-color: #659cd4; }
-                    .mpl-metadata-dialog input[type=checkbox] { width: 13px; height: 13px; margin: 0; accent-color: #70a8df; flex-shrink: 0; }
-                    .mpl-metadata-check { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; font-size: 11px; }
+                    .mpl-metadata-dialog select:focus, .mpl-metadata-dialog input[type=search]:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+                    .mpl-metadata-dialog input[type=checkbox] { width: 13px; height: 13px; margin: 0; accent-color: #6366f1; flex-shrink: 0; }
+                    .mpl-metadata-check { display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap; font-size: 11.5px; color: #d4d4d8; }
                     .mpl-metadata-dialog .mpl-metadata-search-row { flex-wrap: wrap; }
                     .mpl-metadata-dialog .mpl-metadata-search-row input.mpl-metadata-search { flex: 1 1 260px; width: auto; min-width: min(220px, 100%); max-width: 100%; }
                     .mpl-metadata-dialog .mpl-metadata-search-row select.mpl-metadata-status-filter { flex: 0 0 150px; width: 150px; min-width: 130px; max-width: 100%; }
                     .mpl-metadata-dialog .mpl-metadata-search-row .mpl-metadata-refresh { flex: 0 0 auto; width: auto; }
-                    .mpl-metadata-workspace { display: grid; grid-template-columns: 190px minmax(0,1fr); flex: 1; min-height: 0; }
-                    .mpl-metadata-settings { padding: 12px; border-right: 1px solid #373d45; background: #23272d; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+                    .mpl-metadata-workspace { display: grid; grid-template-columns: 195px minmax(0,1fr); flex: 1; min-height: 0; }
+                    .mpl-metadata-settings { padding: 12px 14px; border-right: 1px solid rgba(255,255,255,0.07); background: #0d0d10; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
                     .mpl-metadata-setting-group { display: flex; flex-direction: column; gap: 7px; }
-                    .mpl-metadata-caption { color: #929ca9; font-size: 11px; font-weight: 600; }
+                    .mpl-metadata-caption { color: #a1a1aa; font-size: 11px; font-weight: 600; }
                     .mpl-metadata-types { display: flex; flex-direction: column; gap: 6px; }
-                    .mpl-metadata-type { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 1px solid #3b424c; border-radius: 5px; background: #292e35; cursor: pointer; font-size: 11px; }
-                    .mpl-metadata-type:has(input:checked) { border-color: #527aa2; background: #2b3542; color: #c3ddf6; }
-                    .mpl-metadata-mode-help { font-size: 11px; color: #97a2b0; line-height: 1.6; }
-                    .mpl-metadata-library { min-width: 0; min-height: 0; padding: 10px 12px 0; display: flex; flex-direction: column; gap: 8px; }
+                    .mpl-metadata-type { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; background: #18181c; cursor: pointer; font-size: 11.5px; color: #d4d4d8; transition: all 0.14s; }
+                    .mpl-metadata-type:has(input:checked) { border-color: rgba(99,102,241,0.42); background: rgba(99,102,241,0.14); color: #f4f4f5; }
+                    .mpl-metadata-mode-help { font-size: 11px; color: #71717a; line-height: 1.6; }
+                    .mpl-metadata-library { min-width: 0; min-height: 0; padding: 10px 14px 0; display: flex; flex-direction: column; gap: 8px; background: #111114; }
                     .mpl-metadata-selection { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
-                    .mpl-metadata-counts { margin-left: auto; display: flex; align-items: center; gap: 9px; color: #93a3b6; font-size: 10px; flex-wrap: wrap; }
-                    .mpl-metadata-hint { color: #83909f; font-size: 10px; line-height: 1.5; flex-shrink: 0; }
-                    .mpl-metadata-warning { color: #e3b46f; font-size: 11px; white-space: pre-wrap; max-height: 65px; overflow: auto; flex-shrink: 0; }
+                    .mpl-metadata-counts { margin-left: auto; display: flex; align-items: center; gap: 9px; color: #a1a1aa; font-size: 11px; flex-wrap: wrap; }
+                    .mpl-metadata-hint { color: #71717a; font-size: 11px; line-height: 1.5; flex-shrink: 0; }
+                    .mpl-metadata-warning { color: #fbbf24; font-size: 11px; white-space: pre-wrap; max-height: 65px; overflow: auto; flex-shrink: 0; }
                     .mpl-metadata-warning:empty { display: none; }
-                    .mpl-metadata-inventory { flex: 1; min-height: 100px; overflow: auto; overscroll-behavior: contain; border: 1px solid #3a424d; border-radius: 6px; background: #1d2025; }
-                    .mpl-metadata-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
-                    .mpl-metadata-table thead { position: sticky; top: 0; z-index: 1; background: #2b3139; color: #a6b1be; }
-                    .mpl-metadata-table th { padding: 8px 7px; text-align: left; font-weight: 500; white-space: nowrap; }
-                    .mpl-metadata-table td { padding: 7px; border-bottom: 1px solid #2c323a; vertical-align: middle; }
-                    .mpl-metadata-table tr:has(input:checked) { background: #24303d; }
-                    .mpl-metadata-table tbody tr:hover { background: #2a333f; }
+                    .mpl-metadata-inventory { flex: 1; min-height: 100px; overflow: auto; overscroll-behavior: contain; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; background: #09090b; }
+                    .mpl-metadata-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11.5px; }
+                    .mpl-metadata-table thead { position: sticky; top: 0; z-index: 1; background: #18181c; color: #a1a1aa; box-shadow: 0 1px 0 rgba(255,255,255,0.08); }
+                    .mpl-metadata-table th { padding: 8px 7px; text-align: left; font-weight: 600; white-space: nowrap; }
+                    .mpl-metadata-table td { padding: 7px; border-bottom: 1px solid rgba(255,255,255,0.05); vertical-align: middle; }
+                    .mpl-metadata-table tr:has(input:checked) { background: rgba(99,102,241,0.1); }
+                    .mpl-metadata-table tbody tr:hover { background: #18181c; }
                     .mpl-metadata-file { overflow: hidden; }
-                    .mpl-metadata-file-name { color: #dde5ee; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-                    .mpl-metadata-file-path { color: #788797; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
-                    .mpl-metadata-status { display: inline-block; padding: 2px 5px; border-radius: 4px; font-size: 10px; white-space: nowrap; }
-                    .mpl-metadata-present { color: #93c8b5; background: #263c36; }
-                    .mpl-metadata-missing { color: #dcb774; background: #413824; }
-                    .mpl-metadata-unavailable { color: #9da7b2; background: #30353c; }
-                    .mpl-metadata-progress { padding: 9px 14px; border-top: 1px solid #373d45; display: flex; align-items: center; gap: 10px; background: #23272d; flex-shrink: 0; }
-                    .mpl-metadata-progress-text { width: 125px; min-width: 0; font-size: 11px; color: #9eafc2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    .mpl-metadata-file-name { color: #f4f4f5; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    .mpl-metadata-file-path { color: #71717a; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+                    .mpl-metadata-status { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; white-space: nowrap; font-weight: 500; }
+                    .mpl-metadata-present { color: #34d399; background: rgba(16,185,129,0.14); border: 1px solid rgba(16,185,129,0.3); }
+                    .mpl-metadata-missing { color: #fbbf24; background: rgba(245,158,11,0.14); border: 1px solid rgba(245,158,11,0.3); }
+                    .mpl-metadata-unavailable { color: #a1a1aa; background: #222228; border: 1px solid rgba(255,255,255,0.08); }
+                    .mpl-metadata-progress { padding: 9px 16px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 10px; background: #0d0d10; flex-shrink: 0; }
+                    .mpl-metadata-progress-text { width: 125px; min-width: 0; font-size: 11px; color: #a1a1aa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
                     .mpl-metadata-progress-row { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-                    .mpl-metadata-progress progress { flex: 1; min-width: 0; width: 100%; height: 6px; accent-color: #72a9df; }
-                    .mpl-metadata-progress-count { color: #a4b2c2; font-size: 10px; white-space: nowrap; }
-                    .mpl-metadata-current { color: #8693a3; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
-                    .mpl-metadata-results { flex-shrink: 0; margin-bottom: 8px; color: #98a7b9; font-size: 11px; }
-                    .mpl-metadata-results summary { cursor: pointer; padding: 5px 0; }
-                    .mpl-metadata-stats { display: flex; flex-wrap: wrap; gap: 9px; font-size: 10px; padding-bottom: 5px; }
-                    .mpl-metadata-result-list { max-height: 105px; overflow-y: auto; overscroll-behavior: contain; font-size: 10px; }
-                    .mpl-metadata-result { padding: 7px 0; border-bottom: 1px solid #343c46; overflow-wrap: anywhere; }
-                    .mpl-metadata-result-title { display: flex; align-items: baseline; gap: 7px; color: #becad8; }
-                    .mpl-metadata-result-status { color: #93c8b5; white-space: nowrap; }
-                    .mpl-metadata-result-status-error { color: #e3b46f; }
-                    .mpl-metadata-result-message { color: #8d9cad; margin-top: 3px; white-space: pre-wrap; }
-                    .mpl-metadata-footer { padding: 10px 14px; border-top: 1px solid #373d45; display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+                    .mpl-metadata-progress progress { flex: 1; min-width: 0; width: 100%; height: 6px; accent-color: #6366f1; }
+                    .mpl-metadata-progress-count { color: #a1a1aa; font-size: 10.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+                    .mpl-metadata-current { color: #71717a; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+                    .mpl-metadata-results { flex-shrink: 0; margin-bottom: 8px; color: #a1a1aa; font-size: 11px; }
+                    .mpl-metadata-results summary { cursor: pointer; padding: 5px 0; font-weight: 600; color: #d4d4d8; }
+                    .mpl-metadata-stats { display: flex; flex-wrap: wrap; gap: 9px; font-size: 10.5px; padding-bottom: 5px; }
+                    .mpl-metadata-result-list { max-height: 105px; overflow-y: auto; overscroll-behavior: contain; font-size: 10.5px; }
+                    .mpl-metadata-result { padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06); overflow-wrap: anywhere; }
+                    .mpl-metadata-result-title { display: flex; align-items: baseline; gap: 7px; color: #e4e4e7; }
+                    .mpl-metadata-result-status { color: #34d399; white-space: nowrap; font-weight: 600; }
+                    .mpl-metadata-result-status-error { color: #fbbf24; }
+                    .mpl-metadata-result-message { color: #a1a1aa; margin-top: 3px; white-space: pre-wrap; }
+                    .mpl-metadata-footer { padding: 10px 16px; border-top: 1px solid rgba(255,255,255,0.07); background: #09090b; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
                     .mpl-metadata-footer-spacer { flex: 1; }
-                    .mpl-metadata-dialog button { padding: 5px 9px; margin: 0; border: 1px solid #434d5b; border-radius: 5px; background: #2c333d; color: #becad8; cursor: pointer; font: 11px/1.45 sans-serif; white-space: nowrap; }
-                    .mpl-metadata-dialog button:hover:not(:disabled) { background: #394353; border-color: #5f7793; color: #eef4fb; }
-                    .mpl-metadata-dialog button:disabled { opacity: .4; cursor: default; }
-                    .mpl-metadata-dialog .mpl-metadata-primary { background: #3c77ad; border-color: #568aba; color: white; padding: 6px 16px; }
-                    .mpl-metadata-dialog .mpl-metadata-primary:hover:not(:disabled) { background: #4988c2; }
+                    .mpl-metadata-dialog button { padding: 6px 11px; margin: 0; border: 1px solid rgba(255,255,255,0.11); border-radius: 6px; background: #18181c; color: #e4e4e7; cursor: pointer; font: 11.5px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-weight: 500; white-space: nowrap; transition: all 0.14s ease; }
+                    .mpl-metadata-dialog button:hover:not(:disabled) { background: #27272e; border-color: rgba(255,255,255,0.2); color: #ffffff; }
+                    .mpl-metadata-dialog button:disabled { opacity: .42; cursor: default; }
+                    .mpl-metadata-dialog .mpl-metadata-primary { background: #6366f1; border-color: rgba(255,255,255,0.14); color: white; font-weight: 600; padding: 6px 16px; }
+                    .mpl-metadata-dialog .mpl-metadata-primary:hover:not(:disabled) { background: #818cf8; }
                     @media (max-width: 720px) {
                         .mpl-metadata-workspace { grid-template-columns: 155px minmax(0,1fr); }
                         .mpl-metadata-scope { width: 190px; }
@@ -1017,18 +1961,25 @@ app.registerExtension({
 
             // --- 数据处理与渲染逻辑 ---
             nodeType.prototype.updateWidget = function() {
+                mplNormalizeLoraData(this.loraData);
                 if (!this._stackWidget) {
                     this._stackWidget = this.widgets?.find(w => w.name === "lora_stack");
                 }
                 if (this._stackWidget) {
                     const stack = [];
+                    const masked = this.triggerMaster === false;
+                    const pushLora = (l) => {
+                        if (!l || !mplLoraEnabled(l)) return;
+                        stack.push(masked ? Object.assign({}, l, { triggerEnabled: false }) : l);
+                    };
                     if(this.loraData.folders) {
                         this.loraData.folders.forEach(f => {
-                            f.loras.forEach(l => { if(l.enabled) stack.push(l); });
+                            if (f.ignored) return;
+                            (f.loras || []).forEach(pushLora);
                         });
                     }
                     if(this.loraData.loras) {
-                        this.loraData.loras.forEach(l => { if(l.enabled) stack.push(l); });
+                        (this.loraData.loras || []).forEach(pushLora);
                     }
                     this._stackWidget.value = JSON.stringify(stack);
                 }
@@ -1071,14 +2022,15 @@ app.registerExtension({
                 }
 
                 this.properties["lora_data_state"] = JSON.stringify(this.loraData);
+                if (this.loraData.selected) delete this.loraData.selected;
+                this._syncTopLayout && this._syncTopLayout();
+                this.properties["top_layout"] = JSON.stringify(this._topLayout || []);
                 this.properties["sdnq_mode"] = this.sdnqMode || "none";
                 this.properties["klein_mode"] = this.kleinMode || "auto";
                 this.properties["anima_mode"] = this.animaMode || "none";
-                // 与隐藏 widget、设置弹窗一致：始终用严格布尔，避免 "false" 字符串导致 !adaptiveMode 误判
                 this.adaptiveMode = adaptiveBool;
                 this.properties["adaptive_mode"] = adaptiveBool;
-                // Re-run ComfyUI's official missing-model pipeline immediately
-                // after any LoRA list/widget change.
+                this.properties["trigger_master"] = this.triggerMaster !== false;
                 mplUpdateMissingLoraState(this);
                 mplSyncModelValidationWidgets(this);
                 mplRefreshOfficialMissingModels();
@@ -1088,19 +2040,16 @@ app.registerExtension({
             nodeType.prototype.onConfigure = function(w) {
                 const r = onConfigure ? onConfigure.apply(this, arguments) : undefined;
                 
-                // 确保lora_stack widget保持隐藏（参考zml代码的方式）
                 if (this.widgets) {
                     const stackWidget = this.widgets.find(w => w.name === "lora_stack");
                     if (stackWidget) {
                         stackWidget.hidden = true;
                         stackWidget.computeSize = () => [0, 0];
                     }
-                    // 移除 lora_stack 的输入端口（防止用户误连接）
                     const stackInputIdx = this.inputs?.findIndex(i => i.name === "lora_stack");
                     if (stackInputIdx >= 0) {
                         this.removeInput(stackInputIdx);
                     }
-                    // 兼容旧工作流的 int8_mode widget（占位隐藏，节点已忽略其值）
                     const int8ModeWidget = this.widgets.find(w => w.name === "int8_mode");
                     if (int8ModeWidget) {
                         int8ModeWidget.hidden = true;
@@ -1144,6 +2093,7 @@ app.registerExtension({
                     this.adaptiveMode = false;
                     this.properties["adaptive_mode"] = false;
                 }
+                this.triggerMaster = this.properties["trigger_master"] !== false;
                 // 恢复 Klein 模式设置
                 if (this.properties["klein_mode"] !== undefined) {
                     this.kleinMode = String(this.properties["klein_mode"] || "auto");
@@ -1151,7 +2101,7 @@ app.registerExtension({
                     this.kleinMode = "auto";
                     this.properties["klein_mode"] = "auto";
                 }
-                // 恢复 Anima 2.9B 模式设置（优先隐藏 widget 的 widgets_values，其次 properties）
+                // 恢复 Anima 2.9B 模式设置
                 const animaWidgetVal = (this.widgets?.find(w => w.name === "anima_mode") || this._animaModeWidget)?.value;
                 if (animaWidgetVal !== undefined && animaWidgetVal !== "") {
                     this.animaMode = String(animaWidgetVal);
@@ -1162,7 +2112,7 @@ app.registerExtension({
                 }
                 this.properties["anima_mode"] = this.animaMode;
 
-                // 恢复布局设置（从 properties 读取，确保刷新浏览器后仍生效）
+                // 恢复布局设置
                 const layoutDefaults = {
                     weightStyle: "arrows",
                     sliderStep: 0.05,
@@ -1180,27 +2130,9 @@ app.registerExtension({
                 
                 if (this.properties["lora_data_state"]) {
                     try { 
-                        this.loraData = JSON.parse(this.properties["lora_data_state"]);
-                        // 确保所有lora都有必需字段
-                        if (this.loraData.loras) {
-                            this.loraData.loras.forEach(l => { 
-                                if (!l.note) l.note = "";
-                                if (!l.triggerWords) l.triggerWords = "";
-                                if (!l.jsonInfo) l.jsonInfo = "";
-                                if (!l.logInfo) l.logInfo = "";
-                            });
-                        }
-                        if (this.loraData.folders) {
-                            this.loraData.folders.forEach(f => {
-                                if (f.loras) {
-                                    f.loras.forEach(l => { 
-                                        if (!l.note) l.note = "";
-                                        if (!l.triggerWords) l.triggerWords = "";
-                                        if (!l.jsonInfo) l.jsonInfo = "";
-                                        if (!l.logInfo) l.logInfo = "";
-                                    });
-                                }
-                            });
+                        this.loraData = mplNormalizeLoraData(JSON.parse(this.properties["lora_data_state"]));
+                        if (this.properties["top_layout"]) {
+                            try { this._topLayout = JSON.parse(this.properties["top_layout"]) || []; } catch(e) { this._topLayout = []; }
                         }
                     } catch(e) {}
                 } else if (this.widgets_values && this.widgets_values[2]) {
@@ -1219,28 +2151,19 @@ app.registerExtension({
                         };
                     } catch(e) {}
                 }
-                // 兼容旧工作流：旧的 int8_mode widget（widgets_values[3]）保留占位，但其值已被忽略
-                // （ComfyUI 官方 model_patcher.py 现在直接处理 INT8/FP8 等量化权重，无需自定义模式）
                 if (this.widgets_values && this.widgets_values.length > 3 && this.widgets_values[3] !== undefined && this.widgets_values[3] !== "") {
-                    // 不读取 this.widgets_values[3]，仅覆盖占位 widget 的值，确保不污染后续索引
                     if (this._int8ModeWidget) this._int8ModeWidget.value = "none";
                 }
-
-                // 从 widgets_values 恢复 SDNQ 模式（如果存在）
                 if (this.widgets_values && this.widgets_values.length > 4 && this.widgets_values[4] !== undefined && this.widgets_values[4] !== "") {
                     this.sdnqMode = this.widgets_values[4];
                     this.properties["sdnq_mode"] = this.sdnqMode;
                 }
-
-                // 只从 widgets_values 恢复自适应模式（如果存在）
                 const wAdaptive = this.widgets_values?.[5];
                 const wAdaptiveHasValue = wAdaptive !== undefined && wAdaptive !== "";
                 if (this.widgets_values && this.widgets_values.length > 5 && wAdaptiveHasValue) {
                     this.adaptiveMode = wAdaptive === "true" || wAdaptive === true;
                     this.properties["adaptive_mode"] = this.adaptiveMode;
                 }
-
-                // 从 widgets_values 恢复 Klein 模式（如果存在）
                 const wKlein = this.widgets_values?.[6];
                 const wKleinHasValue = wKlein !== undefined && wKlein !== "";
                 if (this.widgets_values && this.widgets_values.length > 6 && wKleinHasValue) {
@@ -1248,7 +2171,6 @@ app.registerExtension({
                     this.properties["klein_mode"] = this.kleinMode;
                 }
 
-                // 归一化/自动修复旧工作流的模式字段（旧版本可能写入 true/false 等无效值）
                 const normalizeSdnq = (v) => v === "sdnq" ? "sdnq" : "none";
                 const normalizeKlein = (v) => v === "klein" ? "klein" : (v === "auto" ? "auto" : "none");
 
@@ -1266,8 +2188,6 @@ app.registerExtension({
                     if (this._kleinModeWidget) this._kleinModeWidget.value = fixedKlein;
                 }
 
-                // 自动修复旧工作流：某些旧版本会把 adaptive_mode 错误保存成 true
-                // 修复条件：properties 里是 true，但 widgets_values[5] 为空/false（说明不是用户显式选的自适应）
                 if ((this.properties["adaptive_mode"] === true || this.properties["adaptive_mode"] === "true")
                     && (!wAdaptiveHasValue || wAdaptive === "false" || wAdaptive === false)) {
                     this.adaptiveMode = false;
@@ -1275,8 +2195,22 @@ app.registerExtension({
                     if (this._adaptiveModeWidget) this._adaptiveModeWidget.value = "false";
                 }
 
-                // 最后统一同步一次，确保 properties / 隐藏 widget 一致并写回工作流
+                {
+                    const savedColors = this.properties["color_settings"];
+                    const colorDefaults = { selectBg: "#2b3b5e", selectBar: "#6366f1", selectText: "#eef1ff" };
+                    this.colorSettings = (savedColors && typeof savedColors === "object")
+                        ? Object.assign({}, colorDefaults, savedColors)
+                        : colorDefaults;
+                    const savedFolderColors = this.properties["folder_color_settings"];
+                    const folderColorDefaults = { outer: "", inner: "", bar: "" };
+                    this.folderColorSettings = (savedFolderColors && typeof savedFolderColors === "object")
+                        ? Object.assign({}, folderColorDefaults, savedFolderColors)
+                        : folderColorDefaults;
+                }
+
                 this.updateWidget?.();
+                this.applyColorSettings?.();
+                this.applyFolderColorSettings?.();
                 this._mplSyncDOMLayout?.();
                 
                 setTimeout(() => {
@@ -1286,6 +2220,7 @@ app.registerExtension({
                     mplUpdateMissingLoraState(this);
                     mplSyncModelValidationWidgets(this);
                     this._mplSyncDOMLayout?.();
+                    this._mplScheduleLayoutSync?.();
                     void loadLoraNameList();
                 }, 100);
                 return r;
@@ -1294,7 +2229,14 @@ app.registerExtension({
             const onNodeRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function() {
                 const r = onNodeRemoved ? onNodeRemoved.apply(this, arguments) : undefined;
-                // 清理预览图和定时器
+                if (this._mplLayoutSyncTimers) {
+                    this._mplLayoutSyncTimers.forEach(t => clearTimeout(t));
+                    this._mplLayoutSyncTimers = null;
+                }
+                if (this._mplResizeObserver) {
+                    try { this._mplResizeObserver.disconnect(); } catch (e) {}
+                    this._mplResizeObserver = null;
+                }
                 if (this._previewTimeout) {
                     clearTimeout(this._previewTimeout);
                     this._previewTimeout = null;
@@ -1303,401 +2245,585 @@ app.registerExtension({
                     this._previewDiv.remove();
                     this._previewDiv = null;
                 }
-                // Removing a node can resolve its missing-LoRA error without
-                // touching any widget, so rescan the error record immediately.
                 setTimeout(() => mplRefreshOfficialMissingModels(), 0);
-                // 额外清理所有预览图（防止遗漏）
                 const previews = document.querySelectorAll('.mpl-lora-preview');
                 previews.forEach(preview => preview.remove());
                 return r;
             };
 
+            nodeType.prototype.applyColorSettings = function() {
+                const c = this.colorSettings || {};
+                const root = this.embeddedContainer || (this.listContainer ? this.listContainer.closest(".mpl-embedded-container") : null) || this.listContainer;
+                if (!root || !root.style) return;
+                if (c.selectBg) root.style.setProperty("--ma-color-select-bg", c.selectBg);
+                if (c.selectBar) root.style.setProperty("--ma-color-select-border", c.selectBar + "88");
+                if (c.selectBar) root.style.setProperty("--ma-color-select-bar", c.selectBar);
+                if (c.selectText) root.style.setProperty("--ma-color-select-text", c.selectText);
+            };
+            nodeType.prototype.applyFolderColorSettings = function() {
+                const f = this.folderColorSettings || {};
+                const root = this.embeddedContainer || (this.listContainer ? this.listContainer.closest(".mpl-embedded-container") : null) || this.listContainer;
+                if (!root || !root.style) return;
+                if (f.outer) root.style.setProperty("--folder-def-outer", f.outer);
+                else root.style.removeProperty("--folder-def-outer");
+                if (f.inner) root.style.setProperty("--folder-def-inner", f.inner);
+                else root.style.removeProperty("--folder-def-inner");
+                if (f.bar) root.style.setProperty("--folder-def-bar", f.bar);
+                else root.style.removeProperty("--folder-def-bar");
+            };
+            nodeType.prototype._ensureMultiSelectState = function() {
+                if (!this.loraData.selected || typeof this.loraData.selected !== "object") {
+                    this.loraData.selected = {};
+                }
+                return this.loraData.selected;
+            };
+            nodeType.prototype._msKey = function(lora) {
+                return String((lora && (lora.name || lora.id)) || "");
+            };
+            nodeType.prototype._isMultiSelected = function(container, lora) {
+                return !!lora && mplLoraEnabled(lora);
+            };
+            nodeType.prototype._addMultiSelected = function(container, lora) {
+                if (lora) lora.enabled = true;
+            };
+            nodeType.prototype._removeMultiSelected = function(container, lora) {
+                if (lora) lora.enabled = false;
+            };
+            nodeType.prototype._getMultiSelectedLoras = function() {
+                const all = [];
+                (this.loraData.loras || []).forEach(l => all.push(l));
+                (this.loraData.folders || []).forEach(f => {
+                    if (f.ignored) return;
+                    (f.loras || []).forEach(l => all.push(l));
+                });
+                return all.filter(l => l && mplLoraEnabled(l));
+            };
+            nodeType.prototype._clearMultiSelect = function() {
+                this.loraData.selected = {};
+            };
+            nodeType.prototype._refreshMultiSelectUI = function() {
+                const n = this._getMultiSelectedLoras().length;
+                const bar = this.listContainer && this.listContainer.querySelector(".mpl-multisel-bar");
+                if (bar) {
+                    bar.style.display = "flex";
+                    const label = bar.querySelector(".mpl-ms-label");
+                    if (label) {
+                        if (n > 0) {
+                            label.textContent = `已启用 ${n} 个 LoRA`;
+                            label.style.color = "#f4f4f5";
+                        } else {
+                            label.textContent = "暂未启用 LoRA";
+                            label.style.color = "#a1a1aa";
+                        }
+                    }
+                }
+                if (this.listContainer) {
+                    const fRows = this.listContainer.querySelectorAll(".mpl-folder-row");
+                    fRows.forEach((fDiv) => {
+                        const cb = fDiv.querySelector(':scope > .mpl-folder-header > input[type="checkbox"]');
+                        if (!cb) return;
+                        const idx = parseInt(fDiv.dataset.fidx, 10);
+                        const folder = this.loraData.folders[idx];
+                        if (!folder) return;
+                        const total = (folder.loras || []).length;
+                        const cnt = (folder.loras || []).filter(l => this._isMultiSelected(folder, l)).length;
+                        cb.checked = total > 0 && cnt === total;
+                        cb.indeterminate = cnt > 0 && cnt < total;
+                        if (cnt > 0) fDiv.classList.add("has-sel");
+                        else fDiv.classList.remove("has-sel");
+                    });
+                }
+                if (this.updateWidget) this.updateWidget();
+            };
+            // 紧凑状态条：左侧只显示「已启用 N 个 LoRA」，右侧一个触发词总开关；
+            // 只有真的没接入工作流时才出现一个小小的 ⚠ 图标（不显示节点 ID 之类的噪音）。
+            nodeType.prototype._buildMultiSelectBar = function() {
+                const bar = document.createElement("div");
+                bar.className = "mpl-multisel-bar";
+                bar.style.display = "flex";
+                const n = this._getMultiSelectedLoras().length;
+                const label = document.createElement("span");
+                label.className = "mpl-ms-label";
+                if (n > 0) {
+                    label.textContent = `已启用 ${n} 个 LoRA`;
+                    label.style.color = "#f4f4f5";
+                } else {
+                    label.textContent = "暂未启用 LoRA";
+                    label.style.color = "#a1a1aa";
+                }
+                bar.appendChild(label);
+                const masterOn = this.triggerMaster !== false;
+                const masterBtn = document.createElement("button");
+                masterBtn.type = "button";
+                masterBtn.className = "mpl-ms-master" + (masterOn ? " on" : "");
+                masterBtn.innerHTML = mplIcon("tag", 12) + '<span>触发词</span>';
+                masterBtn.title = masterOn
+                    ? "触发词正在输出。单击屏蔽所有触发词（不影响各行小开关的状态）"
+                    : "所有触发词已被屏蔽。单击恢复输出（各行小开关状态保持不变）";
+                masterBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.triggerMaster = (this.triggerMaster === false);
+                    this.updateWidget();
+                    this.renderEmbeddedList();
+                };
+                masterBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+                bar.appendChild(masterBtn);
+                this._mplRefreshStatusBar(bar);
+                return bar;
+            };
+
+            // 只在真的「没接入工作流」时给出提示（不常驻显示节点 ID）
+            nodeType.prototype._mplLinkStatus = function() {
+                const outs = this.outputs || [];
+                const outCount = (i) => {
+                    const o = outs[i];
+                    return o && Array.isArray(o.links) ? o.links.length : 0;
+                };
+                const anyOut = outs.some((o, i) => outCount(i) > 0);
+                const modelIn = (this.inputs || []).find(i => i.name === "model");
+                const hasModelIn = !!(modelIn && modelIn.link !== null && modelIn.link !== undefined && modelIn.link !== false);
+                let activePeer = null;
+                try {
+                    const same = (app?.graph?._nodes || []).filter(n => n && n !== this && (n.type === NODE_NAME || n.constructor?.type === NODE_NAME));
+                    activePeer = same.find(n => {
+                        const mIn = (n.inputs || []).find(i => i.name === "model");
+                        const mOut = (n.outputs || [])[0];
+                        return !!(mIn && mIn.link != null && mOut && Array.isArray(mOut.links) && mOut.links.length);
+                    }) || null;
+                } catch (e) {}
+                if (!anyOut) {
+                    return {
+                        detached: true,
+                        activePeer,
+                        title: "输出没有任何连线，ComfyUI 不会执行本节点——在这里勾选/取消 LoRA 不会影响出图。" +
+                            (activePeer ? " 单击可定位画布上已接入工作流的那一个加载器。" : ""),
+                    };
+                }
+                if (!hasModelIn && outCount(4) === 0) {
+                    return {
+                        detached: true,
+                        activePeer,
+                        title: "链末端需要 model 输入才会应用 LoRA，请把上游模型接到本节点的 model 输入。",
+                    };
+                }
+                return { detached: false, activePeer };
+            };
+
+            // 只维护一个不打扰的小 ⚠ 图标（只有真的没接入时才出现）
+            nodeType.prototype._mplRefreshStatusBar = function(bar) {
+                const target = bar || this.listContainer?.querySelector(".mpl-multisel-bar");
+                if (!target) return;
+                const st = this._mplLinkStatus();
+                let warn = target.querySelector(".mpl-ms-warn");
+                if (!st.detached) {
+                    if (warn) warn.remove();
+                    return;
+                }
+                if (!warn) {
+                    warn = document.createElement("button");
+                    warn.type = "button";
+                    warn.className = "mpl-ms-warn";
+                    warn.textContent = "⚠";
+                    warn.addEventListener("pointerdown", (e) => e.stopPropagation());
+                    target.appendChild(warn);
+                }
+                warn.title = st.title || "";
+                warn.style.cursor = st.activePeer ? "pointer" : "default";
+                warn.onclick = (e) => {
+                    e.stopPropagation();
+                    const peer = st.activePeer;
+                    if (!peer) return;
+                    try {
+                        app.canvas?.centerOnNode?.(peer);
+                        if (typeof app.canvas?.selectNode === "function") app.canvas.selectNode(peer);
+                        else if (typeof app.canvas?.selectNodes === "function") app.canvas.selectNodes([peer]);
+                        app.canvas?.setDirty?.(true, true);
+                    } catch (err) {}
+                };
+            };
+
+            const onConnectionsChangeOrig = nodeType.prototype.onConnectionsChange;
+            nodeType.prototype.onConnectionsChange = function() {
+                const r = onConnectionsChangeOrig ? onConnectionsChangeOrig.apply(this, arguments) : undefined;
+                this._mplRefreshStatusBar();
+                return r;
+            };
+
+            // ---------- 顶层统一布局（文件夹与散装 LoRA 自由穿插）----------
+            nodeType.prototype._uidFor = function(obj) {
+                if (!obj._uid) {
+                    obj._uid = "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                }
+                return obj._uid;
+            };
+            nodeType.prototype._syncTopLayout = function() {
+                const folders = this.loraData.folders || [];
+                const loras = this.loraData.loras || [];
+                if (!Array.isArray(this._topLayout)) this._topLayout = [];
+                const valid = new Set();
+                folders.forEach(f => valid.add("f:" + this._uidFor(f)));
+                loras.forEach(l => valid.add("l:" + this._uidFor(l)));
+                this._topLayout = this._topLayout.filter(tok => valid.has(tok));
+                const present = new Set(this._topLayout);
+                folders.forEach(f => { const k = "f:" + this._uidFor(f); if (!present.has(k)) { this._topLayout.push(k); present.add(k); } });
+                loras.forEach(l => { const k = "l:" + this._uidFor(l); if (!present.has(k)) { this._topLayout.push(k); present.add(k); } });
+                return this._topLayout;
+            };
+            nodeType.prototype._moveTopToken = function(srcTok, dstTok, after) {
+                if (!this._topLayout) return;
+                const arr = this._topLayout;
+                const si = arr.indexOf(srcTok);
+                if (si < 0) return;
+                arr.splice(si, 1);
+                let di = arr.indexOf(dstTok);
+                if (di < 0) { arr.push(srcTok); return; }
+                if (after) di += 1;
+                arr.splice(di, 0, srcTok);
+            };
+            nodeType.prototype._mplPlaceToken = function(token, targetToken, after) {
+                if (!Array.isArray(this._topLayout)) this._topLayout = [];
+                const arr = this._topLayout;
+                const si = arr.indexOf(token);
+                if (si >= 0) arr.splice(si, 1);
+                const di = arr.indexOf(targetToken);
+                if (di < 0) { arr.push(token); return; }
+                arr.splice(after ? di + 1 : di, 0, token);
+            };
+            nodeType.prototype._mplInsertLoraByToken = function(movedLora, targetLora, after) {
+                if (!movedLora || !targetLora) return;
+                this._mplPlaceToken("l:" + this._uidFor(movedLora), "l:" + this._uidFor(targetLora), after);
+            };
+
             nodeType.prototype.renderEmbeddedList = function() {
                 if(!this.listContainer) return;
+                mplNormalizeLoraData(this.loraData);
                 
-                // 清理所有预览图，避免重复显示
                 const previews = document.querySelectorAll('.mpl-lora-preview');
                 previews.forEach(preview => preview.remove());
                 
                 const container = this.listContainer;
+                const _prevScrollTop = container.scrollTop;
                 container.innerHTML = "";
+                this._listEl = container;
 
-                this.loraData.folders.forEach((folder, fIdx) => {
-                    const fDiv = document.createElement("div");
-                    fDiv.className = "mpl-folder-row";
-                    fDiv.ondragover = (e) => { 
-                        e.preventDefault(); 
-                        // 检查是否是排序拖拽（通过节点级别的变量或自定义数据格式）
-                        const isSortDrag = e.dataTransfer.types.includes("application/x-sort-drag") || this._currentSortDrag;
-                        
-                        if (isSortDrag) {
-                            // 从节点级别读取拖拽信息（最可靠的方法）
-                            const dragInfo = this._currentSortDrag;
-                            if (!dragInfo) return;
-                            
-                            // 检查是否是lora排序（lora排序有sourceLIdx字段，文件夹排序没有）
-                            if (dragInfo.sourceLIdx !== undefined) {
-                                // 这是lora排序，不是文件夹排序，不显示特效
-                                return;
-                            }
-                            
-                            // 只显示文件夹排序到文件夹的特效
-                            if (dragInfo.sourceType === 'folder') {
-                                // 排序拖拽：添加视觉反馈（使用橙色以区分移动操作）
-                                // 先移除drag-over类，避免蓝色边框覆盖
-                                fDiv.classList.remove("drag-over");
-                                const rect = fDiv.getBoundingClientRect();
-                                const mouseY = e.clientY - rect.top;
-                                const isTopHalf = mouseY < rect.height / 2;
-                                
-                                if (isTopHalf) {
-                                    fDiv.style.borderTop = "2px dashed #FF9800";
-                                    fDiv.style.borderBottom = "none";
-                                } else {
-                                    fDiv.style.borderBottom = "2px dashed #FF9800";
-                                    fDiv.style.borderTop = "none";
-                                }
-                                return; // 排序拖拽不显示文件夹的drag-over效果
-                            }
-                            // 如果是lora排序到文件夹，不显示特效，直接返回
-                            return;
+                this._ensureMultiSelectState();
+                this.applyColorSettings();
+                this.applyFolderColorSettings();
+                container.appendChild(this._buildMultiSelectBar());
+
+                const _layout = this._syncTopLayout();
+                const _folderByIdx = this.loraData.folders;
+                const _rootLoras = this.loraData.loras;
+
+                const self = this;
+                const _mkTopDragHandle = (handleEl, tok, dimEl, extra) => {
+                    handleEl.draggable = true;
+                    handleEl.ondragstart = (e) => {
+                        e.stopPropagation();
+                        mplClearLoraPreview();
+                        e.dataTransfer.setData("text/plain", JSON.stringify({ type: "top", tok: tok }));
+                        e.dataTransfer.setData("application/x-top-drag", "true");
+                        e.dataTransfer.effectAllowed = "move";
+                        if (String(tok).startsWith("f:")) {
+                            try { e.dataTransfer.setData("application/x-mpl-folder", JSON.stringify({ tok })); } catch (_) {}
                         }
-                        
-                        // 非排序拖拽：显示文件夹的drag-over效果（蓝色虚线）
-                        // 先清除橙色边框
-                        fDiv.style.borderTop = "none";
-                        fDiv.style.borderBottom = "none";
-                        fDiv.classList.add("drag-over"); 
+                        if (extra) {
+                            try { e.dataTransfer.setData(extra.mime, JSON.stringify(extra.value)); } catch (_) {}
+                        }
+                        self._currentTopDrag = tok;
+                        if (dimEl) dimEl.style.opacity = "0.4";
                     };
-                    fDiv.ondragleave = () => { 
-                        fDiv.classList.remove("drag-over");
-                        fDiv.style.borderTop = "none";
-                        fDiv.style.borderBottom = "";
-                        // 清除拖拽信息（如果拖拽离开）
-                        // 注意：这里不清除_currentSortDrag，因为可能只是暂时离开，ondragend会清除
+                    handleEl.ondragend = () => {
+                        if (dimEl) dimEl.style.opacity = "1";
+                        self._currentTopDrag = null;
+                        (self._listEl ? self._listEl.querySelectorAll(".mpl-insert-line") : []).forEach(el => el.remove());
                     };
-                    fDiv.ondrop = (e) => {
-                        e.preventDefault(); 
-                        fDiv.classList.remove("drag-over");
-                        fDiv.style.borderTop = "none";
-                        fDiv.style.borderBottom = "";
-                        
-                        try {
-                            const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-                            // 清除拖拽信息
-                            this._currentSortDrag = null;
-                            
-                            // 如果是排序拖拽
-                            if (data.type === 'sort') {
-                                // 文件夹排序到文件夹（只允许文件夹之间排序）
-                                if (data.sourceType === 'folder') {
-                                    const sourceFIdx = data.sourceFIdx;
-                                    const targetFIdx = fIdx;
-                                    
-                                    if (sourceFIdx === targetFIdx) return;
-                                    
-                                    // 获取要移动的文件夹（深拷贝）
-                                    const movedFolder = JSON.parse(JSON.stringify(this.loraData.folders[sourceFIdx]));
-                                    
-                                // 计算鼠标位置，判断是向上还是向下插入
-                                const rect = fDiv.getBoundingClientRect();
-                                const mouseY = e.clientY - rect.top;
-                                const isTopHalf = mouseY < rect.height / 2;
-                                
-                                // 计算目标插入位置
-                                let insertIdx;
-                                if (sourceFIdx < targetFIdx) {
-                                    // 向下移动：如果插入到上半部分，插入到targetIdx；如果插入到下半部分，插入到targetIdx+1
-                                    insertIdx = isTopHalf ? targetFIdx : targetFIdx + 1;
-                                } else {
-                                    // 向上移动：如果插入到上半部分，插入到targetIdx；如果插入到下半部分，插入到targetIdx+1
-                                    insertIdx = isTopHalf ? targetFIdx : targetFIdx + 1;
-                                }
-                                
-                                // 先删除源文件夹
-                                this.loraData.folders.splice(sourceFIdx, 1);
-                                
-                                // 如果删除后目标索引发生变化，需要调整
-                                if (sourceFIdx < targetFIdx) {
-                                    // 源在目标之前，删除后目标索引已经减1
-                                    if (!isTopHalf) {
-                                        insertIdx = targetFIdx; // 向下插入，目标索引已减1
-                                    } else {
-                                        insertIdx = targetFIdx - 1; // 向上插入
+                };
+                const _clearTopMark = (el) => el.classList.remove("mpl-top-drop-active", "mpl-top-drop-before", "mpl-top-drop-after");
+                const _bindTopDropTarget = (el, tok) => {
+                    el.addEventListener("dragover", (e) => {
+                        if (!self._currentTopDrag) return;
+                        e.preventDefault();
+                        _clearTopMark(el);
+                        const rect = el.getBoundingClientRect();
+                        el.classList.add((e.clientY - rect.top) > rect.height / 2 ? "mpl-top-drop-after" : "mpl-top-drop-before");
+                    });
+                    el.addEventListener("dragleave", () => _clearTopMark(el));
+                    el.addEventListener("drop", (e) => {
+                        const raw = e.dataTransfer.getData("text/plain");
+                        if (!raw) return;
+                        let data; try { data = JSON.parse(raw); } catch (_) { return; }
+                        if (!data || data.type !== "top") return;
+                        e.preventDefault(); e.stopPropagation();
+                        _clearTopMark(el);
+                        if (data.tok === tok) { self._currentTopDrag = null; return; }
+                        const rect = el.getBoundingClientRect();
+                        const after = (e.clientY - rect.top) > rect.height / 2;
+                        self._moveTopToken(data.tok, tok, after);
+                        self._currentTopDrag = null;
+                        self.renderEmbeddedList();
+                        self.updateWidget();
+                    });
+                };
+
+                _layout.forEach((tok) => {
+                    if (tok.startsWith("f:")) {
+                        const uid = tok.slice(2);
+                        const fIdx = _folderByIdx.findIndex(f => this._uidFor(f) === uid);
+                        if (fIdx < 0) return;
+                        const folder = _folderByIdx[fIdx];
+                        const fDiv = document.createElement("div");
+                        fDiv.className = "mpl-folder-row" + (folder.ignored ? " ignored" : "");
+                        fDiv.dataset.fidx = String(fIdx);
+                        if ((folder.loras || []).some(l => this._isMultiSelected(folder, l))) {
+                            fDiv.classList.add("has-sel");
+                        }
+                        if (folder.colorMode !== "global") {
+                            if (folder.color) fDiv.style.setProperty("--folder-c", folder.color);
+                            if (folder.bgColor) fDiv.style.setProperty("--folder-bg", folder.bgColor);
+                            if (folder.headBg) fDiv.style.setProperty("--folder-head-bg", folder.headBg);
+                        }
+                        fDiv.oncontextmenu = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            this.showFolderContextMenu(folder, fDiv, e.clientX, e.clientY);
+                        };
+
+                        fDiv.ondragover = (e) => {
+                            e.preventDefault();
+                            fDiv.classList.add("drag-over");
+                            if (this._currentTopDrag) {
+                                fDiv.classList.remove("mpl-top-drop-before", "mpl-top-drop-after");
+                                const r = fDiv.getBoundingClientRect();
+                                fDiv.classList.add((e.clientY - r.top) > r.height / 2 ? "mpl-top-drop-after" : "mpl-top-drop-before");
+                            }
+                        };
+                        fDiv.ondragleave = () => { fDiv.classList.remove("drag-over", "mpl-top-drop-before", "mpl-top-drop-after"); };
+                        fDiv.ondrop = (e) => {
+                            e.preventDefault();
+                            fDiv.classList.remove("drag-over", "mpl-top-drop-before", "mpl-top-drop-after");
+                            try {
+                                const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                                if (data && data.type === "top" && typeof data.tok === "string") {
+                                    e.stopPropagation();
+                                    if (data.tok.startsWith("l:")) {
+                                        const uid = data.tok.slice(2);
+                                        const ri = this.loraData.loras.findIndex(l => this._uidFor(l) === uid);
+                                        if (ri >= 0) {
+                                            const moved = this.loraData.loras[ri];
+                                            this.loraData.loras.splice(ri, 1);
+                                            folder.loras.push(moved);
+                                            folder.collapsed = false;
+                                        }
+                                    } else if (data.tok.startsWith("f:") && data.tok !== tok) {
+                                        const rect = fDiv.getBoundingClientRect();
+                                        const after = (e.clientY - rect.top) > rect.height / 2;
+                                        this._moveTopToken(data.tok, tok, after);
                                     }
-                                } else {
-                                    // 源在目标之后，删除后目标索引不变
-                                    insertIdx = isTopHalf ? targetFIdx : targetFIdx + 1;
-                                }
-                                
-                                // 确保索引有效
-                                insertIdx = Math.max(0, Math.min(insertIdx, this.loraData.folders.length));
-                                
-                                // 插入到目标位置
-                                this.loraData.folders.splice(insertIdx, 0, movedFolder);
-                                    
+                                    this._currentTopDrag = null;
                                     this.renderEmbeddedList();
                                     this.updateWidget();
                                     return;
                                 }
-                                
-                                // 不允许lora排序到文件夹，直接返回
-                                return;
-                            }
-                            
-                            // 原有的拖拽到文件夹逻辑（移动lora到文件夹内）
-                            let movedItem = null;
-                            
-                            // 先获取要移动的项（深拷贝），然后再删除
-                            if (data.type === 'root') {
-                                // 检查索引有效性
-                                if (data.lIdx >= 0 && data.lIdx < this.loraData.loras.length) {
-                                    movedItem = JSON.parse(JSON.stringify(this.loraData.loras[data.lIdx]));
-                                this.loraData.loras.splice(data.lIdx, 1);
-                                }
-                            } else if (data.type === 'folder') {
-                                // 检查源文件夹索引是否有效
-                                if (data.fIdx >= 0 && data.fIdx < this.loraData.folders.length) {
-                                const srcFolder = this.loraData.folders[data.fIdx];
-                                    // 如果移动到不同文件夹
-                                    if (data.fIdx !== fIdx) {
-                                        // 检查lora索引有效性
-                                        if (data.lIdx >= 0 && data.lIdx < srcFolder.loras.length) {
-                                            // 深拷贝避免引用问题
-                                            movedItem = JSON.parse(JSON.stringify(srcFolder.loras[data.lIdx]));
-                                srcFolder.loras.splice(data.lIdx, 1);
-                            }
+                                let movedItem = null;
+                                if (data.sourceLIdx !== undefined && (data.sourceType === "root" || data.sourceType === "folder")) {
+                                    if (data.sourceType === "root") {
+                                        const src = this.loraData.loras;
+                                        if (data.sourceLIdx >= 0 && data.sourceLIdx < src.length) {
+                                            movedItem = src[data.sourceLIdx];
+                                            src.splice(data.sourceLIdx, 1);
+                                        }
+                                    } else {
+                                        if (data.sourceFIdx >= 0 && data.sourceFIdx < this.loraData.folders.length) {
+                                            const srcFolder = this.loraData.folders[data.sourceFIdx];
+                                            if (data.sourceFIdx !== fIdx && data.sourceLIdx >= 0 && data.sourceLIdx < srcFolder.loras.length) {
+                                                movedItem = srcFolder.loras[data.sourceLIdx];
+                                                srcFolder.loras.splice(data.sourceLIdx, 1);
+                                            }
+                                        }
                                     }
-                                    // 如果是同一文件夹，不做任何操作（避免自己移动到自己）
+                                } else if (data.type === "root") {
+                                    if (data.lIdx >= 0 && data.lIdx < this.loraData.loras.length) {
+                                        movedItem = this.loraData.loras[data.lIdx];
+                                        this.loraData.loras.splice(data.lIdx, 1);
+                                    }
+                                } else if (data.type === "folder") {
+                                    if (data.fIdx >= 0 && data.fIdx < this.loraData.folders.length) {
+                                        const srcFolder = this.loraData.folders[data.fIdx];
+                                        if (data.fIdx !== fIdx && data.lIdx >= 0 && data.lIdx < srcFolder.loras.length) {
+                                            movedItem = srcFolder.loras[data.lIdx];
+                                            srcFolder.loras.splice(data.lIdx, 1);
+                                        }
+                                    }
                                 }
+                                if (movedItem) {
+                                    folder.loras.push(movedItem);
+                                    folder.collapsed = false;
+                                    this.renderEmbeddedList();
+                                    this.updateWidget();
+                                }
+                            } catch (err) {
+                                console.error("拖拽到文件夹错误:", err);
                             }
-                            
-                            // 如果成功获取到要移动的项，添加到目标文件夹
-                            if (movedItem) {
-                                folder.loras.push(movedItem);
-                                folder.collapsed = false; 
-                                this.renderEmbeddedList();
-                                this.updateWidget(); 
-                            }
-                        } catch(err) {
-                            console.error("拖拽到文件夹错误:", err);
-                        }
-                    };
-
-                    const header = document.createElement("div");
-                    header.className = "mpl-folder-header";
-                    
-                    // 文件夹排序条（汉堡菜单图标）
-                    const folderSortHandle = document.createElement("div");
-                    folderSortHandle.className = "mpl-sort-handle";
-                    folderSortHandle.innerHTML = "☰";
-                    folderSortHandle.draggable = true;
-                    folderSortHandle.style.cssText = `
-                        width: 16px;
-                        height: 16px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        cursor: move;
-                        color: #888;
-                        font-size: 14px;
-                        user-select: none;
-                        margin-right: 4px;
-                    `;
-                    folderSortHandle.onmouseenter = () => {
-                        folderSortHandle.style.color = "#ccc";
-                    };
-                    folderSortHandle.onmouseleave = () => {
-                        folderSortHandle.style.color = "#888";
-                    };
-                    // 拖拽开始：标记这是文件夹排序拖拽
-                    folderSortHandle.ondragstart = (e) => {
-                        e.stopPropagation();
-                        const dragInfo = { 
-                            type: 'sort', 
-                            sourceType: 'folder', 
-                            sourceFIdx: fIdx
                         };
-                        e.dataTransfer.setData("text/plain", JSON.stringify(dragInfo));
-                        // 设置effectAllowed以便在ondragover中识别
-                        e.dataTransfer.effectAllowed = "move";
-                        // 使用自定义属性标记这是排序拖拽，并标识源类型
-                        e.dataTransfer.setData("application/x-sort-drag", "true");
-                        e.dataTransfer.setData("application/x-sort-source-type", "folder");
-                        // 存储到节点级别，以便在ondragover中读取
-                        this._currentSortDrag = dragInfo;
-                        fDiv.style.opacity = "0.3";
-                    };
-                    folderSortHandle.ondragend = () => {
-                        fDiv.style.opacity = "1";
-                        // 清除拖拽信息
-                        this._currentSortDrag = null;
-                    };
-                    folderSortHandle.addEventListener("pointerdown", (e)=>e.stopPropagation());
-                    folderSortHandle.addEventListener("mousedown", (e)=>e.stopPropagation());
-                    
-                    const collapseIcon = document.createElement("span");
-                    collapseIcon.style.cssText = "display:inline-block;width:16px;text-align:center;font-size:10px;cursor:pointer;";
-                    collapseIcon.textContent = folder.collapsed ? '▶' : '▼';
-                    collapseIcon.onclick = (e) => {
-                        e.stopPropagation();
-                        folder.collapsed = !folder.collapsed;
-                        this.renderEmbeddedList();
-                    };
-                    
-                    // 文件夹开关按钮（一键开关文件夹下所有lora）
-                    const folderToggle = document.createElement("input");
-                    folderToggle.type = "checkbox";
-                    // 检查文件夹下是否有lora，以及是否全部启用
-                    const hasLoras = folder.loras && folder.loras.length > 0;
-                    const allEnabled = hasLoras && folder.loras.every(l => l.enabled !== false);
-                    folderToggle.checked = allEnabled;
-                    folderToggle.style.cssText = `
-                        width: 16px;
-                        height: 16px;
-                        cursor: pointer;
-                        margin-right: 4px;
-                        margin-left: 4px;
-                    `;
-                    folderToggle.onchange = (e) => {
-                        e.stopPropagation();
-                        const newState = folderToggle.checked;
-                        // 切换文件夹下所有lora的enabled状态
-                        if (folder.loras && folder.loras.length > 0) {
-                            folder.loras.forEach(lora => {
-                                lora.enabled = newState;
-                            });
-                            this.renderEmbeddedList();
-                            this.updateWidget();
-                        }
-                    };
-                    folderToggle.addEventListener("pointerdown", (e)=>e.stopPropagation());
-                    folderToggle.addEventListener("mousedown", (e)=>e.stopPropagation());
-                    folderToggle.addEventListener("click", (e)=>e.stopPropagation());
-                    
-                    const title = document.createElement("span");
-                    title.className = "mpl-folder-title";
-                    title.textContent = folder.name;
-                    // 单击标题重命名
-                    title.onclick = (e) => {
-                        e.stopPropagation();
-                        const newName = prompt("Rename:", folder.name);
-                        if(newName) { folder.name = newName; this.renderEmbeddedList(); this.updateWidget(); }
-                    };
-                    
-                    header.appendChild(folderSortHandle);
-                    header.appendChild(collapseIcon);
-                    header.appendChild(folderToggle);
-                    header.appendChild(title);
 
-                    const controls = document.createElement("div");
-                    controls.className = "mpl-folder-controls";
-                    
-                    const saveBtn = document.createElement("button");
-                    saveBtn.className = "mpl-mini-btn save";
-                    saveBtn.innerHTML = "💾";
-                    saveBtn.onclick = (e) => { 
-                        e.stopPropagation(); 
-                        this.saveFolderPreset(folder); 
-                    };
-                    saveBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
-                    
-                    const delBtn = document.createElement("button");
-                    delBtn.className = "mpl-mini-btn del";
-                    delBtn.innerHTML = "🗑️";
-                    delBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        if(confirm("Delete folder?")) {
-                            // 立即清理所有预览图（防止残留）
-                            if (this._previewTimeout) {
-                                clearTimeout(this._previewTimeout);
-                                this._previewTimeout = null;
+                        const header = document.createElement("div");
+                        header.className = "mpl-folder-header";
+
+                        const collapseIcon = document.createElement("span");
+                        collapseIcon.style.cssText = "display:inline-flex;align-items:center;justify-content:center;width:16px;color:#a1a1aa;cursor:pointer;";
+                        collapseIcon.innerHTML = mplIcon(folder.collapsed ? 'chevronRight' : 'chevronDown', 14);
+                        collapseIcon.onclick = (e) => { e.stopPropagation(); folder.collapsed = !folder.collapsed; this.renderEmbeddedList(); };
+                        _mkTopDragHandle(collapseIcon, tok, fDiv);
+                        collapseIcon.addEventListener("pointerdown", (e)=>e.stopPropagation());
+                        collapseIcon.addEventListener("mousedown", (e)=>e.stopPropagation());
+
+                        const folderToggle = document.createElement("input");
+                        folderToggle.type = "checkbox";
+                        const _fLoras = (folder.loras || []);
+                        const _fSelCount = _fLoras.filter(l => this._isMultiSelected(folder, l)).length;
+                        folderToggle.checked = _fLoras.length > 0 && _fSelCount === _fLoras.length;
+                        folderToggle.indeterminate = _fSelCount > 0 && _fSelCount < _fLoras.length;
+                        folderToggle.title = "启用/停用此文件夹内的全部 LoRA";
+                        folderToggle.style.cssText = "width:15px;height:15px;cursor:pointer;margin-right:4px;margin-left:2px;accent-color:#6366f1;";
+                        folderToggle.onchange = (e) => {
+                            e.stopPropagation();
+                            const newState = folderToggle.checked;
+                            if (folder.loras && folder.loras.length > 0) {
+                                folder.loras.forEach(lora => { newState ? this._addMultiSelected(folder, lora) : this._removeMultiSelected(folder, lora); });
+                                this.updateWidget();
+                                this.renderEmbeddedList();
                             }
-                            if (this._previewDiv) {
-                                this._previewDiv.remove();
-                                this._previewDiv = null;
-                            }
-                            // 清理所有可能的预览图（防止遗漏）
-                            const allPreviews = document.querySelectorAll('.mpl-lora-preview');
-                            allPreviews.forEach(preview => preview.remove());
-                            
-                            this.loraData.folders.splice(fIdx, 1);
-                            this.renderEmbeddedList();
+                        };
+                        folderToggle.addEventListener("pointerdown", (e)=>e.stopPropagation());
+                        folderToggle.addEventListener("mousedown", (e)=>e.stopPropagation());
+                        folderToggle.addEventListener("click", (e)=>e.stopPropagation());
+
+                        const title = document.createElement("span");
+                        title.className = "mpl-folder-title";
+                        title.textContent = folder.name;
+                        title.title = folder.ignored
+                            ? "已忽略（不参与加载）· 单击恢复 · 右键重命名"
+                            : "单击忽略此文件夹（不参与加载，保留组内勾选状态）· 右键重命名";
+                        title.draggable = true;
+                        title.ondragstart = (e) => {
+                            e.stopPropagation();
+                            try {
+                                e.dataTransfer.setData("text/plain", JSON.stringify({ type: "top", tok }));
+                                e.dataTransfer.setData("application/x-mpl-folder", JSON.stringify({ tok }));
+                                e.dataTransfer.effectAllowed = "copy";
+                            } catch (_) {}
+                        };
+                        title.onclick = (e) => {
+                            e.stopPropagation();
+                            folder.ignored = !folder.ignored;
                             this.updateWidget();
-                        }
-                    };
-                    delBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
-                    
-                    controls.append(saveBtn, delBtn);
-                    header.appendChild(controls);
-                    
-                    header.onclick = (e) => {
-                        // 如果点击的是header本身（不是标题、不是折叠图标、不是按钮），则切换折叠状态
-                        // 标题、折叠图标和按钮都有自己的点击处理，会阻止冒泡
-                        const target = e.target;
-                        if (target === header) {
+                            this.renderEmbeddedList();
+                        };
+
+                        header.appendChild(collapseIcon);
+                        header.appendChild(folderToggle);
+                        header.appendChild(title);
+
+                        const titleSpace = document.createElement("div");
+                        titleSpace.className = "mpl-folder-title-space";
+                        titleSpace.style.cssText = "flex:1 1 auto; min-width:8px; align-self:stretch; cursor:move;";
+                        titleSpace.title = "拖动调整位置；单击折叠/展开";
+                        titleSpace.onclick = (e) => {
+                            e.stopPropagation();
                             folder.collapsed = !folder.collapsed;
                             this.renderEmbeddedList();
-                        }
-                    };
-                    fDiv.appendChild(header);
+                        };
+                        _mkTopDragHandle(titleSpace, tok, fDiv);
+                        header.appendChild(titleSpace);
 
-                    if (!folder.collapsed) {
-                        folder.loras.forEach((lora, lIdx) => {
-                            const row = this.createLoraRow(lora, 'folder', fIdx, lIdx);
-                            row.querySelector(".del").onclick = () => {
-                                // 立即清理所有预览图（防止残留）
-                                if (this._previewTimeout) {
-                                    clearTimeout(this._previewTimeout);
-                                    this._previewTimeout = null;
-                                }
-                                if (this._previewDiv) {
-                                    this._previewDiv.remove();
-                                    this._previewDiv = null;
-                                }
-                                // 清理所有可能的预览图（防止遗漏）
-                                const allPreviews = document.querySelectorAll('.mpl-lora-preview');
-                                allPreviews.forEach(preview => preview.remove());
-                                
-                                folder.loras.splice(lIdx, 1);
+                        const controls = document.createElement("div");
+                        controls.className = "mpl-folder-controls";
+
+                        const saveBtn = document.createElement("button");
+                        saveBtn.className = "mpl-mini-btn save";
+                        saveBtn.innerHTML = "💾";
+                        saveBtn.title = "保存为预设";
+                        saveBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            this.saveFolderPreset(folder);
+                        };
+                        saveBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
+
+                        const delBtn = document.createElement("button");
+                        delBtn.className = "mpl-mini-btn del";
+                        delBtn.innerHTML = mplIcon("close", 13);
+                        delBtn.title = "删除文件夹";
+                        delBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            if (confirm("Delete folder?")) {
+                                if (this._previewTimeout) { clearTimeout(this._previewTimeout); this._previewTimeout = null; }
+                                if (this._previewDiv) { this._previewDiv.remove(); this._previewDiv = null; }
+                                document.querySelectorAll('.mpl-lora-preview').forEach(p => p.remove());
+                                this.loraData.folders.splice(fIdx, 1);
                                 this.renderEmbeddedList();
                                 this.updateWidget();
-                            };
-                            fDiv.appendChild(row);
-                        });
-                    }
-                    container.appendChild(fDiv);
-                });
+                            }
+                        };
+                        delBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
 
-                if (this.loraData.loras.length > 0) {
-                    if (this.loraData.folders.length > 0) {
-                        const hr = document.createElement("div"); hr.style.cssText = "height:1px;background:#444;margin:5px 0;";
-                        container.appendChild(hr);
-                    }
-                    this.loraData.loras.forEach((lora, lIdx) => {
+                        controls.append(saveBtn, delBtn);
+                        header.appendChild(controls);
+
+                        header.onclick = (e) => {
+                            if (e.target === header ||
+                                (e.target.classList && e.target.classList.contains("mpl-folder-title-space"))) {
+                                folder.collapsed = !folder.collapsed;
+                                this.renderEmbeddedList();
+                            }
+                        };
+                        fDiv.appendChild(header);
+
+                        if (!folder.collapsed) {
+                            folder.loras.forEach((lora, lIdx) => {
+                                const row = this.createLoraRow(lora, 'folder', fIdx, lIdx);
+                                row.querySelector(".del").onclick = () => {
+                                    if (this._previewTimeout) { clearTimeout(this._previewTimeout); this._previewTimeout = null; }
+                                    if (this._previewDiv) { this._previewDiv.remove(); this._previewDiv = null; }
+                                    document.querySelectorAll('.mpl-lora-preview').forEach(p => p.remove());
+                                    folder.loras.splice(lIdx, 1);
+                                    this.renderEmbeddedList();
+                                    this.updateWidget();
+                                };
+                                fDiv.appendChild(row);
+                            });
+                        }
+                        container.appendChild(fDiv);
+                    } else if (tok.startsWith("l:")) {
+                        const uid = tok.slice(2);
+                        const lIdx = _rootLoras.findIndex(l => this._uidFor(l) === uid);
+                        if (lIdx < 0) return;
+                        const lora = _rootLoras[lIdx];
                         const row = this.createLoraRow(lora, 'root', -1, lIdx);
                         row.classList.add("root-item");
+                        const topHandle = row.querySelector(".mpl-sort-handle");
+                        if (topHandle) { _mkTopDragHandle(topHandle, tok, row, { mime: "application/x-mpl-lora", value: { name: lora.name } }); }
+                        _bindTopDropTarget(row, tok);
                         row.querySelector(".del").onclick = () => {
-                            // 立即清理所有预览图（防止残留）
-                            if (this._previewTimeout) {
-                                clearTimeout(this._previewTimeout);
-                                this._previewTimeout = null;
-                            }
-                            if (this._previewDiv) {
-                                this._previewDiv.remove();
-                                this._previewDiv = null;
-                            }
-                            // 清理所有可能的预览图（防止遗漏）
-                            const allPreviews = document.querySelectorAll('.mpl-lora-preview');
-                            allPreviews.forEach(preview => preview.remove());
-                            
-                            this.loraData.loras.splice(lIdx, 1);
+                            if (this._previewTimeout) { clearTimeout(this._previewTimeout); this._previewTimeout = null; }
+                            if (this._previewDiv) { this._previewDiv.remove(); this._previewDiv = null; }
+                            document.querySelectorAll('.mpl-lora-preview').forEach(p => p.remove());
+                            _rootLoras.splice(lIdx, 1);
                             this.renderEmbeddedList();
                             this.updateWidget();
                         };
                         container.appendChild(row);
-                    });
+                    }
+                });
+                // 空列表时给一个明确引导，避免「一片空白不知道干啥」
+                if (!container.querySelector(".mpl-lora-row") && !container.querySelector(".mpl-folder-row")) {
+                    const hint = document.createElement("div");
+                    hint.className = "mpl-empty-hint";
+                    hint.innerHTML = '<div>还没有 LoRA</div>' +
+                        '<div style="font-size:11.5px;color:#52525b;line-height:1.6;">点下方「➕ 添加 Lora」选择模型；常用组合可存为预设，在「📂预设」里一键发送。</div>';
+                    container.appendChild(hint);
                 }
+                if (_prevScrollTop > 0) container.scrollTop = _prevScrollTop;
             };
 
             // 通用的弹窗拖拽功能（一比一参考 magic_resolution.js）
@@ -1762,13 +2888,11 @@ app.registerExtension({
                     newX = Math.max(minX, Math.min(newX, maxX));
                     newY = Math.max(minY, Math.min(newY, maxY));
 
-                    // 一比一参考 magic_resolution.js：清除 top/left/right/bottom，用 transform 定位
                     dialog.style.top = '0px';
                     dialog.style.left = '0px';
                     dialog.style.right = '';
                     dialog.style.bottom = '';
 
-                    // 如果父元素是 flex 居中，需要改父样式
                     const parent = dialog.parentElement;
                     if (parent && parent !== document.body && parent.style.display === 'flex') {
                         parent.style.display = 'block';
@@ -1779,15 +2903,34 @@ app.registerExtension({
                         parent.style.height = '100%';
                     }
 
-                    // 确保 dialog 使用 fixed 定位
                     dialog.style.position = 'fixed';
-
-                    // 用 transform 移动
                     dialog.style.transform = `translate(${newX}px, ${newY}px)`;
                 };
 
                 const dragEnd = () => {
+                    if (!isDragging) return;
                     isDragging = false;
+                    try {
+                        if (typeof dialog.__maSaveWinPos === "function") {
+                            const r = dialog.getBoundingClientRect();
+                            dialog.style.transform = "";
+                            dialog.style.top = r.top + "px";
+                            dialog.style.left = r.left + "px";
+                            dialog.style.right = "";
+                            dialog.style.bottom = "";
+                            const parent = dialog.parentElement;
+                            if (parent && parent !== document.body &&
+                                (parent.style.display === 'flex' || parent.style.position === 'fixed')) {
+                                parent.style.display = '';
+                                parent.style.position = '';
+                                parent.style.top = '';
+                                parent.style.left = '';
+                                parent.style.width = '';
+                                parent.style.height = '';
+                            }
+                            dialog.__maSaveWinPos();
+                        }
+                    } catch (e) {}
                 };
 
                 titleBar.addEventListener("mousedown", dragStart);
@@ -1812,23 +2955,19 @@ app.registerExtension({
                 const container = this.embeddedDiv;
                 if (!container) return;
 
-                // 移除旧 banner
                 if (this._kleinBannerEl) {
                     this._kleinBannerEl.remove();
                     this._kleinBannerEl = null;
                 }
 
-                // 读取当前 klein_mode 设置
                 const kleinMode = this.kleinMode
                     ?? this.properties?.klein_mode
                     ?? this._kleinModeWidget?.value
                     ?? "auto";
                 const isKleinActive = String(kleinMode).toLowerCase() === "klein";
 
-                // Klein 模式下不需要提示
                 if (isKleinActive) return;
 
-                // 检测是否使用了 Klein Loader（通过检查本节点的 model 输入是否连接了 MagicKleinLoader）
                 const isKleinModelConnected = this.inputs?.some(input => {
                     if (!input.link) return false;
                     const link = app.graph.links?.[input.link];
@@ -1839,7 +2978,6 @@ app.registerExtension({
 
                 if (!isKleinModelConnected) return;
 
-                // 构建 Banner
                 const banner = document.createElement("div");
                 banner.style.cssText = `
                     background: #1a3a2a;
@@ -1866,18 +3004,15 @@ app.registerExtension({
                     >前往设置</button>
                 `;
 
-                // 前往设置按钮
                 banner.querySelector("button").onclick = () => {
                     this.showSettingsModal();
                 };
 
-                // 插入到 listContainer 之前
                 const listContainer = this.listContainer;
-                if (listContainer && listContainer.parentNode === container) {
-                    container.insertBefore(banner, listContainer);
-                } else {
-                    const footer = container.querySelector(".mpl-footer");
-                    if (footer) container.insertBefore(banner, footer);
+                if (listContainer && listContainer.parentNode) {
+                    listContainer.parentNode.insertBefore(banner, listContainer);
+                } else if (container) {
+                    container.appendChild(banner);
                 }
 
                 this._kleinBannerEl = banner;
@@ -1886,72 +3021,44 @@ app.registerExtension({
             nodeType.prototype.showTagEditModal = function(lora) {
                 // 创建遮罩层
                 const overlay = document.createElement("div");
-                overlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0, 0, 0, 0.5);
-                    z-index: 10001;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
+                overlay.className = "ma-modal-backdrop";
+                overlay.style.zIndex = "10001";
                 
-                // 创建弹窗（一比一参考 magic_resolution.js：fixed + translate 居中）
+                // 创建弹窗
                 const dialog = document.createElement("div");
+                dialog.className = "ma-modal";
                 dialog.style.cssText = `
                     position: fixed;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    background: #2a2a2a;
-                    border: 1px solid #555;
-                    border-radius: 8px;
-                    padding: 20px;
-                    min-width: 500px;
-                    max-width: 700px;
-                    box-shadow: 0 8px 25px rgba(0,0,0,0.8);
+                    width: 540px;
+                    max-width: 92vw;
                     z-index: 10002;
                 `;
                 
                 // 标题栏（可拖拽）
                 const title = document.createElement("div");
                 title.textContent = "编辑触发词";
-                title.style.cssText = `
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #eee;
-                    margin-bottom: 15px;
-                    border-bottom: 1px solid #444;
-                    padding-bottom: 10px;
-                    cursor: move;
-                    user-select: none;
-                `;
+                title.className = "ma-modal-header ma-modal-title";
                 
                 // 输入框容器
                 const inputContainer = document.createElement("div");
-                inputContainer.style.cssText = "margin-bottom: 15px;";
+                inputContainer.className = "ma-modal-body";
+                inputContainer.style.padding = "18px 20px";
                 
                 const label = document.createElement("label");
                 label.textContent = "使用触发词时需要将tags_output连接出去，可以连到文本框、clip框等等";
-                label.style.cssText = "display: block; color: #ccc; margin-bottom: 5px; font-size: 14px;";
+                label.className = "ma-section-label";
+                label.style.marginBottom = "10px";
                 
                 const textarea = document.createElement("textarea");
+                textarea.className = "ma-textarea";
                 textarea.value = lora.tags || "";
                 textarea.style.cssText = `
                     width: 100%;
-                    min-height: 100px;
-                    padding: 8px;
-                    background: #1a1a1a;
-                    border: 1px solid #555;
-                    border-radius: 4px;
-                    color: #fff;
-                    font-size: 13px;
-                    font-family: sans-serif;
+                    min-height: 110px;
                     resize: vertical;
-                    box-sizing: border-box;
                 `;
                 textarea.placeholder = "输入标签，用逗号分隔...";
                 
@@ -1960,25 +3067,13 @@ app.registerExtension({
                 
                 // 按钮容器
                 const buttonContainer = document.createElement("div");
-                buttonContainer.style.cssText = `
-                    display: flex;
-                    gap: 10px;
-                    justify-content: flex-end;
-                    margin-top: 15px;
-                `;
+                buttonContainer.className = "ma-modal-footer";
                 
                 // 获取现成tag按钮
                 const fetchBtn = document.createElement("button");
                 fetchBtn.textContent = "🔍 获取现成tag";
-                fetchBtn.style.cssText = `
-                    padding: 8px 16px;
-                    background: #4CAF50;
-                    border: none;
-                    color: white;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                `;
+                fetchBtn.className = "ma-btn ma-btn-success";
+                fetchBtn.style.marginRight = "auto";
                 fetchBtn.onclick = async () => {
                     try {
                         // 读取本地的.txt文件
@@ -2018,47 +3113,25 @@ app.registerExtension({
                         alert("没有获取到现成的tag");
                     }
                 };
-                fetchBtn.onmouseenter = () => fetchBtn.style.background = "#5CBF60";
-                fetchBtn.onmouseleave = () => fetchBtn.style.background = "#4CAF50";
                 
                 // 确定按钮
                 const confirmBtn = document.createElement("button");
                 confirmBtn.textContent = "确定";
-                confirmBtn.style.cssText = `
-                    padding: 8px 16px;
-                    background: #2196F3;
-                    border: none;
-                    color: white;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                `;
+                confirmBtn.className = "ma-btn ma-btn-primary";
                 confirmBtn.onclick = () => {
                     lora.tags = textarea.value.trim();
                     this.renderEmbeddedList();
                     this.updateWidget();
                     document.body.removeChild(overlay);
                 };
-                confirmBtn.onmouseenter = () => confirmBtn.style.background = "#42A5F5";
-                confirmBtn.onmouseleave = () => confirmBtn.style.background = "#2196F3";
                 
                 // 取消按钮
                 const cancelBtn = document.createElement("button");
                 cancelBtn.textContent = "取消";
-                cancelBtn.style.cssText = `
-                    padding: 8px 16px;
-                    background: #666;
-                    border: none;
-                    color: white;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                `;
+                cancelBtn.className = "ma-btn";
                 cancelBtn.onclick = () => {
                     document.body.removeChild(overlay);
                 };
-                cancelBtn.onmouseenter = () => cancelBtn.style.background = "#777";
-                cancelBtn.onmouseleave = () => cancelBtn.style.background = "#666";
                 
                 // 阻止事件冒泡
                 const stopProp = (e) => { e.stopPropagation(); };
@@ -2111,7 +3184,6 @@ app.registerExtension({
                 };
                 
                 try {
-                    // 并行读取三个文件
                     const [txtResp, jsonResp, logResp] = await Promise.all([
                         api.fetchApi('/ma/lora/get_lora_file', {
                             method: 'POST',
@@ -2154,77 +3226,70 @@ app.registerExtension({
                 
                 // 创建遮罩层
                 const overlay = document.createElement("div");
-                overlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0, 0, 0, 0.5);
-                    z-index: 10001;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
+                overlay.className = "ma-modal-backdrop";
+                overlay.style.zIndex = "10001";
                 
-                // 创建弹窗（一比一参考 magic_resolution.js：fixed + translate 居中）
+                // 创建弹窗
                 const dialog = document.createElement("div");
+                dialog.className = "ma-modal";
                 dialog.style.cssText = `
                     position: fixed;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    background: #1e1e1e;
-                    border: 1px solid #3a3a3a;
-                    border-radius: 12px;
-                    padding: 24px;
-                    min-width: 700px;
-                    max-width: 1000px;
+                    min-width: min(680px, 94vw);
+                    max-width: 960px;
                     width: 85%;
-                    max-height: 85vh;
-                    box-shadow: 0 12px 40px rgba(0,0,0,0.9);
+                    max-height: 88vh;
                     z-index: 10002;
-                    display: flex;
-                    flex-direction: column;
-                    overflow: hidden;
                 `;
                 
                 // 标题栏
                 const header = document.createElement("div");
-                header.style.cssText = `
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 20px;
-                    padding-bottom: 16px;
-                    border-bottom: 2px solid #333;
-                    cursor: move;
-                    user-select: none;
-                `;
+                header.className = "ma-modal-header";
                 
+                const lmInfo = mplLmEntry(loraName);
+                const loraStem = String(loraName).split(/[/\\]/).pop().replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, "");
+                const lmTitle = String(lmInfo.title || "").trim();
+
                 const title = document.createElement("div");
-                title.textContent = `编辑 LoRA 内容: ${lora.name.split(/[/\\]/).pop()}`;
-                title.style.cssText = `
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: #fff;
-                    letter-spacing: 0.3px;
-                    flex: 1;
-                `;
+                title.textContent = lmTitle ? `编辑 LoRA 内容: ${lmTitle}` : `编辑 LoRA 内容: ${lora.name.split(/[/\\]/).pop()}`;
+                title.className = "ma-modal-title";
+                title.style.flex = "1";
+                title.style.cursor = "pointer";
+                title.title = (lmTitle || loraStem) + "\n单击复制标题";
+
+                const copyText = async (text) => {
+                    const val = String(text == null ? "" : text);
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(val);
+                            return true;
+                        }
+                    } catch (e) {}
+                    try {
+                        const ta = document.createElement("textarea");
+                        ta.value = val;
+                        ta.style.cssText = "position:fixed;left:-9999px;top:0;";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand("copy");
+                        ta.remove();
+                        return true;
+                    } catch (e) { return false; }
+                };
+
+                title.onclick = async (e) => {
+                    e.stopPropagation();
+                    const ok = await copyText(lmTitle || loraStem);
+                    const prev = title.textContent;
+                    title.textContent = ok ? "✓ 已复制标题" : "复制失败";
+                    setTimeout(() => { title.textContent = prev; }, 900);
+                };
                 
                 const deleteBtn = document.createElement("button");
                 deleteBtn.textContent = "删除";
-                deleteBtn.style.cssText = `
-                    padding: 8px 16px;
-                    background: #f44336;
-                    border: none;
-                    color: white;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                `;
+                deleteBtn.className = "ma-btn ma-btn-danger";
                 deleteBtn.onclick = async () => {
                     if (confirm("确定要删除这个 LoRA 及其所有相关文件吗？此操作不可恢复！")) {
                         try {
@@ -2238,7 +3303,6 @@ app.registerExtension({
                             if (result.status === 'success') {
                                 const deletedLoraName = lora.name;
                                 
-                                // 立即清理所有预览图（防止残留）
                                 if (this._previewTimeout) {
                                     clearTimeout(this._previewTimeout);
                                     this._previewTimeout = null;
@@ -2247,11 +3311,9 @@ app.registerExtension({
                                     this._previewDiv.remove();
                                     this._previewDiv = null;
                                 }
-                                // 清理所有可能的预览图（防止遗漏）
                                 const allPreviews = document.querySelectorAll('.mpl-lora-preview');
                                 allPreviews.forEach(preview => preview.remove());
                                 
-                                // 从节点数据中移除
                                 if (type === 'folder' && fIdx >= 0 && lIdx >= 0) {
                                     if (this.loraData.folders[fIdx] && this.loraData.folders[fIdx].loras[lIdx]) {
                                         this.loraData.folders[fIdx].loras.splice(lIdx, 1);
@@ -2277,22 +3339,14 @@ app.registerExtension({
                                     }
                                 }
                                 
-                                // 刷新全局图片列表缓存（类似爬取成功后的逻辑）
                                 await loadLoraImageList();
-                                
-                                // 刷新缓存（重新渲染列表）
                                 this.renderEmbeddedList();
                                 this.updateWidget();
-                                
-                                // 刷新所有显示该lora图片的地方（虽然已删除，但需要清理缓存）
                                 this.refreshLoraImageCache(deletedLoraName);
                                 
-                                // 如果"添加Lora"窗口打开，重新获取文件列表并渲染
                                 if (this._addLoraModal && this._addLoraModal.parentElement && this._refreshFileListFunc) {
-                                    // 调用refreshFileList函数重新获取文件列表并渲染
                                     await this._refreshFileListFunc();
                                 } else if (this._addLoraModal && this._addLoraModal.parentElement && this._renderContentFunc) {
-                                    // 如果没有refreshFileList，至少调用renderContent
                                     this._renderContentFunc();
                                 }
                                 
@@ -2307,21 +3361,84 @@ app.registerExtension({
                         }
                     }
                 };
-                deleteBtn.onmouseenter = () => deleteBtn.style.background = "#d32f2f";
-                deleteBtn.onmouseleave = () => deleteBtn.style.background = "#f44336";
-                
                 header.appendChild(title);
                 header.appendChild(deleteBtn);
+
+                // 顶部快捷信息栏（位置打开、基础模型、CivitAI 跳转、附加备注）
+                const infoSection = document.createElement("div");
+                infoSection.style.cssText = "padding:12px 20px;border-bottom:1px solid rgba(255,255,255,0.08);background:#0d0d10;display:flex;flex-direction:column;gap:8px;flex-shrink:0;";
+
+                const topActions = document.createElement("div");
+                topActions.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;";
+                const addNodeBtn = document.createElement("button");
+                addNodeBtn.type = "button";
+                addNodeBtn.className = "ma-btn ma-btn-primary";
+                addNodeBtn.textContent = "➕ 添加到节点";
+                addNodeBtn.style.cssText = "padding:4px 12px;font-size:12px;";
+                addNodeBtn.onclick = () => {
+                    if (!this.loraData) this.loraData = { loras: [], folders: [] };
+                    if (!Array.isArray(this.loraData.loras)) this.loraData.loras = [];
+                    this.loraData.loras.push(mplDecorateNewLora({
+                        name: loraName, weight: 1.0, enabled: true, tags: fileContents.txt || "", note: "", triggerWords: fileContents.txt || "", jsonInfo: "", logInfo: "",
+                    }));
+                    this.renderEmbeddedList();
+                    this.updateWidget();
+                };
+                const civitaiBtn = document.createElement("button");
+                civitaiBtn.type = "button";
+                civitaiBtn.className = "ma-btn";
+                civitaiBtn.textContent = "🌐 在 CivitAI 查看";
+                civitaiBtn.style.cssText = "padding:4px 12px;font-size:12px;";
+                civitaiBtn.onclick = () => { try { this.openLoraCivitai(loraName); } catch (e) { console.warn(e); } };
+                topActions.appendChild(addNodeBtn);
+                topActions.appendChild(civitaiBtn);
+
+                const absPath = mplPathFor(loraName);
+                const dirPath = absPath
+                    ? absPath.replace(/\/[^\/]*$/, "/")
+                    : (String(loraName).split(/[/\\]/).slice(0, -1).join("/") ? String(loraName).split(/[/\\]/).slice(0, -1).join("/") + "/" : "");
+                const metaInfoLine = document.createElement("div");
+                metaInfoLine.style.cssText = "display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:#a1a1aa;";
+                const fileSpan = document.createElement("span");
+                fileSpan.textContent = `文件名: ${loraStem}`;
+                fileSpan.style.color = "#d4d4d8";
+                const baseModelSpan = document.createElement("span");
+                baseModelSpan.textContent = `基础模型: ${String(lmInfo.base_model || "").trim() || "—"}`;
+                const dirSpan = document.createElement("span");
+                dirSpan.textContent = `📂 位置: ${dirPath || "根目录"} (点击打开目录)`;
+                dirSpan.style.cssText = "color:#818cf8;cursor:pointer;";
+                dirSpan.title = "点击在资源管理器中定位该 LoRA";
+                dirSpan.onclick = () => {
+                    api.fetchApi("/ma/lora/open_folder", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lora_name: loraName }),
+                    }).catch((e) => console.warn("[MA Loader] 打开文件夹失败:", e));
+                };
+                metaInfoLine.append(fileSpan, baseModelSpan, dirSpan);
+                topActions.appendChild(metaInfoLine);
+                infoSection.appendChild(topActions);
+
+                const prevNote = String(lora.note || "");
+                const noteRow = document.createElement("div");
+                noteRow.style.cssText = "display:flex;align-items:center;gap:8px;";
+                const noteLabel = document.createElement("span");
+                noteLabel.textContent = "附加备注:";
+                noteLabel.style.cssText = "color:#a1a1aa;font-size:12px;white-space:nowrap;";
+                const noteInput = document.createElement("input");
+                noteInput.type = "text";
+                noteInput.className = "ma-input";
+                noteInput.value = prevNote || mplNoteFor(loraName);
+                noteInput.placeholder = "在此添加你的持久化备注...";
+                noteInput.style.cssText = "flex:1;padding:5px 10px;font-size:12px;";
+                noteInput.addEventListener("keydown", (e) => e.stopPropagation());
+                noteInput.addEventListener("pointerdown", (e) => e.stopPropagation());
+                noteRow.append(noteLabel, noteInput);
+                infoSection.appendChild(noteRow);
                 
                 // Tab容器
                 const tabContainer = document.createElement("div");
-                tabContainer.style.cssText = `
-                    display: flex;
-                    gap: 8px;
-                    margin-bottom: 20px;
-                    border-bottom: 2px solid #2a2a2a;
-                    padding-bottom: 2px;
-                `;
+                tabContainer.className = "ma-tabs";
                 
                 const tabs = [
                     { id: 'txt', label: '触发词文件(txt)' },
@@ -2336,30 +3453,13 @@ app.registerExtension({
                     const tabBtn = document.createElement("button");
                     tabBtn.textContent = tab.label;
                     tabBtn.dataset.tab = tab.id;
-                    tabBtn.style.cssText = `
-                        padding: 10px 20px;
-                        background: ${currentTab === tab.id ? '#2a2a2a' : 'transparent'};
-                        border: none;
-                        border-bottom: 3px solid ${currentTab === tab.id ? '#2196F3' : 'transparent'};
-                        color: ${currentTab === tab.id ? '#fff' : '#888'};
-                        cursor: pointer;
-                        font-size: 14px;
-                        font-weight: ${currentTab === tab.id ? '500' : '400'};
-                        border-radius: 6px 6px 0 0;
-                        transition: all 0.3s;
-                        position: relative;
-                        top: 2px;
-                    `;
+                    tabBtn.className = "ma-tab-btn" + (currentTab === tab.id ? " active" : "");
                     tabBtn.onclick = () => {
                         currentTab = tab.id;
                         tabs.forEach(t => {
                             const btn = tabButtons[t.id];
-                            btn.style.background = currentTab === t.id ? '#2a2a2a' : 'transparent';
-                            btn.style.color = currentTab === t.id ? '#fff' : '#888';
-                            btn.style.borderBottomColor = currentTab === t.id ? '#2196F3' : 'transparent';
-                            btn.style.fontWeight = currentTab === t.id ? '500' : '400';
+                            btn.className = "ma-tab-btn" + (currentTab === t.id ? " active" : "");
                         });
-                        // 切换内容区域
                         contentAreas.forEach((area, idx) => {
                             area.style.display = tabs[idx].id === currentTab ? 'flex' : 'none';
                         });
@@ -2370,12 +3470,14 @@ app.registerExtension({
                 
                 // 内容区域容器
                 const contentWrapper = document.createElement("div");
+                contentWrapper.className = "ma-modal-body";
                 contentWrapper.style.cssText = `
                     flex: 1;
                     display: flex;
                     flex-direction: column;
-                    min-height: 300px;
+                    min-height: 260px;
                     overflow: hidden;
+                    padding: 16px 20px;
                 `;
                 
                 const contentAreas = [];
@@ -2389,32 +3491,16 @@ app.registerExtension({
                         height: 100%;
                     `;
                     
-                    // 文本编辑区域
                     const textarea = document.createElement("textarea");
+                    textarea.className = "ma-textarea ma-textarea-code";
                     textarea.style.cssText = `
                         flex: 1;
                         width: 100%;
-                        min-height: 350px;
-                        padding: 16px;
-                        background: #151515;
-                        border: 1px solid #3a3a3a;
-                        border-radius: 8px;
-                        color: #e0e0e0;
-                        font-size: 14px;
-                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                        min-height: 280px;
+                        padding: 14px;
                         resize: both;
-                        box-sizing: border-box;
-                        line-height: 1.6;
-                        transition: border-color 0.2s;
                     `;
-                    textarea.onfocus = () => {
-                        textarea.style.borderColor = '#2196F3';
-                    };
-                    textarea.onblur = () => {
-                        textarea.style.borderColor = '#3a3a3a';
-                    };
                     
-                    // 初始化内容：只使用本地文件内容，不读取内存中的lora对象
                     if (tab.id === 'txt') {
                         textarea.value = fileContents.txt || '';
                     } else if (tab.id === 'json') {
@@ -2430,105 +3516,73 @@ app.registerExtension({
                 
                 // 底部按钮容器
                 const buttonContainer = document.createElement("div");
-                buttonContainer.style.cssText = `
-                    display: flex;
-                    gap: 12px;
-                    justify-content: flex-end;
-                    margin-top: 20px;
-                    padding-top: 20px;
-                    border-top: 2px solid #2a2a2a;
-                `;
+                buttonContainer.className = "ma-modal-footer";
                 
-                // 取消按钮
                 const cancelBtn = document.createElement("button");
                 cancelBtn.textContent = "取消";
-                cancelBtn.style.cssText = `
-                    padding: 10px 24px;
-                    background: #3a3a3a;
-                    border: 1px solid #555;
-                    color: #fff;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                `;
+                cancelBtn.className = "ma-btn";
                 cancelBtn.onclick = () => {
                     document.body.removeChild(overlay);
                 };
-                cancelBtn.onmouseenter = () => {
-                    cancelBtn.style.background = "#f44336";
-                    cancelBtn.style.borderColor = "#f44336";
-                };
-                cancelBtn.onmouseleave = () => {
-                    cancelBtn.style.background = "#3a3a3a";
-                    cancelBtn.style.borderColor = "#555";
-                };
                 
-                // 保存按钮
                 const saveBtn = document.createElement("button");
                 saveBtn.textContent = "保存";
-                saveBtn.style.cssText = `
-                    padding: 10px 24px;
-                    background: #4CAF50;
-                    border: none;
-                    color: white;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                `;
-                // 保存位置选择对话框
+                saveBtn.className = "ma-btn ma-btn-primary";
                 const showSaveTargetDialog = () => new Promise((resolve) => {
                     const saveOverlay = document.createElement("div");
-                    saveOverlay.style.cssText = "position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 10005; display: flex; align-items: center; justify-content: center;";
+                    saveOverlay.className = "ma-modal-backdrop";
+                    saveOverlay.style.zIndex = "10005";
                     
                     const saveDialog = document.createElement("div");
-                    saveDialog.style.cssText = "background: #1a1a1a; border: 1px solid #4a4a4a; border-radius: 8px; padding: 24px; width: 420px; z-index: 10006; color: #f0f0f0; box-shadow: 0 4px 16px rgba(0,0,0,0.8);";
+                    saveDialog.className = "ma-modal ma-modal-static-anim";
+                    saveDialog.style.cssText = "padding: 20px 22px; width: 420px; max-width: 92vw; z-index: 10006;";
                     
                     const title = document.createElement("p");
                     title.textContent = "选择保存位置";
-                    title.style.cssText = "margin: 0 0 12px; color: #fff; font-weight: bold; font-size: 16px;";
+                    title.style.cssText = "margin: 0 0 10px; color: #f4f4f5; font-weight: 600; font-size: 15px;";
                     
                     const tips = document.createElement("p");
                     tips.textContent = "请选择要将修改内容保存到哪里。您也可以选择同时保存到两个位置。";
-                    tips.style.cssText = "margin: 0 0 16px; color: #ccc; line-height: 1.5; font-size: 13px;";
+                    tips.style.cssText = "margin: 0 0 14px; color: #a1a1aa; line-height: 1.5; font-size: 12.5px;";
                     
                     const targetContainer = document.createElement("div");
-                    targetContainer.style.cssText = "margin: 8px 0 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;";
+                    targetContainer.className = "ma-card";
+                    targetContainer.style.cssText = "margin: 4px 0 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;";
                     
                     const targetLabel = document.createElement("span");
                     targetLabel.textContent = "保存位置";
-                    targetLabel.style.cssText = "color: #ccc; font-size: 13px;";
+                    targetLabel.style.cssText = "color: #a1a1aa; font-size: 12px; font-weight: 500;";
                     
                     const sameLabel = document.createElement("label");
-                    sameLabel.style.cssText = "display: flex; gap: 6px; align-items: center; cursor: pointer;";
+                    sameLabel.style.cssText = "display: flex; gap: 6px; align-items: center; cursor: pointer; font-size: 12.5px;";
                     const inputSame = document.createElement("input");
                     inputSame.type = "radio";
                     inputSame.name = "save-target";
                     inputSame.value = "same";
                     inputSame.checked = true;
+                    inputSame.style.accentColor = "#6366f1";
                     const sameText = document.createTextNode("同层级");
                     sameLabel.appendChild(inputSame);
                     sameLabel.appendChild(sameText);
                     
                     const magicLabel = document.createElement("label");
-                    magicLabel.style.cssText = "display: flex; gap: 6px; align-items: center; cursor: pointer;";
+                    magicLabel.style.cssText = "display: flex; gap: 6px; align-items: center; cursor: pointer; font-size: 12.5px;";
                     const inputMagic = document.createElement("input");
                     inputMagic.type = "radio";
                     inputMagic.name = "save-target";
                     inputMagic.value = "magicloradate";
+                    inputMagic.style.accentColor = "#6366f1";
                     const magicText = document.createTextNode("magicloradate子目录");
                     magicLabel.appendChild(inputMagic);
                     magicLabel.appendChild(magicText);
                     
                     const bothLabel = document.createElement("label");
-                    bothLabel.style.cssText = "display: flex; gap: 6px; align-items: center; cursor: pointer;";
+                    bothLabel.style.cssText = "display: flex; gap: 6px; align-items: center; cursor: pointer; font-size: 12.5px;";
                     const inputBoth = document.createElement("input");
                     inputBoth.type = "radio";
                     inputBoth.name = "save-target";
                     inputBoth.value = "both";
+                    inputBoth.style.accentColor = "#6366f1";
                     const bothText = document.createTextNode("同时保存");
                     bothLabel.appendChild(inputBoth);
                     bothLabel.appendChild(bothText);
@@ -2539,15 +3593,15 @@ app.registerExtension({
                     targetContainer.appendChild(bothLabel);
                     
                     const buttons = document.createElement("div");
-                    buttons.style.cssText = "display: flex; gap: 12px; justify-content: flex-end;";
+                    buttons.style.cssText = "display: flex; gap: 10px; justify-content: flex-end;";
                     
                     const okBtn = document.createElement("button");
                     okBtn.textContent = "确定";
-                    okBtn.style.cssText = "padding: 8px 16px; background: #4CAF50; border: none; color: #fff; border-radius: 4px; cursor: pointer;";
+                    okBtn.className = "ma-btn ma-btn-primary";
                     
                     const cancelBtn2 = document.createElement("button");
                     cancelBtn2.textContent = "取消";
-                    cancelBtn2.style.cssText = "padding: 8px 16px; background: #666; border: none; color: #fff; border-radius: 4px; cursor: pointer;";
+                    cancelBtn2.className = "ma-btn";
                     
                     const close = () => {
                         try {
@@ -2583,7 +3637,6 @@ app.registerExtension({
                     const loraName = filePath || lora.name;
                     
                     try {
-                        // 智能保存策略：先探测可读性
                         const probeRes = await api.fetchApi('/ma/lora/probe_save_targets', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -2591,35 +3644,30 @@ app.registerExtension({
                         });
                         const probe = await probeRes.json();
                         
-                        // 解析探测结果
                         const magicDirExists = !!probe.magicloradate_dir_exists;
                         const magicReadable = !!probe.magicloradate_has_readable;
                         const sameReadable = !!probe.same_has_readable;
                         
-                        // 依据情况决定保存目标
                         let targets = [];
                         let needChoice = false;
                         
                         if (magicDirExists && magicReadable && !sameReadable) {
-                            targets = ["magicloradate"]; // 情形1：存在magicloradate且可读，无同层级可读
+                            targets = ["magicloradate"];
                         } else if (magicDirExists && !magicReadable && !sameReadable) {
-                            needChoice = true; // 情形3：存在magicloradate但不可读，无同层级可读
+                            needChoice = true;
                         } else if (!magicDirExists && sameReadable) {
-                            targets = ["same"]; // 情形4：不存在magicloradate，有同层级可读
+                            targets = ["same"];
                         } else if (!magicDirExists && !sameReadable) {
-                            needChoice = true; // 情形5：不存在magicloradate，且无同层级可读
+                            needChoice = true;
                         } else if (magicReadable && sameReadable) {
-                            targets = ["magicloradate", "same"]; // 情形6：同时存在可读magicloradate与同层级
+                            targets = ["magicloradate", "same"];
                         } else if (magicDirExists && sameReadable && !magicReadable) {
-                            targets = ["same"]; // magicloradate目录存在但不可读，同层级可读
+                            targets = ["same"];
                         }
                         
-                        // 当不确定时弹出选择弹窗
                         if (needChoice || targets.length === 0) {
                             const userTarget = await showSaveTargetDialog();
-                            if (!userTarget) {
-                                return; // 用户取消
-                            }
+                            if (!userTarget) return;
                             if (userTarget === "both") {
                                 targets = ["magicloradate", "same"];
                             } else {
@@ -2627,12 +3675,10 @@ app.registerExtension({
                             }
                         }
                         
-                        // 获取所有tab的内容
                         const txtArea = contentAreas[0].querySelector('textarea');
                         const jsonArea = contentAreas[1].querySelector('textarea');
                         const logArea = contentAreas[2].querySelector('textarea');
                         
-                        // 执行保存（可能双写）
                         const saveOne = async (file_type, content, target) => {
                             const res = await api.fetchApi('/ma/lora/save_lora_file', {
                                 method: 'POST',
@@ -2660,14 +3706,17 @@ app.registerExtension({
                             const targetText = targets.length === 2 ? "magicloradate 和 同层级" : (targets[0] === "magicloradate" ? "magicloradate子目录" : "同层级");
                             alert(`LoRA '${loraName.split(/[/\\]/).pop()}' 的内容已保存到 ${targetText}！`);
                             
-                            // 更新lora对象的内容
                             lora.triggerWords = txtArea.value;
+                            lora.tags = txtArea.value;
                             lora.jsonInfo = jsonArea.value;
                             lora.logInfo = logArea.value;
+                            const nextNote = noteInput.value;
+                            if (nextNote !== prevNote) {
+                                lora.note = nextNote;
+                                void mplSetNote(loraName, nextNote, prevNote);
+                            }
                             
-                            // 如果lora还没有添加到节点中（从"添加Lora"窗口编辑的），先添加它
                             if (filePath && (fIdx === -1 || !this.loraData.loras.find(l => l.name === filePath))) {
-                                // 检查是否在文件夹中
                                 let foundInFolder = false;
                                 for (let fi = 0; fi < this.loraData.folders.length; fi++) {
                                     const folder = this.loraData.folders[fi];
@@ -2676,11 +3725,8 @@ app.registerExtension({
                                         break;
                                     }
                                 }
-                                
-                                // 如果不在任何地方，添加到根loras
                                 if (!foundInFolder) {
-                                    // 确保lora对象有所有必需的字段
-                                    if (!lora.enabled) lora.enabled = true;
+                                    lora.enabled = mplLoraEnabled(lora);
                                     if (!lora.weight) lora.weight = 1.0;
                                     if (!lora.tags) lora.tags = '';
                                     if (!lora.note) lora.note = '';
@@ -2700,50 +3746,18 @@ app.registerExtension({
                         alert(`保存时发生错误：${error.message}`);
                     }
                 };
-                saveBtn.onmouseenter = () => {
-                    saveBtn.style.background = "#5CBF60";
-                    saveBtn.style.transform = "translateY(-1px)";
-                    saveBtn.style.boxShadow = "0 4px 12px rgba(76, 175, 80, 0.3)";
-                };
-                saveBtn.onmouseleave = () => {
-                    saveBtn.style.background = "#4CAF50";
-                    saveBtn.style.transform = "translateY(0)";
-                    saveBtn.style.boxShadow = "none";
-                };
-                
                 // 爬取信息按钮
                 const fetchBtn = document.createElement("button");
                 fetchBtn.textContent = "爬取信息";
-                fetchBtn.style.cssText = `
-                    padding: 10px 24px;
-                    background: #2196F3;
-                    border: none;
-                    color: white;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                `;
+                fetchBtn.className = "ma-btn ma-btn-success";
                 fetchBtn.onclick = () => {
                     this.showFetchModal(lora, contentAreas, overlay);
-                };
-                fetchBtn.onmouseenter = () => {
-                    fetchBtn.style.background = "#42A5F5";
-                    fetchBtn.style.transform = "translateY(-1px)";
-                    fetchBtn.style.boxShadow = "0 4px 12px rgba(33, 150, 243, 0.3)";
-                };
-                fetchBtn.onmouseleave = () => {
-                    fetchBtn.style.background = "#2196F3";
-                    fetchBtn.style.transform = "translateY(0)";
-                    fetchBtn.style.boxShadow = "none";
                 };
                 
                 buttonContainer.appendChild(cancelBtn);
                 buttonContainer.appendChild(fetchBtn);
                 buttonContainer.appendChild(saveBtn);
                 
-                // 阻止事件冒泡
                 const stopProp = (e) => { e.stopPropagation(); };
                 dialog.addEventListener("pointerdown", stopProp);
                 dialog.addEventListener("pointermove", stopProp);
@@ -2751,14 +3765,12 @@ app.registerExtension({
                 dialog.addEventListener("mousedown", stopProp);
                 dialog.addEventListener("wheel", stopProp, { passive: false });
                 
-                // 点击遮罩层关闭
                 overlay.onclick = (e) => {
                     if (e.target === overlay) {
                         document.body.removeChild(overlay);
                     }
                 };
                 
-                // ESC键关闭
                 const handleEsc = (e) => {
                     if (e.key === "Escape") {
                         document.body.removeChild(overlay);
@@ -2767,18 +3779,16 @@ app.registerExtension({
                 };
                 document.addEventListener("keydown", handleEsc);
                 
-                // 组装弹窗
                 dialog.appendChild(header);
+                dialog.appendChild(infoSection);
                 dialog.appendChild(tabContainer);
                 dialog.appendChild(contentWrapper);
                 dialog.appendChild(buttonContainer);
                 overlay.appendChild(dialog);
                 document.body.appendChild(overlay);
                 
-                // 使弹窗可拖拽
                 this.makeDialogDraggable(dialog, header);
                 
-                // 自动聚焦到当前tab的文本区域
                 setTimeout(() => {
                     const currentArea = contentAreas.find(a => a.dataset.tab === currentTab);
                     if (currentArea) {
@@ -2786,6 +3796,135 @@ app.registerExtension({
                         if (textarea) textarea.focus();
                     }
                 }, 100);
+            };
+
+            // 批量加载选中 LoRA 的触发词与预览图
+            nodeType.prototype.showBatchEditModal = async function(fileList) {
+                const files = Array.from(fileList || []);
+                if (!files.length) { alert("请先选择要处理的 LoRA"); return; }
+
+                const fetchOverlay = document.createElement("div");
+                fetchOverlay.className = "ma-modal-backdrop";
+                fetchOverlay.style.zIndex = "10020";
+                const fetchDialog = document.createElement("div");
+                fetchDialog.className = "ma-modal ma-modal-static-anim";
+                fetchDialog.setAttribute("data-magic-i18n", "manual");
+                fetchDialog.style.cssText = "padding:20px 22px;min-width:480px;max-width:580px;width:90%;z-index:10021;position:relative;";
+
+                const title = document.createElement("div");
+                title.textContent = "批量加载 LoRA 信息（已选 " + files.length + " 个）";
+                title.style.cssText = "font-size:15px;font-weight:650;color:#f4f4f5;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.08);cursor:move;user-select:none;";
+                fetchDialog.appendChild(title);
+
+                const listBox = document.createElement("div");
+                listBox.style.cssText = "max-height:92px;overflow:auto;background:#09090b;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 10px;font-size:12px;color:#d4d4d8;line-height:1.5;margin-bottom:14px;";
+                listBox.textContent = files.map(f => String(f).split(/[/\\]/).pop()).join("、");
+                fetchDialog.appendChild(listBox);
+
+                const infoLine = document.createElement("div");
+                infoLine.textContent = "将补全触发词、模型介绍、推荐权重与预览图，保存到 LoRA 同目录；与 LoRA Manager 互通，已有信息不会重复下载。";
+                infoLine.style.cssText = "font-size:12px;color:#a1a1aa;line-height:1.6;background:#18181c;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 10px;margin-bottom:16px;";
+                fetchDialog.appendChild(infoLine);
+
+                const statusLine = document.createElement("div");
+                statusLine.style.cssText = "font-size:12px;color:#a1a1aa;min-height:18px;margin-bottom:6px;";
+                fetchDialog.appendChild(statusLine);
+
+                const buttonContainer = document.createElement("div");
+                buttonContainer.style.cssText = "display:flex;gap:10px;justify-content:flex-end;margin-top:12px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.08);";
+
+                const cancelFetchBtn = document.createElement("button");
+                cancelFetchBtn.textContent = "取消";
+                cancelFetchBtn.className = "ma-btn";
+
+                const fetchConfirmBtn = document.createElement("button");
+                fetchConfirmBtn.textContent = "开始加载";
+                fetchConfirmBtn.className = "ma-btn ma-btn-primary";
+
+                buttonContainer.appendChild(cancelFetchBtn);
+                buttonContainer.appendChild(fetchConfirmBtn);
+                fetchDialog.appendChild(buttonContainer);
+
+                const closeFetch = () => { try { document.body.removeChild(fetchOverlay); } catch (e) {} };
+                cancelFetchBtn.onclick = closeFetch;
+
+                for (const ev of ["pointerdown", "pointermove", "pointerup", "mousedown", "wheel", "keydown"]) {
+                    fetchDialog.addEventListener(ev, (e) => e.stopPropagation(), ev === "wheel" ? { passive: false } : undefined);
+                }
+                fetchOverlay.appendChild(fetchDialog);
+                document.body.appendChild(fetchOverlay);
+                if (this.makeDialogDraggable) this.makeDialogDraggable(fetchDialog, title);
+
+                fetchConfirmBtn.onclick = async () => {
+                    const savePathMode = "same_dir";
+                    const options = { download_txt: true, download_json: true, download_image: true, download_log: true };
+                    let okCount = 0, failCount = 0, tagCount = 0, imgCount = 0;
+                    const errs = [];
+                    const findLora = (name) => {
+                        const list = (this.loraData && this.loraData.loras) ? this.loraData.loras : [];
+                        return list.find(l => l && l.name === name);
+                    };
+                    fetchConfirmBtn.disabled = true;
+                    cancelFetchBtn.disabled = true;
+                    fetchConfirmBtn.textContent = "加载中...";
+                    let doneCount = 0;
+                    const runOne = async (f) => {
+                        const short = String(f).split(/[/\\]/).pop();
+                        statusLine.textContent = `加载中 ${Math.min(doneCount + 1, files.length)}/${files.length}：${short}`;
+                        try {
+                            const response = await api.fetchApi('/ma/lora/fetch_metadata', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    lora_name: f,
+                                    options: options,
+                                    save_path_mode: savePathMode,
+                                    overwrite: false,
+                                    force_refresh: true,
+                                })
+                            });
+                            const rj = await response.json();
+                            if (!(response.ok || ['success','partial','skipped'].includes(rj && rj.status))) {
+                                throw new Error((rj && rj.message) || ('HTTP ' + response.status));
+                            }
+                            const v = rj && rj.data ? rj.data.triggerWords : "";
+                            if (typeof v === "string" && v.trim()) {
+                                const lo = findLora(f);
+                                if (lo) mplSetTriggerWords(lo, v);
+                                tagCount++;
+                            }
+                            mplBumpImage(f);
+                            if (this.refreshLoraImageCache) this.refreshLoraImageCache(f);
+                            imgCount++;
+                            okCount++;
+                        } catch (e) {
+                            failCount++;
+                            errs.push(`${short}: ${e.message}`);
+                        } finally {
+                            doneCount++;
+                        }
+                    };
+                    let cursor = 0;
+                    const worker = async () => {
+                        while (cursor < files.length) {
+                            const f = files[cursor++];
+                            await runOne(f);
+                        }
+                    };
+                    await Promise.all(Array.from({ length: Math.min(3, files.length) }, () => worker()));
+                    statusLine.textContent = `完成：处理 ${okCount} 个（触发词 ${tagCount} 个、预览 ${imgCount} 个），失败 ${failCount} 个`;
+                    if (failCount) alert(`部分失败：\n` + errs.join("\n"));
+                    await mplLoadExtraInfo(true);
+                    if (this.renderEmbeddedList) this.renderEmbeddedList();
+                    if (this.updateWidget) this.updateWidget();
+                    if (this._addLoraModal && this._addLoraModal.isConnected && this._refreshFileListFunc) {
+                        try { await this._refreshFileListFunc(); } catch (e) { console.error(e); }
+                    }
+                    fetchConfirmBtn.disabled = false;
+                    cancelFetchBtn.disabled = false;
+                    fetchConfirmBtn.textContent = "完成";
+                    setTimeout(closeFetch, 700);
+                };
             };
 
             nodeType.prototype.showBatchMetadataModal = function() {
@@ -2861,11 +4000,11 @@ app.registerExtension({
                 const searchRow = el("div", "", "mpl-metadata-filter-row mpl-metadata-search-row", filters);
                 const search = el("input", "", "mpl-metadata-search", searchRow);
                 search.type = "search";
-                search.placeholder = mplT("搜索文件名或路径…");
-                search.setAttribute("aria-label", mplT("搜索文件名或路径…"));
+                search.placeholder = mplT("搜索文件名、路径或标题…");
+                search.setAttribute("aria-label", mplT("搜索文件名、路径或标题…"));
                 const statusSelect = el("select", "", "mpl-metadata-status-filter", searchRow);
                 statusSelect.setAttribute("aria-label", mplT("信息状态筛选"));
-                for (const [value, label] of [["pending", "仅看待处理"], ["local_missing", "所有本地缺项"], ["all", "全部状态"]]) {
+                for (const [value, label] of [["pending", "仅看待处理"], ["local_missing", "所有本地缺项"], ["not_found", "未找到来源"], ["all", "全部状态"]]) {
                     const option = el("option", label, "", statusSelect);
                     option.value = value;
                 }
@@ -2921,7 +4060,7 @@ app.registerExtension({
                 [selectVisibleBtn, clearSelectionBtn, refreshInventoryBtn].forEach(button => { button.type = "button"; });
                 const preflightRow = el("div", "", "mpl-metadata-counts", selectionRow);
                 const preflightCounters = {};
-                for (const [key, label] of [["scoped", "当前范围"], ["selected", "已勾选"], ["need", "将处理"], ["complete", "无需获取"], ["issues", "本地异常"]]) {
+                for (const [key, label] of [["scoped", "当前范围"], ["selected", "已勾选"], ["need", "将处理"], ["notFound", "未找到来源"], ["complete", "无需获取"], ["issues", "本地异常"]]) {
                     const stat = el("span", "", "", preflightRow);
                     el("span", label, "", stat);
                     preflightCounters[key] = el("span", "", "", stat);
@@ -3129,12 +4268,12 @@ app.registerExtension({
                     selected.clear();
                     renderInventory();
                 };
-                const loadInventory = async (autoSelect = false) => {
+                const loadInventory = async (autoSelect = false, force = false) => {
                     loadingFiles = true;
                     if (!state.running) phase.textContent = mplT("正在读取本地 LoRA 列表…");
                     updateControls();
                     try {
-                        const response = await api.fetchApi("/ma/lora/list?include_metadata=true");
+                        const response = await api.fetchApi("/ma/lora/list?include_metadata=true" + (force ? "&force=1" : ""));
                         const data = await response.json();
                         if (!response.ok || data.error || !Array.isArray(data.files)) throw new Error(data.error || data.message || mplT("读取本地 LoRA 列表失败"));
                         if (closed) return;
@@ -3160,7 +4299,12 @@ app.registerExtension({
                             option.value = directory;
                             option.textContent = directory;
                         }
-                        directorySelect.value = [...directorySelect.options].some(option => option.value === oldDirectory) ? oldDirectory : "";
+                        let _savedDir = oldDirectory;
+                        if (!_savedDir) {
+                            try { _savedDir = localStorage.getItem("MA_META_DIR") || ""; } catch(e) {}
+                        }
+                        directorySelect.value = [...directorySelect.options].some(option => option.value === _savedDir) ? _savedDir : "";
+                        try { localStorage.setItem("MA_META_DIR", directorySelect.value); } catch(e) {}
                         inventoryErrors.replaceChildren();
                         if (Array.isArray(data.errors) && data.errors.length) {
                             el("div", "清单读取异常", "", inventoryErrors);
@@ -3183,7 +4327,10 @@ app.registerExtension({
                         if (!closed) renderInventory();
                     }
                 };
-                refreshInventoryBtn.onclick = () => loadInventory(false);
+                directorySelect.addEventListener("change", () => {
+                    try { localStorage.setItem("MA_META_DIR", directorySelect.value); } catch(e) {}
+                });
+                refreshInventoryBtn.onclick = () => loadInventory(false, true);
                 const resultRows = new Map();
                 const updateResults = (result) => {
                     const key = mplMetadataNameKey(result.name);
@@ -3277,7 +4424,7 @@ app.registerExtension({
                         }
                         progress.value = names.length;
                         progressCount.textContent = `${names.length} / ${names.length}`;
-                        await loadInventory(false);
+                        await loadInventory(false, true);
                         phase.textContent = failed || result.errors.length || !response.ok || result.status === "error"
                             ? mplT("整理标记未全部完成，请查看结果。")
                             : mplT(reviewed ? "整理标记已保存。" : "已恢复自动补全，尚未获取在线信息。");
@@ -3319,8 +4466,9 @@ app.registerExtension({
                             progressCount.textContent = `${completed} / ${total}`;
                             if (result) {
                                 mplMergeMetadataFieldStates(result.name, result, metadata, fieldStates, result.requested_types);
-                                updateResults(result);
-                                if (result.saved?.length) {
+                                const noopSkipped = result.status === "skipped" && !result.saved?.length && !(result.data && result.data.triggerWords);
+                                if (!noopSkipped) updateResults(result);
+                                if (result.saved?.length || (result.data && result.data.triggerWords)) {
                                     changedNames.add(result.name);
                                     for (const target of referencesByName.get(mplMetadataNameKey(result.name)) || []) {
                                         mplApplyMetadataData(target, result.name, result.data);
@@ -3333,13 +4481,17 @@ app.registerExtension({
                         if (changedNames.size) {
                             affectedNodes.forEach(target => target.updateWidget());
                             await loadLoraImageList();
+                            await mplLoadExtraInfo(true);
                             for (const target of affectedNodes) {
                                 target.renderEmbeddedList();
                                 if (target._addLoraModal?.isConnected && target._refreshFileListFunc) await target._refreshFileListFunc();
-                                changedNames.forEach(name => target.refreshLoraImageCache(name));
+                                changedNames.forEach(name => {
+                                    mplBumpImage(name);
+                                    target.refreshLoraImageCache(name);
+                                });
                             }
                         }
-                        await loadInventory(false);
+                        await loadInventory(false, true);
                         if (state.pauseResult) {
                             const retryAfter = state.pauseResult.retry_after;
                             const retryHint = retryAfter == null ? "" : ` ${mplT(/^\d+(\.\d+)?$/.test(String(retryAfter)) ? "重试等待秒数：" : "建议重试时间：")}${retryAfter}`;
@@ -3483,30 +4635,15 @@ app.registerExtension({
                 
                 // 创建遮罩层
                 const fetchOverlay = document.createElement("div");
-                fetchOverlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0, 0, 0, 0.7);
-                    z-index: 10003;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
+                fetchOverlay.className = "ma-modal-backdrop";
+                fetchOverlay.style.zIndex = "10003";
                 
                 // 创建弹窗
                 const fetchDialog = document.createElement("div");
+                fetchDialog.className = "ma-modal ma-modal-static-anim";
                 fetchDialog.style.cssText = `
-                    background: #1e1e1e;
-                    border: 1px solid #3a3a3a;
-                    border-radius: 12px;
-                    padding: 24px;
-                    min-width: 500px;
-                    max-width: 600px;
-                    width: 90%;
-                    box-shadow: 0 12px 40px rgba(0,0,0,0.9);
+                    width: 480px;
+                    max-width: 92vw;
                     z-index: 10004;
                     position: relative;
                 `;
@@ -3514,68 +4651,64 @@ app.registerExtension({
                 // 标题栏（可拖拽）
                 const title = document.createElement("div");
                 title.textContent = "爬取 LoRA 信息";
-                title.style.cssText = `
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: #fff;
-                    margin-bottom: 20px;
-                    padding-bottom: 16px;
-                    border-bottom: 2px solid #333;
-                    cursor: move;
-                    user-select: none;
-                `;
+                title.className = "ma-modal-header ma-modal-title";
                 
+                const fetchBody = document.createElement("div");
+                fetchBody.className = "ma-modal-body";
+                fetchBody.style.padding = "18px 20px";
+
                 // 下载选项
                 const optionsContainer = document.createElement("div");
-                optionsContainer.style.cssText = "margin-bottom: 20px;";
+                optionsContainer.className = "ma-card";
+                optionsContainer.style.marginBottom = "14px";
                 
                 const optionsTitle = document.createElement("div");
                 optionsTitle.textContent = "下载选项";
                 optionsTitle.style.cssText = `
-                    font-size: 14px;
-                    font-weight: 500;
-                    color: #ccc;
-                    margin-bottom: 12px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #f4f4f5;
+                    margin-bottom: 6px;
                 `;
                 optionsContainer.appendChild(optionsTitle);
                 const fetchHelp = document.createElement("div");
                 fetchHelp.textContent = mplT("重新检查缺项，保留已有文件和编辑内容。");
-                fetchHelp.style.cssText = "color: #999; font-size: 12px; margin-bottom: 12px;";
+                fetchHelp.style.cssText = "color: #71717a; font-size: 11.5px; margin-bottom: 12px;";
                 optionsContainer.appendChild(fetchHelp);
                 
                 const downloadTxt = document.createElement("label");
-                downloadTxt.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
+                downloadTxt.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #d4d4d8; font-size: 12.5px;";
                 const txtCheckbox = document.createElement("input");
                 txtCheckbox.type = "checkbox";
                 txtCheckbox.checked = savedSettings.download_txt !== false; // 默认true
-                txtCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                txtCheckbox.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                 downloadTxt.appendChild(txtCheckbox);
                 downloadTxt.appendChild(document.createTextNode("触发词文件 (.txt)"));
                 
                 const downloadJson = document.createElement("label");
-                downloadJson.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
+                downloadJson.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #d4d4d8; font-size: 12.5px;";
                 const jsonCheckbox = document.createElement("input");
                 jsonCheckbox.type = "checkbox";
                 jsonCheckbox.checked = savedSettings.download_json !== false; // 默认true
-                jsonCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                jsonCheckbox.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                 downloadJson.appendChild(jsonCheckbox);
                 downloadJson.appendChild(document.createTextNode("模型介绍信息 (.json)"));
                 
                 const downloadImage = document.createElement("label");
-                downloadImage.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
+                downloadImage.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #d4d4d8; font-size: 12.5px;";
                 const imageCheckbox = document.createElement("input");
                 imageCheckbox.type = "checkbox";
                 imageCheckbox.checked = savedSettings.download_image !== false; // 默认true
-                imageCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                imageCheckbox.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                 downloadImage.appendChild(imageCheckbox);
                 downloadImage.appendChild(document.createTextNode("预览图像"));
                 
                 const downloadLog = document.createElement("label");
-                downloadLog.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer; color: #eee;";
+                downloadLog.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer; color: #d4d4d8; font-size: 12.5px;";
                 const logCheckbox = document.createElement("input");
                 logCheckbox.type = "checkbox";
                 logCheckbox.checked = savedSettings.download_log !== false; // 默认true
-                logCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                logCheckbox.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                 downloadLog.appendChild(logCheckbox);
                 downloadLog.appendChild(document.createTextNode("默认权重下载 (.log)"));
                 
@@ -3586,37 +4719,37 @@ app.registerExtension({
                 
                 // 保存路径选择
                 const pathContainer = document.createElement("div");
-                pathContainer.style.cssText = "margin-bottom: 20px;";
+                pathContainer.className = "ma-card";
                 
                 const pathTitle = document.createElement("div");
                 pathTitle.textContent = "保存路径";
                 pathTitle.style.cssText = `
-                    font-size: 14px;
-                    font-weight: 500;
-                    color: #ccc;
-                    margin-bottom: 12px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #f4f4f5;
+                    margin-bottom: 10px;
                 `;
                 pathContainer.appendChild(pathTitle);
                 
                 const pathSameDir = document.createElement("label");
-                pathSameDir.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #eee;";
+                pathSameDir.style.cssText = "display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer; color: #d4d4d8; font-size: 12.5px;";
                 const sameDirRadio = document.createElement("input");
                 sameDirRadio.type = "radio";
                 sameDirRadio.name = "save_path";
                 sameDirRadio.value = "same_dir";
                 sameDirRadio.checked = savedSettings.save_path !== "subfolder"; // 默认same_dir
-                sameDirRadio.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                sameDirRadio.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                 pathSameDir.appendChild(sameDirRadio);
                 pathSameDir.appendChild(document.createTextNode("保存到 LoRA 同目录下"));
                 
                 const pathSubfolder = document.createElement("label");
-                pathSubfolder.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer; color: #eee;";
+                pathSubfolder.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer; color: #d4d4d8; font-size: 12.5px;";
                 const subfolderRadio = document.createElement("input");
                 subfolderRadio.type = "radio";
                 subfolderRadio.name = "save_path";
                 subfolderRadio.value = "subfolder";
                 subfolderRadio.checked = savedSettings.save_path === "subfolder";
-                subfolderRadio.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                subfolderRadio.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                 pathSubfolder.appendChild(subfolderRadio);
                 pathSubfolder.appendChild(document.createTextNode("保存到 magicloradate 子文件夹"));
                 
@@ -3645,53 +4778,20 @@ app.registerExtension({
                 
                 // 按钮容器
                 const buttonContainer = document.createElement("div");
-                buttonContainer.style.cssText = `
-                    display: flex;
-                    gap: 12px;
-                    justify-content: flex-end;
-                    margin-top: 20px;
-                    padding-top: 20px;
-                    border-top: 2px solid #2a2a2a;
-                `;
+                buttonContainer.className = "ma-modal-footer";
                 
                 // 取消按钮
                 const cancelFetchBtn = document.createElement("button");
                 cancelFetchBtn.textContent = "取消";
-                cancelFetchBtn.style.cssText = `
-                    padding: 10px 24px;
-                    background: #3a3a3a;
-                    border: 1px solid #555;
-                    color: #fff;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                `;
+                cancelFetchBtn.className = "ma-btn";
                 cancelFetchBtn.onclick = () => {
                     closeFetch();
-                };
-                cancelFetchBtn.onmouseenter = () => {
-                    cancelFetchBtn.style.background = "#555";
-                };
-                cancelFetchBtn.onmouseleave = () => {
-                    cancelFetchBtn.style.background = "#3a3a3a";
                 };
                 
                 // 爬取按钮
                 const fetchConfirmBtn = document.createElement("button");
                 fetchConfirmBtn.textContent = "开始爬取";
-                fetchConfirmBtn.style.cssText = `
-                    padding: 10px 24px;
-                    background: #4CAF50;
-                    border: none;
-                    color: white;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    font-weight: 500;
-                    transition: all 0.2s;
-                `;
+                fetchConfirmBtn.className = "ma-btn ma-btn-primary";
                 fetchConfirmBtn.onclick = async () => {
                     if (![txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox].some(checkbox => checkbox.checked)) return;
                     fetching = true;
@@ -3778,16 +4878,6 @@ app.registerExtension({
                 const updateFetchAvailability = () => { fetchConfirmBtn.disabled = fetching || ![txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox].some(checkbox => checkbox.checked); };
                 [txtCheckbox, jsonCheckbox, imageCheckbox, logCheckbox].forEach(checkbox => checkbox.addEventListener("change", updateFetchAvailability));
                 updateFetchAvailability();
-                fetchConfirmBtn.onmouseenter = () => {
-                    if (!fetchConfirmBtn.disabled) {
-                        fetchConfirmBtn.style.background = "#5CBF60";
-                    }
-                };
-                fetchConfirmBtn.onmouseleave = () => {
-                    if (!fetchConfirmBtn.disabled) {
-                        fetchConfirmBtn.style.background = "#4CAF50";
-                    }
-                };
                 
                 buttonContainer.appendChild(cancelFetchBtn);
                 buttonContainer.appendChild(fetchConfirmBtn);
@@ -3820,9 +4910,10 @@ app.registerExtension({
                 document.addEventListener("keydown", handleEsc);
                 
                 // 组装弹窗
+                fetchBody.appendChild(optionsContainer);
+                fetchBody.appendChild(pathContainer);
                 fetchDialog.appendChild(title);
-                fetchDialog.appendChild(optionsContainer);
-                fetchDialog.appendChild(pathContainer);
+                fetchDialog.appendChild(fetchBody);
                 fetchDialog.appendChild(buttonContainer);
                 fetchOverlay.appendChild(fetchDialog);
                 document.body.appendChild(fetchOverlay);
@@ -3923,8 +5014,7 @@ app.registerExtension({
             };
 
             nodeType.prototype.createLoraRow = function(lora, type, fIdx, lIdx) {
-                // 确保lora对象有所有必需字段
-                if (lora.enabled === undefined) lora.enabled = true;
+                lora.enabled = mplLoraEnabled(lora);
                 if (lora.weight === undefined || lora.weight === null) lora.weight = 1.0;
                 if (!lora.tags) lora.tags = "";
                 if (!lora.note) lora.note = "";
@@ -3935,56 +5025,53 @@ app.registerExtension({
                 
                 const row = document.createElement("div");
                 row.className = "mpl-lora-row";
-                row.style.opacity = lora.enabled ? "1" : "0.5";
-                // 移除row的draggable，改为在空白区域和排序按钮上才允许拖拽
+                row.title = mplLoraEnabled(lora) ? "已启用：参与加载（点击整行停用）" : "未启用：不会参与加载（点击整行启用）";
+                if (!mplLoraEnabled(lora)) row.classList.add("mpl-disabled");
+                row.dataset.selected = "false";
+                if (lora.colorMode !== "global" && lora.color && typeof lora.color === "object") {
+                    if (lora.color.bg) row.style.setProperty("--lora-sel-bg", lora.color.bg);
+                    if (lora.color.bar) {
+                        row.style.setProperty("--lora-sel-bar", lora.color.bar);
+                        row.style.setProperty("--lora-sel-border", lora.color.bar + "88");
+                    }
+                    if (lora.color.text) row.style.setProperty("--lora-sel-text", lora.color.text);
+                }
                 row.draggable = false;
                 
-                // 创建一个可拖拽的空白区域（在name和noteInput之间）
                 const dragArea = document.createElement("div");
                 dragArea.className = "mpl-drag-area";
                 dragArea.style.cssText = `
-                    flex: 1;
-                    min-width: 20px;
+                    flex: 0 0 10px;
+                    width: 10px;
                     cursor: move;
                     user-select: none;
                 `;
                 dragArea.draggable = true;
                 dragArea.ondragstart = (e) => {
-                    e.dataTransfer.setData("text/plain", JSON.stringify({ type, fIdx, lIdx }));
+                    mplClearLoraPreview();
+                    const dragInfo = { type: 'sort', sourceType: type, sourceFIdx: fIdx, sourceLIdx: lIdx };
+                    e.dataTransfer.setData("text/plain", JSON.stringify(dragInfo));
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("application/x-sort-drag", "true");
+                    e.dataTransfer.setData("application/x-sort-source-type", type);
+                    try { e.dataTransfer.setData("application/x-mpl-lora", JSON.stringify({ name: lora.name })); } catch (_) {}
+                    this._currentSortDrag = dragInfo;
                     row.style.opacity = "0.3";
                 };
                 dragArea.ondragend = () => { 
-                    row.style.opacity = lora.enabled ? "1" : "0.5"; 
+                    row.style.opacity = mplLoraEnabled(lora) ? "1" : "0.45"; 
                 };
                 
-                // 添加拖拽排序功能：拖拽到目标lora上方时插入
                 row.ondragover = (e) => {
                     e.preventDefault();
-                    // 检查是否是排序拖拽（通过节点级别的变量或自定义数据格式）
                     const isSortDrag = e.dataTransfer.types.includes("application/x-sort-drag") || this._currentSortDrag;
-                    
                     if (isSortDrag) {
-                        // 从节点级别读取拖拽信息（最可靠的方法）
                         const dragInfo = this._currentSortDrag;
                         if (!dragInfo) return;
-                        
-                        // 只显示lora排序到lora的特效（同一类型）
-                        if ((dragInfo.sourceType === 'root' && type === 'root') || 
-                            (dragInfo.sourceType === 'folder' && type === 'folder')) {
-                            // 如果是文件夹内的lora，还需要检查是否是同一个文件夹
-                            if (dragInfo.sourceType === 'folder' && type === 'folder') {
-                                if (dragInfo.sourceFIdx !== fIdx) {
-                                    // 不同文件夹的lora之间不排序，不显示特效
-                                    return;
-                                }
-                            }
-                            // 排序拖拽：添加视觉反馈（使用橙色以区分移动操作）
-                            // 计算鼠标位置，判断是插入到上方还是下方
+                        if (dragInfo.sourceLIdx !== undefined) {
                             const rect = row.getBoundingClientRect();
                             const mouseY = e.clientY - rect.top;
                             const isTopHalf = mouseY < rect.height / 2;
-                            
-                            // 添加橙色虚线边框特效
                             if (isTopHalf) {
                                 row.style.borderTop = "2px dashed #FF9800";
                                 row.style.borderBottom = "none";
@@ -3994,11 +5081,8 @@ app.registerExtension({
                             }
                             return;
                         }
-                        // 如果是文件夹排序到lora，不显示特效，直接返回
                         return;
                     }
-                    
-                    // 非排序拖拽：不显示特效（移动操作由文件夹的ondrop处理）
                     row.style.borderTop = "none";
                     row.style.borderBottom = "";
                 };
@@ -4006,365 +5090,256 @@ app.registerExtension({
                 row.ondragleave = () => {
                     row.style.borderTop = "none";
                     row.style.borderBottom = "";
-                    // 清除拖拽信息（如果拖拽离开）
-                    // 注意：这里不清除_currentSortDrag，因为可能只是暂时离开，ondragend会清除
                 };
                 
                 row.ondrop = (e) => {
                     e.preventDefault();
                     row.style.borderTop = "none";
                     row.style.borderBottom = "";
-                    
                     try {
                         const dragData = e.dataTransfer.getData("text/plain");
                         if (!dragData) {
-                            // 清除拖拽信息
                             this._currentSortDrag = null;
                             return;
                         }
-                        
                         const data = JSON.parse(dragData);
-                        // 清除拖拽信息
                         this._currentSortDrag = null;
                         
-                        // 如果是排序拖拽
+                        if (data.type === 'top' && typeof data.tok === 'string' && data.tok.startsWith('l:')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const uid = data.tok.slice(2);
+                            let srcArr = this.loraData.loras;
+                            let srcIdx = (srcArr || []).findIndex(l => this._uidFor(l) === uid);
+                            if (srcIdx < 0) {
+                                srcArr = null;
+                                for (const f of (this.loraData.folders || [])) {
+                                    const i = (f.loras || []).findIndex(l => this._uidFor(l) === uid);
+                                    if (i >= 0) { srcArr = f.loras; srcIdx = i; break; }
+                                }
+                            }
+                            if (!srcArr || srcIdx < 0) return;
+                            const targetArr = (type === 'folder') ? this.loraData.folders[fIdx].loras : this.loraData.loras;
+                            if (!targetArr) return;
+                            const rect = row.getBoundingClientRect();
+                            const after = (e.clientY - rect.top) >= rect.height / 2;
+                            const item = srcArr[srcIdx];
+                            const fromRoot = (srcArr === this.loraData.loras);
+                            srcArr.splice(srcIdx, 1);
+                            if (srcArr === targetArr) {
+                                let at = srcArr.indexOf(lora);
+                                if (at < 0) at = srcArr.length;
+                                srcArr.splice(after ? at + 1 : at, 0, item);
+                            } else {
+                                const idx = Math.max(0, Math.min(after ? lIdx + 1 : lIdx, targetArr.length));
+                                targetArr.splice(idx, 0, item);
+                            }
+                            if (targetArr === this.loraData.loras) {
+                                this._mplInsertLoraByToken(item, lora, after);
+                            } else if (fromRoot) {
+                                const tok = "l:" + this._uidFor(item);
+                                const tl = this._topLayout || [];
+                                const ti = tl.indexOf(tok);
+                                if (ti >= 0) tl.splice(ti, 1);
+                            }
+                            if (type === 'folder' && this.loraData.folders[fIdx]) this.loraData.folders[fIdx].collapsed = false;
+                            this._currentTopDrag = null;
+                            this.renderEmbeddedList();
+                            this.updateWidget();
+                            return;
+                        }
+
+                        if (data.type === 'top' && typeof data.tok === 'string' && data.tok.startsWith('f:') && type === 'root') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const rect = row.getBoundingClientRect();
+                            const after = (e.clientY - rect.top) >= rect.height / 2;
+                            this._mplPlaceToken(data.tok, "l:" + this._uidFor(lora), after);
+                            this._currentTopDrag = null;
+                            this.renderEmbeddedList();
+                            this.updateWidget();
+                            return;
+                        }
+
                         if (data.type === 'sort') {
-                            // lora排序到lora（同一列表内）
-                            if (data.sourceType === type && 
-                                (type === 'root' || (type === 'folder' && data.sourceFIdx === fIdx))) {
-                                
-                                const loras = type === 'folder' ? this.loraData.folders[fIdx].loras : this.loraData.loras;
+                            e.stopPropagation();
+                            if (data.sourceLIdx !== undefined && (data.sourceType === 'root' || data.sourceType === 'folder')) {
+                                const targetLoras = (type === 'folder') ? this.loraData.folders[fIdx].loras : this.loraData.loras;
+                                const srcLoras = (data.sourceType === 'folder') ? this.loraData.folders[data.sourceFIdx].loras : this.loraData.loras;
+                                if (!srcLoras || !targetLoras) return;
                                 const sourceIdx = data.sourceLIdx;
                                 const targetIdx = lIdx;
-                                
-                                // 如果源和目标相同，不处理
-                                if (sourceIdx === targetIdx) return;
-                                
-                                // 获取要移动的项（深拷贝）
-                                const movedItem = JSON.parse(JSON.stringify(loras[sourceIdx]));
-                                
-                                // 计算鼠标位置，判断是向上还是向下插入
+                                if (srcLoras === targetLoras && sourceIdx === targetIdx) return;
+
                                 const rect = row.getBoundingClientRect();
                                 const mouseY = e.clientY - rect.top;
                                 const isTopHalf = mouseY < rect.height / 2;
-                                
-                                // 计算目标插入位置
-                                let insertIdx;
-                                if (sourceIdx < targetIdx) {
-                                    // 向下移动：如果插入到上半部分，插入到targetIdx；如果插入到下半部分，插入到targetIdx+1
-                                    insertIdx = isTopHalf ? targetIdx : targetIdx + 1;
-                                } else {
-                                    // 向上移动：如果插入到上半部分，插入到targetIdx；如果插入到下半部分，插入到targetIdx+1
-                                    insertIdx = isTopHalf ? targetIdx : targetIdx + 1;
-                                }
-                                
-                                // 先删除源项
-                                loras.splice(sourceIdx, 1);
-                                
-                                // 如果删除后目标索引发生变化，需要调整
-                                if (sourceIdx < targetIdx) {
-                                    // 源在目标之前，删除后目标索引已经减1
-                                    if (!isTopHalf) {
-                                        insertIdx = targetIdx; // 向下插入，目标索引已减1
+
+                                const targetItem = targetLoras[targetIdx];
+                                const movedItem = JSON.parse(JSON.stringify(srcLoras[sourceIdx]));
+                                srcLoras.splice(sourceIdx, 1);
+
+                                if (srcLoras === targetLoras) {
+                                    let insertIdx;
+                                    if (sourceIdx < targetIdx) {
+                                        insertIdx = isTopHalf ? targetIdx - 1 : targetIdx;
                                     } else {
-                                        insertIdx = targetIdx - 1; // 向上插入
+                                        insertIdx = isTopHalf ? targetIdx : targetIdx + 1;
+                                    }
+                                    insertIdx = Math.max(0, Math.min(insertIdx, targetLoras.length));
+                                    targetLoras.splice(insertIdx, 0, movedItem);
+                                    if (targetLoras === this.loraData.loras && targetItem) {
+                                        this._mplInsertLoraByToken(movedItem, targetItem, !isTopHalf);
                                     }
                                 } else {
-                                    // 源在目标之后，删除后目标索引不变
-                                    insertIdx = isTopHalf ? targetIdx : targetIdx + 1;
+                                    let insertIdx = isTopHalf ? targetIdx : targetIdx + 1;
+                                    insertIdx = Math.max(0, Math.min(insertIdx, targetLoras.length));
+                                    targetLoras.splice(insertIdx, 0, movedItem);
+                                    if (targetLoras === this.loraData.loras && targetItem) {
+                                        this._mplInsertLoraByToken(movedItem, targetItem, !isTopHalf);
+                                    } else if (srcLoras === this.loraData.loras) {
+                                        const tok = "l:" + this._uidFor(movedItem);
+                                        const tl = this._topLayout || [];
+                                        const ti = tl.indexOf(tok);
+                                        if (ti >= 0) tl.splice(ti, 1);
+                                    }
                                 }
-                                
-                                // 确保索引有效
-                                insertIdx = Math.max(0, Math.min(insertIdx, loras.length));
-                                
-                                // 插入到目标位置
-                                loras.splice(insertIdx, 0, movedItem);
-                                
                                 this.renderEmbeddedList();
                                 this.updateWidget();
                                 return;
                             }
-                            
-                            // 不允许文件夹和lora之间互相排序，只允许同类型之间排序
-                            return; // 排序拖拽处理完毕，不继续处理
+                            return;
                         }
-                        
-                        // 原有的拖拽到文件夹逻辑保持不变
-                        // （这里会被文件夹的ondrop处理，所以不需要在这里处理）
                     } catch(err) {
                         console.error("拖拽排序错误:", err);
                     }
                 };
 
-                const check = document.createElement("input");
-                check.type = "checkbox"; check.checked = lora.enabled;
-                check.onchange = () => { lora.enabled = check.checked; row.style.opacity = lora.enabled ? "1" : "0.5"; this.renderEmbeddedList(); this.updateWidget(); };
-                check.addEventListener("pointerdown", (e)=>e.stopPropagation());
-                check.addEventListener("mousedown", (e)=>e.stopPropagation());
-                check.addEventListener("click", (e)=>e.stopPropagation());
+                const setSelected = (on) => {
+                    row.dataset.selected = on ? "true" : "false";
+                    if (on) row.classList.add("mpl-selected");
+                    else row.classList.remove("mpl-selected");
+                };
+                if (this._isMultiSelected(this.loraData, lora)) setSelected(true);
 
-                // 添加点击事件：点击lora行本身也能切换enabled状态
                 row.onclick = (e) => {
-                    // 排除交互元素：checkbox、input、button、备注框、权重控件
-                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' ||
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON' ||
                         e.target.classList.contains('mpl-mini-btn') ||
                         e.target.classList.contains('mpl-mini-input') ||
+                        e.target.closest('.mpl-mini-btn') ||
+                        e.target.closest('.mpl-mini-input') ||
+                        e.target.closest('.mpl-lora-actions') ||
+                        e.target.closest('.mpl-sort-handle') ||
                         e.target === noteInput || e.target.closest('.mpl-mini-input') ||
                         e.target === weightContainer || e.target.closest('.mpl-weight-container')) {
                         return;
                     }
-                    // 切换enabled状态
-                    lora.enabled = !lora.enabled;
-                    check.checked = lora.enabled;
-                    row.style.opacity = lora.enabled ? "1" : "0.5";
+                    lora.enabled = !mplLoraEnabled(lora);
+                    if (row._mplCheckEl) row._mplCheckEl.checked = lora.enabled;
                     this.renderEmbeddedList();
                     this.updateWidget();
                 };
 
-                // 添加鼠标悬停事件：显示缩略图预览
-                // 使用节点级别的预览图管理，避免重复创建
-                if (!this._previewTimeout) this._previewTimeout = null;
-                if (!this._previewDiv) this._previewDiv = null;
-                
-                row.onmouseenter = (e) => {
-                    // 先清理之前的预览图和定时器
-                    if (this._previewTimeout) {
-                        clearTimeout(this._previewTimeout);
-                        this._previewTimeout = null;
-                    }
-                    if (this._previewDiv) {
-                        this._previewDiv.remove();
-                        this._previewDiv = null;
-                    }
-                    
-                    // 延迟显示，避免快速移动时频繁创建
-                    this._previewTimeout = setTimeout(() => {
-                        // 再次检查，确保没有其他预览图
-                        const existingPreviews = document.querySelectorAll('.mpl-lora-preview');
-                        existingPreviews.forEach(p => p.remove());
-                        
-                        this._previewDiv = document.createElement("div");
-                        this._previewDiv.className = "mpl-lora-preview";
-                        this._previewDiv.style.cssText = `
-                            position: fixed;
-                            z-index: 10000;
-                            background: #2a2a2a;
-                            border: 2px solid #555;
-                            border-radius: 4px;
-                            padding: 8px;
-                            box-shadow: 0 4px 12px rgba(0,0,0,0.8);
-                            pointer-events: none;
-                            max-width: 300px;
-                            max-height: 300px;
-                        `;
-                        
-                        const img = document.createElement("img");
-                        img.style.cssText = `
-                            max-width: 300px;
-                            max-height: 300px;
-                            object-fit: contain;
-                            display: block;
-                        `;
-                        
-                        // 使用API获取预览图
-                        const safeName = encodeURIComponent(lora.name);
-                        img.src = api.apiURL(`/ma/lora/image?name=${safeName}&t=${Date.now()}`);
-                        img.onerror = () => {
-                            this._previewDiv.innerHTML = `<div style="padding:20px;color:#888;text-align:center;">${mplT("无预览图")}</div>`;
-                        };
-                        
-                        this._previewDiv.appendChild(img);
-                        document.body.appendChild(this._previewDiv);
-                        
-                        // 定位预览图在鼠标右侧，确保不超出屏幕边界
-                        const rect = row.getBoundingClientRect();
-                        const previewWidth = 300;
-                        const previewHeight = 300;
-                        const margin = 10;
-                        
-                        let left = rect.right + margin;
-                        let top = rect.top;
-                        
-                        // 如果右侧空间不足，显示在左侧
-                        if (left + previewWidth > window.innerWidth) {
-                            left = rect.left - previewWidth - margin;
-                        }
-                        
-                        // 如果下方空间不足，向上调整
-                        if (top + previewHeight > window.innerHeight) {
-                            top = window.innerHeight - previewHeight - margin;
-                        }
-                        
-                        // 确保不超出左边界和上边界
-                        left = Math.max(margin, left);
-                        top = Math.max(margin, top);
-                        
-                        this._previewDiv.style.left = `${left}px`;
-                        this._previewDiv.style.top = `${top}px`;
-                        this._previewDiv.style.display = 'block';
-                    }, 300); // 300ms延迟
-                };
-                
-                row.onmouseleave = () => {
-                    // 清理定时器
-                    if (this._previewTimeout) {
-                        clearTimeout(this._previewTimeout);
-                        this._previewTimeout = null;
-                    }
-                    // 删除预览图元素
-                    if (this._previewDiv) {
-                        this._previewDiv.remove();
-                        this._previewDiv = null;
-                    }
-                };
-                
-                row.onmousemove = (e) => {
-                    // 鼠标移动时更新预览图位置，确保不超出屏幕边界
-                    if (this._previewDiv && this._previewDiv.style.display !== 'none') {
-                        const rect = row.getBoundingClientRect();
-                        const previewWidth = 300;
-                        const previewHeight = 300;
-                        const margin = 10;
-                        
-                        let left = rect.right + margin;
-                        let top = rect.top;
-                        
-                        // 如果右侧空间不足，显示在左侧
-                        if (left + previewWidth > window.innerWidth) {
-                            left = rect.left - previewWidth - margin;
-                        }
-                        
-                        // 如果下方空间不足，向上调整
-                        if (top + previewHeight > window.innerHeight) {
-                            top = window.innerHeight - previewHeight - margin;
-                        }
-                        
-                        // 确保不超出左边界和上边界
-                        left = Math.max(margin, left);
-                        top = Math.max(margin, top);
-                        
-                        this._previewDiv.style.left = `${left}px`;
-                        this._previewDiv.style.top = `${top}px`;
-                    }
-                };
+                MA_LoraPreview.bindRowHover(row, lora);
 
-                // 排序条（汉堡菜单图标）- 作为拖拽手柄
+                // 🖼 左侧缩略图（加载失败时只留空占位，不会撑大行）
+                const thumb = document.createElement("div");
+                thumb.className = "mpl-lora-thumb";
+                const thumbImg = document.createElement("img");
+                const safeThumbName = encodeURIComponent(lora.name);
+                thumbImg.loading = "lazy";
+                thumbImg.decoding = "async";
+                thumbImg.src = api.apiURL(`/ma/lora/image?name=${safeThumbName}${mplBustSuffix(lora.name)}`);
+                thumbImg.onerror = () => { thumb.classList.add("mpl-lora-thumb-empty"); thumbImg.remove(); };
+                thumb.appendChild(thumbImg);
+                thumb.title = lora.name;
+                thumb.addEventListener("pointerdown", (e) => e.stopPropagation());
+                thumb.addEventListener("mousedown", (e) => e.stopPropagation());
+
+                // ☰ 排序手柄：拖动排序 / 拖出文件夹（复用 dragArea 的拖拽逻辑）
                 const sortHandle = document.createElement("div");
                 sortHandle.className = "mpl-sort-handle";
-                sortHandle.innerHTML = "☰";
+                sortHandle.textContent = "☰";
+                sortHandle.title = "拖动排序";
                 sortHandle.draggable = true;
-                sortHandle.style.cssText = `
-                    width: 16px;
-                    height: 16px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: move;
-                    color: #888;
-                    font-size: 14px;
-                    user-select: none;
-                    margin-right: 4px;
-                `;
-                sortHandle.onmouseenter = () => {
-                    sortHandle.style.color = "#ccc";
+                sortHandle.ondragstart = dragArea.ondragstart;
+                sortHandle.ondragend = dragArea.ondragend;
+                sortHandle.addEventListener("pointerdown", (e) => e.stopPropagation());
+                sortHandle.addEventListener("mousedown", (e) => e.stopPropagation());
+
+                // ☑ 启用开关（与整行点击、文件夹总开关保持同步）
+                const check = document.createElement("input");
+                check.type = "checkbox";
+                check.checked = mplLoraEnabled(lora);
+                check.title = "启用 / 停用此 LoRA";
+                check.addEventListener("pointerdown", (e) => e.stopPropagation());
+                check.addEventListener("mousedown", (e) => e.stopPropagation());
+                check.addEventListener("click", (e) => e.stopPropagation());
+                check.onchange = () => {
+                    lora.enabled = check.checked;
+                    row.style.opacity = check.checked ? "1" : "0.45";
+                    this.renderEmbeddedList();
+                    this.updateWidget();
                 };
-                sortHandle.onmouseleave = () => {
-                    sortHandle.style.color = "#888";
-                };
-                // 拖拽开始：标记这是排序拖拽
-                sortHandle.ondragstart = (e) => {
-                    e.stopPropagation();
-                    const dragInfo = { 
-                        type: 'sort', 
-                        sourceType: type, 
-                        sourceFIdx: fIdx, 
-                        sourceLIdx: lIdx 
-                    };
-                    e.dataTransfer.setData("text/plain", JSON.stringify(dragInfo));
-                    // 设置effectAllowed以便在ondragover中识别
-                    e.dataTransfer.effectAllowed = "move";
-                    // 使用自定义属性标记这是排序拖拽，并标识源类型
-                    e.dataTransfer.setData("application/x-sort-drag", "true");
-                    e.dataTransfer.setData("application/x-sort-source-type", type);
-                    // 存储到节点级别，以便在ondragover中读取
-                    this._currentSortDrag = dragInfo;
-                    row.style.opacity = "0.3";
-                };
-                sortHandle.ondragend = () => {
-                    row.style.opacity = lora.enabled ? "1" : "0.5";
-                    // 清除拖拽信息
-                    this._currentSortDrag = null;
-                };
-                sortHandle.addEventListener("pointerdown", (e)=>e.stopPropagation());
-                sortHandle.addEventListener("mousedown", (e)=>e.stopPropagation());
+                row._mplCheckEl = check;
 
                 const name = document.createElement("div");
                 name.className = "mpl-lora-name";
-                // 提取文件名（隐藏路径），保留完整路径在title中
-                const displayName = lora.name.split(/[/\\]/).pop() || lora.name;
+                const displayName = (lora.name.split(/[/\\]/).pop() || lora.name).replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, "");
                 name.textContent = displayName;
-                name.title = lora.name; // 鼠标悬停时显示完整路径
-                // name区域也可以拖拽
+                name.dataset.lora = lora.name;
+                mplDecorateName(name, lora.name);
                 name.draggable = true;
                 name.style.cursor = "move";
                 name.ondragstart = (e) => {
-                    e.dataTransfer.setData("text/plain", JSON.stringify({ type, fIdx, lIdx }));
+                    mplClearLoraPreview();
+                    const info = { type: "sort", sourceType: type, sourceFIdx: fIdx, sourceLIdx: lIdx };
+                    e.dataTransfer.setData("text/plain", JSON.stringify(info));
+                    e.dataTransfer.setData("application/x-sort-drag", "true");
+                    try { e.dataTransfer.setData("application/x-mpl-lora", JSON.stringify({ name: lora.name })); } catch (_) {}
+                    e.dataTransfer.effectAllowed = "move";
+                    this._currentSortDrag = info;
                     row.style.opacity = "0.3";
                 };
                 name.ondragend = () => { 
-                    row.style.opacity = lora.enabled ? "1" : "0.5"; 
+                    this._currentSortDrag = null;
+                    row.style.opacity = mplLoraEnabled(lora) ? "1" : "0.45"; 
                 };
 
-                // 备注输入框
                 if (!lora.note) lora.note = "";
                 const noteInput = document.createElement("input");
                 noteInput.type = "text";
                 noteInput.className = "mpl-note-input";
                 noteInput.value = lora.note || "";
                 noteInput.placeholder = "备注...";
-                noteInput.style.cssText = `
-                    flex: 1;
-                    min-width: 80px;
-                    padding: 4px 8px;
-                    background: #1a1a1a;
-                    border: 1px solid #555;
-                    border-radius: 3px;
-                    color: #fff;
-                    font-size: 12px;
-                `;
                 noteInput.onchange = () => {
+                    const previous = lora.note || "";
                     lora.note = noteInput.value;
+                    void mplSetNote(lora.name, lora.note, previous);
                     this.updateWidget();
                 };
                 noteInput.onblur = () => {
+                    if (lora.note === noteInput.value) return;
+                    const previous = lora.note || "";
                     lora.note = noteInput.value;
+                    void mplSetNote(lora.name, lora.note, previous);
                     this.updateWidget();
                 };
                 noteInput.addEventListener("keydown", (e)=>e.stopPropagation());
                 noteInput.addEventListener("pointerdown", (e)=>e.stopPropagation());
                 noteInput.addEventListener("mousedown", (e)=>e.stopPropagation());
 
-                // 权重调节器（带左右箭头按钮）
                 const weightContainer = document.createElement("div");
                 weightContainer.className = "mpl-weight-container";
-                weightContainer.style.cssText = `
-                    display: flex;
-                    align-items: center;
-                    background: #333;
-                    border-radius: 3px;
-                    border: 1px solid #555;
-                    overflow: hidden;
-                `;
                 
-                // 左箭头按钮（减少）
                 const decreaseBtn = document.createElement("button");
-                decreaseBtn.innerHTML = "◀";
+                decreaseBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
                 decreaseBtn.style.cssText = `
                     width: 18px;
                     height: 18px;
-                    background: #444;
+                    background: #18181c;
                     border: none;
-                    color: #ccc;
+                    color: #a1a1aa;
                     cursor: pointer;
                     font-size: 8px;
                     display: flex;
@@ -4378,27 +5353,13 @@ app.registerExtension({
                     weightDisplay.textContent = lora.weight.toFixed(2);
                     this.updateWidget();
                 };
-                decreaseBtn.onmouseenter = () => decreaseBtn.style.background = "#555";
-                decreaseBtn.onmouseleave = () => decreaseBtn.style.background = "#444";
+                decreaseBtn.onmouseenter = () => decreaseBtn.style.background = "#27272e";
+                decreaseBtn.onmouseleave = () => decreaseBtn.style.background = "#18181c";
                 decreaseBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
                 
-                // 权重显示
                 const weightDisplay = document.createElement("div");
                 weightDisplay.className = "mpl-weight-display";
                 weightDisplay.textContent = parseFloat(lora.weight).toFixed(2);
-                weightDisplay.style.cssText = `
-                    min-width: 45px;
-                    padding: 2px 6px;
-                    text-align: center;
-                    color: #fff;
-                    font-size: 11px;
-                    user-select: none;
-                    background: #2a2a2a;
-                    height: 18px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
                 weightDisplay.onclick = (e) => {
                     e.stopPropagation();
                     const newVal = prompt("输入权重:", lora.weight);
@@ -4412,15 +5373,14 @@ app.registerExtension({
                     }
                 };
                 
-                // 右箭头按钮（增加）
                 const increaseBtn = document.createElement("button");
-                increaseBtn.innerHTML = "▶";
+                increaseBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
                 increaseBtn.style.cssText = `
                     width: 18px;
                     height: 18px;
-                    background: #444;
+                    background: #18181c;
                     border: none;
-                    color: #ccc;
+                    color: #a1a1aa;
                     cursor: pointer;
                     font-size: 8px;
                     display: flex;
@@ -4434,18 +5394,16 @@ app.registerExtension({
                     weightDisplay.textContent = lora.weight.toFixed(2);
                     this.updateWidget();
                 };
-                increaseBtn.onmouseenter = () => increaseBtn.style.background = "#555";
-                increaseBtn.onmouseleave = () => increaseBtn.style.background = "#444";
+                increaseBtn.onmouseenter = () => increaseBtn.style.background = "#27272e";
+                increaseBtn.onmouseleave = () => increaseBtn.style.background = "#18181c";
                 increaseBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
                 
                 weightContainer.appendChild(decreaseBtn);
                 weightContainer.appendChild(weightDisplay);
                 weightContainer.appendChild(increaseBtn);
 
-                // ========== 滑条模式（追加在箭头模式之后） ==========
                 const layoutCfg = this.layoutSettings || { weightStyle: "arrows" };
                 if (layoutCfg.weightStyle === "slider") {
-                    // 清空箭头模式的子元素
                     while (weightContainer.firstChild) weightContainer.removeChild(weightContainer.firstChild);
 
                     const sliderMin = layoutCfg.sliderMin ?? -2;
@@ -4455,11 +5413,9 @@ app.registerExtension({
                     const showValue = layoutCfg.showWeightValue !== false;
                     const snapToZero = layoutCfg.snapToZero !== false;
 
-                    // 给 weightContainer 设置固定宽度，防止被 row 的 flex 布局挤压
                     weightContainer.style.flexShrink = "0";
                     weightContainer.style.width = (sliderWidth + (showValue ? 46 : 0)) + "px";
 
-                    // 滑条更新函数
                     const applySliderWeight = (newVal) => {
                         const clamped = Math.max(sliderMin, Math.min(sliderMax, newVal));
                         lora.weight = parseFloat(clamped.toFixed(2));
@@ -4467,29 +5423,42 @@ app.registerExtension({
                         this.updateWidget();
                     };
 
-                    // 滑条轨道
                     const track = document.createElement("div");
                     track.style.cssText = `
                         position: relative;
                         flex: 1 1 0;
                         min-width: 0;
-                        height: 22px;
-                        background: #2a2a2a;
+                        height: 20px;
+                        background: transparent;
                         cursor: pointer;
                         display: flex;
                         align-items: center;
-                        padding: 0 6px;
+                        padding: 0 7px;
                         box-sizing: border-box;
                     `;
+
+                    const rail = document.createElement("div");
+                    rail.style.cssText = `
+                        position: absolute;
+                        left: 7px;
+                        right: 7px;
+                        top: 50%;
+                        height: 4px;
+                        transform: translateY(-50%);
+                        background: #27272e;
+                        border-radius: 3px;
+                        pointer-events: none;
+                    `;
+                    track.appendChild(rail);
 
                     const zeroLine = document.createElement("div");
                     zeroLine.style.cssText = `
                         position: absolute;
                         left: 50%;
-                        top: 4px;
-                        bottom: 4px;
+                        top: 5px;
+                        bottom: 5px;
                         width: 1px;
-                        background: #555;
+                        background: #52525b;
                         pointer-events: none;
                     `;
                     track.appendChild(zeroLine);
@@ -4497,47 +5466,48 @@ app.registerExtension({
                     const fill = document.createElement("div");
                     fill.style.cssText = `
                         position: absolute;
-                        top: 9px;
+                        top: 8px;
                         height: 4px;
-                        background: #2196F3;
-                        border-radius: 2px;
+                        background: linear-gradient(90deg,#6366f1,#818cf8);
+                        border-radius: 3px;
                         pointer-events: none;
                     `;
                     track.appendChild(fill);
 
-                    const thumb = document.createElement("div");
-                    thumb.style.cssText = `
+                    const sThumb = document.createElement("div");
+                    sThumb.style.cssText = `
                         position: absolute;
                         top: 50%;
-                        width: 10px;
-                        height: 14px;
-                        background: #fff;
-                        border: 1px solid #2196F3;
-                        border-radius: 2px;
+                        width: 12px;
+                        height: 16px;
+                        background: #f4f4f5;
+                        border: 1px solid #6366f1;
+                        border-radius: 5px;
                         transform: translate(-50%, -50%);
                         cursor: grab;
                         pointer-events: none;
-                        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+                        box-shadow: 0 1px 4px rgba(0,0,0,0.55), 0 0 0 2px rgba(99,102,241,0.18);
                     `;
-                    track.appendChild(thumb);
+                    track.appendChild(sThumb);
 
                     const valueDisplay = document.createElement("div");
                     valueDisplay.className = "mpl-weight-display";
                     valueDisplay.textContent = parseFloat(lora.weight).toFixed(2);
                     valueDisplay.style.cssText = `
-                        min-width: 38px;
-                        padding: 2px 4px;
+                        min-width: 40px;
+                        padding: 2px 5px;
                         text-align: center;
-                        color: #fff;
-                        font-size: 11px;
+                        color: #f4f4f5;
+                        font-size: 11.5px;
                         user-select: none;
-                        background: #1a1a1a;
-                        height: 22px;
+                        background: transparent;
+                        font-variant-numeric: tabular-nums;
+                        height: 20px;
                         display: ${showValue ? "flex" : "none"};
                         align-items: center;
                         justify-content: center;
                         cursor: pointer;
-                        border-left: 1px solid #444;
+                        border-left: 1px solid rgba(255,255,255,0.08);
                         flex-shrink: 0;
                     `;
                     valueDisplay.onclick = (e) => {
@@ -4563,15 +5533,15 @@ app.registerExtension({
 
                     const updateSliderUI = () => {
                         const pct = Math.max(0, Math.min(100, valueToPercent(lora.weight)));
-                        thumb.style.left = pct + "%";
+                        sThumb.style.left = pct + "%";
                         if (lora.weight >= 0) {
                             fill.style.left = "50%";
                             fill.style.width = (pct - 50) + "%";
-                            fill.style.background = "#2196F3";
+                            fill.style.background = "linear-gradient(90deg,#6366f1,#818cf8)";
                         } else {
                             fill.style.left = pct + "%";
                             fill.style.width = (50 - pct) + "%";
-                            fill.style.background = "#f44336";
+                            fill.style.background = "linear-gradient(90deg,#fca5a5,#ef4444)";
                         }
                         valueDisplay.textContent = lora.weight.toFixed(2);
                     };
@@ -4617,18 +5587,34 @@ app.registerExtension({
                     updateSliderUI();
                 }
 
+                // 🏷️ 触发词按钮：左键编辑触发词，右键临时开关触发词输出（有触发词时亮起）
                 const tagBtn = document.createElement("button");
-                tagBtn.className = `mpl-mini-btn tag ${lora.tags ? 'active' : ''}`;
+                tagBtn.className = "mpl-mini-btn tag";
+                const _trigText = (lora.tags || lora.triggerWords || "").trim();
+                const _trigOn = lora.triggerEnabled !== false;
+                if (_trigText && _trigOn) tagBtn.classList.add("active");
+                if (!_trigOn) tagBtn.classList.add("mpl-trigger-off");
                 tagBtn.textContent = "🏷️";
-                tagBtn.onclick = () => {
+                tagBtn.title = _trigText
+                    ? ((_trigOn ? "触发词：已启用（左键编辑 · 右键关闭）" : "触发词：已关闭（左键编辑 · 右键启用）") + "\n" + _trigText)
+                    : "暂无触发词（左键添加）";
+                tagBtn.onclick = (e) => {
+                    e.stopPropagation();
                     this.showTagEditModal(lora);
+                };
+                tagBtn.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    lora.triggerEnabled = (lora.triggerEnabled === false);
+                    this.renderEmbeddedList();
+                    this.updateWidget();
                 };
                 tagBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
 
-                // 编辑按钮（蓝色背景，铅笔图标）
                 const editBtn = document.createElement("button");
                 editBtn.className = "mpl-mini-btn edit";
-                editBtn.innerHTML = "✎";
+                editBtn.innerHTML = mplIcon("edit", 13);
+                editBtn.title = "编辑 LoRA 内容";
                 editBtn.onclick = (e) => {
                     e.stopPropagation();
                     this.showLoraEditModal(lora, type, fIdx, lIdx);
@@ -4637,38 +5623,893 @@ app.registerExtension({
 
                 const del = document.createElement("button");
                 del.className = "mpl-mini-btn del";
-                del.textContent = "×";
+                del.innerHTML = mplIcon("close", 13);
+                del.title = "删除";
                 del.addEventListener("pointerdown", (e)=>e.stopPropagation());
                 
-                // 阻止在交互元素上拖拽
                 const preventDrag = (e) => {
                     e.stopPropagation();
-                    if (e.target === check || e.target === noteInput || 
+                    if (e.target === check || e.target === sortHandle || e.target === thumb ||
+                        e.target === noteInput || 
                         e.target === weightContainer || e.target.closest('.mpl-weight-container') ||
                         e.target === tagBtn || e.target === editBtn || e.target === del ||
-                        e.target === decreaseBtn || e.target === increaseBtn || e.target === weightDisplay) {
+                        (typeof decreaseBtn !== 'undefined' && e.target === decreaseBtn) || (typeof increaseBtn !== 'undefined' && e.target === increaseBtn) || (typeof weightDisplay !== 'undefined' && e.target === weightDisplay)) {
                         e.preventDefault();
                         return false;
                     }
                 };
                 
-                // 为交互元素添加阻止拖拽的事件
                 check.addEventListener("dragstart", preventDrag);
+                thumb.addEventListener("dragstart", preventDrag);
                 noteInput.addEventListener("dragstart", preventDrag);
                 weightContainer.addEventListener("dragstart", preventDrag);
                 tagBtn.addEventListener("dragstart", preventDrag);
                 editBtn.addEventListener("dragstart", preventDrag);
                 del.addEventListener("dragstart", preventDrag);
                 
-                row.append(sortHandle, check, name, dragArea, noteInput, weightContainer, tagBtn, editBtn, del);
+                const actions = document.createElement("div");
+                actions.className = "mpl-lora-actions";
+                actions.append(tagBtn, editBtn, del);
+
+                row.append(thumb, sortHandle, check, name, dragArea, noteInput, weightContainer, actions);
+
+                row.oncontextmenu = (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showLoraRowContextMenu(lora, type, fIdx, lIdx, e.clientX, e.clientY);
+                };
                 return row;
             };
 
+            // LoRA 颜色设置弹窗
+            nodeType.prototype.showLoraColorModal = function(lora) {
+                const old = document.querySelector('.mpl-lora-color-overlay');
+                if (old) old.remove();
+                const DEF = { bg: "#2b3b5e", bar: "#6366f1", text: "#eef1ff" };
+                const overlay = document.createElement("div");
+                overlay.className = "ma-modal-backdrop mpl-lora-color-overlay";
+                overlay.style.cssText = "position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;";
+                const dlg = document.createElement("div");
+                dlg.className = "ma-modal ma-modal-static-anim";
+                dlg.style.cssText = "padding:18px 20px;min-width:340px;color:#f4f4f5;font-size:13px;";
+                const title = document.createElement("div");
+                title.textContent = "颜色设置：" + (lora.name || "");
+                title.style.cssText = "font-size:14px;font-weight:650;color:#f4f4f5;margin-bottom:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:380px;";
+                dlg.appendChild(title);
+
+                const cs = this.colorSettings || {};
+                const gcur = {
+                    bg: cs.selectBg || DEF.bg,
+                    bar: cs.selectBar || DEF.bar,
+                    text: cs.selectText || DEF.text,
+                };
+                const hasLocal = !!(lora.color && typeof lora.color === "object");
+                const lcur = {
+                    bg: (hasLocal && lora.color.bg) || gcur.bg,
+                    bar: (hasLocal && lora.color.bar) || gcur.bar,
+                    text: (hasLocal && lora.color.text) || gcur.text,
+                };
+                const initialMode = lora.colorMode || (hasLocal ? "custom" : "global");
+
+                const section = (text, hint) => {
+                    const s = document.createElement("div");
+                    s.style.cssText = "border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#18181c;";
+                    const h = document.createElement("div");
+                    h.textContent = text;
+                    h.style.cssText = "font-size:13px;font-weight:600;color:#e4e4e7;margin-bottom:8px;";
+                    s.appendChild(h);
+                    if (hint) {
+                        const p = document.createElement("div");
+                        p.textContent = hint;
+                        p.style.cssText = "font-size:11px;color:#a1a1aa;margin-bottom:8px;";
+                        s.appendChild(p);
+                    }
+                    dlg.appendChild(s);
+                    return s;
+                };
+                const mkRow = (parent, label, val) => {
+                    const w = document.createElement("div");
+                    w.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:8px;";
+                    const l = document.createElement("div");
+                    l.textContent = label;
+                    l.style.cssText = "color:#d4d4d8;min-width:100px;font-size:12px;";
+                    const inp = document.createElement("input");
+                    inp.type = "color"; inp.value = val;
+                    inp.style.cssText = "width:44px;height:26px;border:1px solid rgba(255,255,255,0.12);border-radius:5px;background:#09090b;cursor:pointer;";
+                    w.appendChild(l); w.appendChild(inp); parent.appendChild(w);
+                    return inp;
+                };
+
+                const localSec = section("本条 LoRA 颜色", "选择颜色来源后，下方色块用于「独立固定」模式");
+                let applyLoraMode = () => {};
+                const modeSwitch = mplColorModeSwitch(localSec, initialMode, (mode) => applyLoraMode(mode));
+                const lbg = mkRow(localSec, "选中背景色", lcur.bg);
+                const lbar = mkRow(localSec, "左侧色条", lcur.bar);
+                const ltext = mkRow(localSec, "文字色", lcur.text);
+
+                const preview = document.createElement("div");
+                preview.style.cssText = "padding:7px 9px;border-radius:8px;font-size:12px;font-weight:600;margin:0 0 12px;";
+                const renderPreview = () => {
+                    preview.style.background = lbg.value;
+                    preview.style.borderLeft = "3px solid " + lbar.value;
+                    preview.style.color = ltext.value;
+                    preview.textContent = "示例 LoRA 行（选中状态）";
+                };
+                [lbg, lbar, ltext].forEach(i => i.addEventListener("input", renderPreview));
+                renderPreview();
+                dlg.appendChild(preview);
+
+                const globalSec = section("全局默认颜色", "跟随全局的 LoRA 使用此颜色；改动会同步到所有跟随全局的条目");
+                const gbg = mkRow(globalSec, "选中背景色", gcur.bg);
+                const gbar = mkRow(globalSec, "左侧色条", gcur.bar);
+                const gtext = mkRow(globalSec, "文字色", gcur.text);
+
+                applyLoraMode = (mode) => {
+                    const follow = mode === "global";
+                    if (follow) {
+                        lbg.value = gbg.value; lbar.value = gbar.value; ltext.value = gtext.value;
+                    }
+                    [lbg, lbar, ltext].forEach(i => { i.disabled = follow; i.style.opacity = follow ? "0.45" : "1"; });
+                    renderPreview();
+                };
+                applyLoraMode(modeSwitch.getMode());
+                [gbg, gbar, gtext].forEach(i => i.addEventListener("input", () => {
+                    if (modeSwitch.getMode() !== "global") return;
+                    lbg.value = gbg.value; lbar.value = gbar.value; ltext.value = gtext.value;
+                    renderPreview();
+                }));
+
+                const btnRow = document.createElement("div");
+                btnRow.style.cssText = "display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;";
+                const clearBtn = document.createElement("button");
+                clearBtn.textContent = "清除本条色";
+                clearBtn.className = "ma-btn";
+                clearBtn.style.marginRight = "auto";
+                clearBtn.onclick = () => {
+                    delete lora.color;
+                    lora.colorMode = "global";
+                    this.renderEmbeddedList(); this.updateWidget();
+                    overlay.remove();
+                };
+                const resetBtn = document.createElement("button");
+                resetBtn.textContent = "恢复默认颜色";
+                resetBtn.className = "ma-btn";
+                resetBtn.onclick = () => {
+                    gbg.value = DEF.bg; gbar.value = DEF.bar; gtext.value = DEF.text;
+                    if (modeSwitch.getMode() === "global") {
+                        lbg.value = DEF.bg; lbar.value = DEF.bar; ltext.value = DEF.text;
+                        renderPreview();
+                    }
+                };
+                const cancelBtn = document.createElement("button");
+                cancelBtn.textContent = "取消";
+                cancelBtn.className = "ma-btn";
+                cancelBtn.onclick = () => overlay.remove();
+                const okBtn = document.createElement("button");
+                okBtn.textContent = "确定";
+                okBtn.className = "ma-btn ma-btn-primary";
+                okBtn.onclick = () => {
+                    const mode = modeSwitch.getMode();
+                    lora.colorMode = mode;
+                    if (mode === "custom") {
+                        lora.color = { bg: lbg.value, bar: lbar.value, text: ltext.value };
+                    } else {
+                        delete lora.color;
+                    }
+                    this.colorSettings = { selectBg: gbg.value, selectBar: gbar.value, selectText: gtext.value };
+                    this.properties["color_settings"] = this.colorSettings;
+                    this.renderEmbeddedList(); this.updateWidget();
+                    this.applyColorSettings?.();
+                    this.setDirtyCanvas?.(true, true);
+                    overlay.remove();
+                };
+                btnRow.appendChild(clearBtn); btnRow.appendChild(resetBtn); btnRow.appendChild(cancelBtn); btnRow.appendChild(okBtn);
+                dlg.appendChild(btnRow);
+                overlay.appendChild(dlg);
+                overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+                document.body.appendChild(overlay);
+            };
+
+            // 文件夹颜色设置弹窗
+            nodeType.prototype.showFolderColorModal = function(folder, fDiv) {
+                const old = document.querySelector('.mpl-folder-color-overlay');
+                if (old) old.remove();
+                const DEF = { outer: "#18181c", inner: "#222228", bar: "#6366f1" };
+                const overlay = document.createElement("div");
+                overlay.className = "ma-modal-backdrop mpl-folder-color-overlay";
+                overlay.style.cssText = "position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;";
+                const dlg = document.createElement("div");
+                dlg.className = "ma-modal ma-modal-static-anim";
+                dlg.style.cssText = "padding:18px 20px;min-width:360px;color:#f4f4f5;font-size:13px;";
+                const title = document.createElement("div");
+                title.textContent = "文件夹颜色设置：" + (folder.name || "");
+                title.style.cssText = "font-size:14px;font-weight:650;color:#f4f4f5;margin-bottom:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:400px;";
+                dlg.appendChild(title);
+
+                const gcs = this.folderColorSettings || {};
+                const gcur = {
+                    outer: gcs.outer || "",
+                    inner: gcs.inner || "",
+                    bar: gcs.bar || "",
+                };
+                const hasLocal = !!(folder.color || folder.bgColor || folder.headBg);
+                const lcur = {
+                    outer: folder.bgColor || gcur.outer || DEF.outer,
+                    inner: folder.headBg || gcur.inner || DEF.inner,
+                    bar: folder.color || gcur.bar || DEF.bar,
+                };
+                const initialMode = folder.colorMode || (hasLocal ? "custom" : "global");
+
+                const section = (text, hint) => {
+                    const s = document.createElement("div");
+                    s.style.cssText = "border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#18181c;";
+                    const h = document.createElement("div");
+                    h.textContent = text;
+                    h.style.cssText = "font-size:13px;font-weight:600;color:#e4e4e7;margin-bottom:8px;";
+                    s.appendChild(h);
+                    if (hint) {
+                        const p = document.createElement("div");
+                        p.textContent = hint;
+                        p.style.cssText = "font-size:11px;color:#a1a1aa;margin-bottom:8px;";
+                        s.appendChild(p);
+                    }
+                    dlg.appendChild(s);
+                    return s;
+                };
+                const mkRow = (parent, label, val) => {
+                    const w = document.createElement("div");
+                    w.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:8px;";
+                    const l = document.createElement("div");
+                    l.textContent = label;
+                    l.style.cssText = "color:#d4d4d8;min-width:120px;font-size:12px;";
+                    const inp = document.createElement("input");
+                    inp.type = "color"; inp.value = val;
+                    inp.style.cssText = "width:44px;height:26px;border:1px solid rgba(255,255,255,0.12);border-radius:5px;background:#09090b;cursor:pointer;";
+                    const clearBtn = document.createElement("span");
+                    clearBtn.textContent = "✕";
+                    clearBtn.title = "清除此项单独颜色（回退全局）";
+                    clearBtn.style.cssText = "cursor:pointer;color:#a1a1aa;font-size:12px;padding:0 4px;";
+                    w.appendChild(l); w.appendChild(inp); w.appendChild(clearBtn); parent.appendChild(w);
+                    inp.__clearBtn = clearBtn;
+                    clearBtn.onclick = () => { inp.dataset.cleared = "1"; };
+                    inp.addEventListener("input", () => { delete inp.dataset.cleared; });
+                    return inp;
+                };
+
+                const localSec = section("本条文件夹颜色", "选择颜色来源后，下方色块用于「独立固定」模式");
+                let applyFolderMode = () => {};
+                const modeSwitch = mplColorModeSwitch(localSec, initialMode, (mode) => applyFolderMode(mode));
+                const lInner = mkRow(localSec, "标题栏背景", lcur.inner);
+                const lOuter = mkRow(localSec, "卡片背景", lcur.outer);
+                const lBar = mkRow(localSec, "左侧色条", lcur.bar);
+
+                const preview = document.createElement("div");
+                preview.style.cssText = "border-radius:8px;overflow:hidden;margin:0 0 12px;border:1px solid rgba(255,255,255,0.08);";
+                const ph = document.createElement("div");
+                ph.style.cssText = "padding:6px 9px;font-size:12px;font-weight:600;";
+                ph.textContent = "文件夹标题";
+                const pb = document.createElement("div");
+                pb.style.cssText = "padding:8px 9px;font-size:11px;color:#a1a1aa;";
+                pb.textContent = "· 内含 LoRA 行区域";
+                preview.appendChild(ph); preview.appendChild(pb);
+                const renderPreview = () => {
+                    preview.style.background = lOuter.value;
+                    preview.style.borderLeft = "4px solid " + lBar.value;
+                    ph.style.background = lInner.value;
+                    ph.style.color = "#f4f4f5";
+                };
+                [lOuter, lInner, lBar].forEach(i => i.addEventListener("input", renderPreview));
+                renderPreview();
+                dlg.appendChild(preview);
+
+                const globalSec = section("全局默认文件夹颜色", "跟随全局的文件夹使用此颜色；改动会同步到所有跟随全局的文件夹");
+                const gInner = mkRow(globalSec, "标题栏背景", gcur.inner || DEF.inner);
+                const gOuter = mkRow(globalSec, "卡片背景", gcur.outer || DEF.outer);
+                const gBar = mkRow(globalSec, "左侧色条", gcur.bar || DEF.bar);
+
+                applyFolderMode = (mode) => {
+                    const follow = mode === "global";
+                    if (follow) {
+                        lInner.value = gInner.value; lOuter.value = gOuter.value; lBar.value = gBar.value;
+                        [lInner, lOuter, lBar].forEach(i => delete i.dataset.cleared);
+                    }
+                    [lInner, lOuter, lBar].forEach(i => {
+                        i.disabled = follow;
+                        i.style.opacity = follow ? "0.45" : "1";
+                        if (i.__clearBtn) { i.__clearBtn.style.pointerEvents = follow ? "none" : "auto"; i.__clearBtn.style.opacity = follow ? "0.4" : "1"; }
+                    });
+                    renderPreview();
+                };
+                applyFolderMode(modeSwitch.getMode());
+                [gInner, gOuter, gBar].forEach(i => i.addEventListener("input", () => {
+                    if (modeSwitch.getMode() !== "global") return;
+                    lInner.value = gInner.value; lOuter.value = gOuter.value; lBar.value = gBar.value;
+                    renderPreview();
+                }));
+
+                const btnRow = document.createElement("div");
+                btnRow.style.cssText = "display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;";
+                const clearBtn = document.createElement("button");
+                clearBtn.textContent = "清除本条色";
+                clearBtn.className = "ma-btn";
+                clearBtn.style.marginRight = "auto";
+                clearBtn.onclick = () => {
+                    delete folder.color; delete folder.bgColor; delete folder.headBg;
+                    folder.colorMode = "global";
+                    this.renderEmbeddedList(); this.updateWidget();
+                    overlay.remove();
+                };
+                const resetBtn = document.createElement("button");
+                resetBtn.textContent = "恢复默认颜色";
+                resetBtn.className = "ma-btn";
+                resetBtn.onclick = () => {
+                    gOuter.value = DEF.outer; gInner.value = DEF.inner; gBar.value = DEF.bar;
+                    gOuter.dataset.cleared = "1"; gInner.dataset.cleared = "1"; gBar.dataset.cleared = "1";
+                    if (modeSwitch.getMode() === "global") {
+                        lOuter.value = DEF.outer; lInner.value = DEF.inner; lBar.value = DEF.bar;
+                        renderPreview();
+                    }
+                };
+                const cancelBtn = document.createElement("button");
+                cancelBtn.textContent = "取消";
+                cancelBtn.className = "ma-btn";
+                cancelBtn.onclick = () => overlay.remove();
+                const okBtn = document.createElement("button");
+                okBtn.textContent = "确定";
+                okBtn.className = "ma-btn ma-btn-primary";
+                okBtn.onclick = () => {
+                    const mode = modeSwitch.getMode();
+                    folder.colorMode = mode;
+                    if (mode === "custom") {
+                        if (lOuter.dataset.cleared) delete folder.bgColor; else folder.bgColor = lOuter.value;
+                        if (lInner.dataset.cleared) delete folder.headBg; else folder.headBg = lInner.value;
+                        if (lBar.dataset.cleared) delete folder.color; else folder.color = lBar.value;
+                    } else {
+                        delete folder.color; delete folder.bgColor; delete folder.headBg;
+                    }
+                    this.folderColorSettings = {
+                        outer: gOuter.dataset.cleared ? "" : gOuter.value,
+                        inner: gInner.dataset.cleared ? "" : gInner.value,
+                        bar: gBar.dataset.cleared ? "" : gBar.value,
+                    };
+                    this.properties["folder_color_settings"] = this.folderColorSettings;
+                    this.renderEmbeddedList(); this.updateWidget();
+                    this.applyFolderColorSettings?.();
+                    this.setDirtyCanvas?.(true, true);
+                    overlay.remove();
+                };
+                btnRow.appendChild(clearBtn); btnRow.appendChild(resetBtn); btnRow.appendChild(cancelBtn); btnRow.appendChild(okBtn);
+                dlg.appendChild(btnRow);
+                overlay.appendChild(dlg);
+                overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+                document.body.appendChild(overlay);
+            };
+
+            nodeType.prototype._builtinColorPresets = function() {
+                return [
+                    { name: "星夜紫蓝", lora: { selectBg: "#3d4d8c", selectBar: "#8ab4ff", selectText: "#f2f6ff" }, folder: { outer: "#1b1e2e", inner: "#272c44", bar: "#6c8cff" } },
+                    { name: "极夜青碧", lora: { selectBg: "#0f5148", selectBar: "#3ef0d4", selectText: "#eafffb" }, folder: { outer: "#0c1f1d", inner: "#13322e", bar: "#2fe0c8" } },
+                    { name: "暮色玫瑰", lora: { selectBg: "#5c2340", selectBar: "#ff8fc4", selectText: "#fff0f7" }, folder: { outer: "#241019", inner: "#3a1b2a", bar: "#ff7ab6" } },
+                    { name: "琥珀暖橙", lora: { selectBg: "#5c3a12", selectBar: "#ffb454", selectText: "#fff6e8" }, folder: { outer: "#241a0c", inner: "#3a2a13", bar: "#ffa94d" } },
+                    { name: "森野青绿", lora: { selectBg: "#1f5230", selectBar: "#6ff09a", selectText: "#eafff0" }, folder: { outer: "#101f15", inner: "#1b3322", bar: "#67d98b" } },
+                    { name: "深空靛蓝", lora: { selectBg: "#2e2a6e", selectBar: "#9a8bff", selectText: "#f1eeff" }, folder: { outer: "#14132b", inner: "#22204a", bar: "#8aa1ff" } },
+                    { name: "赤焰朱红", lora: { selectBg: "#5c1f28", selectBar: "#ff6b78", selectText: "#fff0f1" }, folder: { outer: "#241014", inner: "#3a1b20", bar: "#ff5f6d" } },
+                    { name: "薄荷清灰", lora: { selectBg: "#2b4a52", selectBar: "#8fe4ea", selectText: "#f0fdff" }, folder: { outer: "#171f22", inner: "#233036", bar: "#7fd4d8" } },
+                    { name: "葡萄奶紫", lora: { selectBg: "#432a66", selectBar: "#c79bff", selectText: "#f8f2ff" }, folder: { outer: "#1d1429", inner: "#2d2040", bar: "#b98bff" } },
+                    { name: "石墨单色", lora: { selectBg: "#3c414b", selectBar: "#aeb8c6", selectText: "#fafcff" }, folder: { outer: "#202329", inner: "#2c3037", bar: "#9aa4b2" } },
+                ];
+            };
+
+            nodeType.prototype._loadCustomColorPresets = function() {
+                try {
+                    const raw = localStorage.getItem("MA_COLOR_PRESETS");
+                    const arr = raw ? JSON.parse(raw) : [];
+                    return Array.isArray(arr) ? arr : [];
+                } catch (e) { return []; }
+            };
+            nodeType.prototype._saveCustomColorPresets = function(arr) {
+                try { localStorage.setItem("MA_COLOR_PRESETS", JSON.stringify(arr)); } catch (e) {}
+            };
+
+            nodeType.prototype._applyColorPreset = function(preset) {
+                if (!preset) return;
+                const l = preset.lora || {};
+                const f = preset.folder || {};
+                this.colorSettings = {
+                    selectBg: l.selectBg || "#2b3b5e",
+                    selectBar: l.selectBar || "#6366f1",
+                    selectText: l.selectText || "#eef1ff",
+                };
+                this.folderColorSettings = {
+                    outer: f.outer || "",
+                    inner: f.inner || "",
+                    bar: f.bar || "",
+                };
+                this.properties["color_settings"] = this.colorSettings;
+                this.properties["folder_color_settings"] = this.folderColorSettings;
+                this.renderEmbeddedList();
+                this.updateWidget();
+                this.applyColorSettings?.();
+                this.applyFolderColorSettings?.();
+                this.setDirtyCanvas?.(true, true);
+            };
+
+            nodeType.prototype.showColorPresetModal = function() {
+                this.showSettingsModal("layout");
+            };
+
+            nodeType.prototype._mplLoraInIgnoredFolder = function(lora) {
+                if (!lora) return false;
+                return (this.loraData.folders || []).some(f => f.ignored && (f.loras || []).includes(lora));
+            };
+
+            nodeType.prototype._mplGroupSelectedIntoFolder = function(fallbackLora) {
+                const folders = this.loraData.folders || [];
+                const roots = this.loraData.loras || [];
+                this._syncTopLayout();
+                const layout = this._topLayout.slice();
+                const folderByUid = new Map(folders.map(f => [this._uidFor(f), f]));
+                const rootByUid = new Map(roots.map(l => [this._uidFor(l), l]));
+                const seen = new Set();
+                const picked = [];
+                layout.forEach(tok => {
+                    if (tok.startsWith("l:")) {
+                        const l = rootByUid.get(tok.slice(2));
+                        if (l && mplLoraEnabled(l) && !seen.has(l)) {
+                            seen.add(l);
+                            picked.push({ lora: l, containerTok: tok, isRoot: true });
+                        }
+                    } else if (tok.startsWith("f:")) {
+                        const f = folderByUid.get(tok.slice(2));
+                        if (f && !f.ignored) (f.loras || []).forEach(l => {
+                            if (l && mplLoraEnabled(l) && !seen.has(l)) {
+                                seen.add(l);
+                                picked.push({ lora: l, containerTok: tok, isRoot: false });
+                            }
+                        });
+                    }
+                });
+                if (!picked.length && fallbackLora) {
+                    if (this._mplLoraInIgnoredFolder(fallbackLora)) {
+                        alert("该 LoRA 所在群组已被忽略，不参与分组；请先取消忽略。");
+                        return;
+                    }
+                    const tok = "l:" + this._uidFor(fallbackLora);
+                    picked.push({ lora: fallbackLora, containerTok: tok, isRoot: true });
+                }
+                if (!picked.length) return;
+
+                const pickedSet = new Set(picked.map(p => p.lora));
+                const rootTokens = new Set(picked.filter(p => p.isRoot).map(p => p.containerTok));
+                const firstTok = picked[0].containerTok;
+                const firstOrigIdx = layout.indexOf(firstTok);
+                const removedBefore = firstOrigIdx >= 0
+                    ? layout.slice(0, firstOrigIdx).filter(t => rootTokens.has(t)).length
+                    : 0;
+
+                for (let i = roots.length - 1; i >= 0; i--) {
+                    if (pickedSet.has(roots[i])) roots.splice(i, 1);
+                }
+                folders.forEach(f => {
+                    if (!Array.isArray(f.loras)) return;
+                    for (let i = f.loras.length - 1; i >= 0; i--) {
+                        if (pickedSet.has(f.loras[i])) f.loras.splice(i, 1);
+                    }
+                });
+
+                let num = 1;
+                while (folders.some(f => f.name === `新建文件夹${num}`)) num++;
+                const folder = {
+                    name: `新建文件夹${num}`,
+                    collapsed: false,
+                    loras: picked.map(p => p.lora),
+                };
+                folders.push(folder);
+
+                const cleaned = layout.filter(t => !rootTokens.has(t));
+                let insertIdx = firstOrigIdx >= 0 ? firstOrigIdx - removedBefore : cleaned.length;
+                insertIdx = Math.max(0, Math.min(insertIdx, cleaned.length));
+                cleaned.splice(insertIdx, 0, "f:" + this._uidFor(folder));
+                this._topLayout = cleaned;
+
+                this.renderEmbeddedList();
+                this.updateWidget();
+            };
+
+            nodeType.prototype._mplCopyIntoNewFolder = function(fallbackLora) {
+                const folders = this.loraData.folders || [];
+                const roots = this.loraData.loras || [];
+                this._syncTopLayout();
+                const layout = this._topLayout.slice();
+                const folderByUid = new Map(folders.map(f => [this._uidFor(f), f]));
+                const rootByUid = new Map(roots.map(l => [this._uidFor(l), l]));
+                const seen = new Set();
+                const picked = [];
+                layout.forEach(tok => {
+                    if (tok.startsWith("l:")) {
+                        const l = rootByUid.get(tok.slice(2));
+                        if (l && mplLoraEnabled(l) && !seen.has(l)) { seen.add(l); picked.push({ lora: l, tok }); }
+                    } else if (tok.startsWith("f:")) {
+                        const f = folderByUid.get(tok.slice(2));
+                        if (f && !f.ignored) (f.loras || []).forEach(l => {
+                            if (l && mplLoraEnabled(l) && !seen.has(l)) { seen.add(l); picked.push({ lora: l, tok }); }
+                        });
+                    }
+                });
+                if (!picked.length && fallbackLora) {
+                    if (this._mplLoraInIgnoredFolder(fallbackLora)) {
+                        alert("该 LoRA 所在群组已被忽略，不参与额外群组；请先取消忽略。");
+                        return;
+                    }
+                    picked.push({ lora: fallbackLora, tok: "l:" + this._uidFor(fallbackLora) });
+                }
+                if (!picked.length) return;
+
+                let num = 1;
+                while (folders.some(f => f.name === `新建文件夹${num}`)) num++;
+                const folder = {
+                    name: `新建文件夹${num}`,
+                    collapsed: false,
+                    loras: picked.map(p => {
+                        const copy = JSON.parse(JSON.stringify(p.lora));
+                        delete copy._uid;
+                        copy.enabled = mplLoraEnabled(p.lora);
+                        return mplDecorateNewLora(copy);
+                    }),
+                };
+                folders.push(folder);
+                const arr = this._topLayout;
+                const folderTok = "f:" + this._uidFor(folder);
+                const di = arr.indexOf(picked[picked.length - 1].tok);
+                if (di >= 0) arr.splice(di + 1, 0, folderTok);
+                else arr.push(folderTok);
+
+                this.renderEmbeddedList();
+                this.updateWidget();
+            };
+
+            nodeType.prototype._mplDuplicateLoras = function(sources) {
+                const picked = [...new Set((sources || []).filter(Boolean))];
+                if (!picked.length) return;
+                if (!Array.isArray(this.loraData.loras)) this.loraData.loras = [];
+                const roots = this.loraData.loras;
+                const folders = this.loraData.folders || [];
+                this._syncTopLayout();
+
+                const rootByUid = new Map(roots.map(l => [this._uidFor(l), l]));
+                const folderByUid = new Map(folders.map(f => [this._uidFor(f), f]));
+                const wanted = new Set(picked);
+                const ordered = [];
+                const seen = new Set();
+                this._topLayout.forEach(tok => {
+                    if (tok.startsWith("l:")) {
+                        const l = rootByUid.get(tok.slice(2));
+                        if (l && wanted.has(l) && !seen.has(l)) { seen.add(l); ordered.push(l); }
+                    } else if (tok.startsWith("f:")) {
+                        const f = folderByUid.get(tok.slice(2));
+                        if (f) (f.loras || []).forEach(l => {
+                            if (wanted.has(l) && !seen.has(l)) { seen.add(l); ordered.push(l); }
+                        });
+                    }
+                });
+                picked.forEach(l => { if (!seen.has(l)) ordered.push(l); });
+                if (!ordered.length) return;
+
+                ordered.forEach(l => {
+                    const copy = JSON.parse(JSON.stringify(l));
+                    delete copy._uid;
+                    copy.enabled = mplLoraEnabled(l);
+                    mplDecorateNewLora(copy);
+                    roots.push(copy);
+                });
+                this._syncTopLayout();
+                this.renderEmbeddedList();
+                this.updateWidget();
+            };
+
+            nodeType.prototype.showLoraRowContextMenu = function(lora, type, fIdx, lIdx, x, y) {
+                const old = document.querySelector('.mpl-ctx-menu');
+                if (old) old.remove();
+                const menu = document.createElement("div");
+                menu.className = "mpl-ctx-menu";
+                menu.style.cssText = "position:fixed;z-index:10030;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.72);padding:5px;min-width:158px;font-size:12.5px;color:#f4f4f5;";
+                menu.style.left = x + "px";
+                menu.style.top = y + "px";
+
+                const mkItem = (label, fn, danger, icon) => {
+                    const it = document.createElement("div");
+                    it.style.cssText = "padding:8px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s;display:flex;align-items:center;gap:8px;" + (danger ? "color:#f87171;" : "color:#d4d4d8;");
+                    it.innerHTML = (icon ? '<span style="display:inline-flex;opacity:.85;">' + mplIcon(icon, 15) + '</span>' : '') + '<span>' + label + '</span>';
+                    it.onmouseenter = () => it.style.background = danger ? "rgba(239,68,68,0.14)" : "rgba(99,102,241,0.16)";
+                    it.onmouseleave = () => it.style.background = "transparent";
+                    it.onclick = (ev) => { ev.stopPropagation(); menu.remove(); fn(); };
+                    menu.appendChild(it);
+                    return it;
+                };
+                const selectedLoras = this._getMultiSelectedLoras();
+                const actionLoras = selectedLoras.length > 1 ? selectedLoras : [lora];
+                const many = actionLoras.length > 1;
+                mkItem("加入收藏夹 ⭐", () => {
+                    this._mplAddLoraToFavoriteMenu(lora.name, x, y);
+                });
+                mkItem(many ? `复制 LoRA（${actionLoras.length} 个）` : "复制 LoRA", () => {
+                    this._mplDuplicateLoras(actionLoras);
+                }, false, 'copy');
+                if (many) {
+                    mkItem("单独复制此项", () => {
+                        this._mplDuplicateLoras([lora]);
+                    }, false, 'copy');
+                }
+                const selectedCount = selectedLoras.length;
+                mkItem(selectedCount ? `组成文件夹（选中 ${selectedCount} 个）` : "组成文件夹", () => {
+                    this._mplGroupSelectedIntoFolder(lora);
+                }, false, 'folderPlus');
+                mkItem(selectedCount ? `额外群组（复制 ${selectedCount} 个）` : "额外群组（复制）", () => {
+                    this._mplCopyIntoNewFolder(lora);
+                }, false, 'layers');
+                const fetchTargets = actionLoras.filter(l => l && l.name).map(l => l.name);
+                if (fetchTargets.length) {
+                    mkItem(many ? `爬取信息（${fetchTargets.length} 个）` : "爬取信息", () => {
+                        this.showBatchEditModal(fetchTargets);
+                    }, false, 'download');
+                }
+                mkItem("在 Civitai 打开", () => {
+                    if (lora && lora.name) this.openLoraCivitai(lora.name);
+                }, false, 'link');
+                mkItem("颜色设置", () => {
+                    this.showLoraColorModal(lora);
+                }, false, 'palette');
+                mkItem("删除", () => {
+                    if (type === 'root') this.loraData.loras.splice(lIdx, 1);
+                    else if (type === 'folder' && this.loraData.folders[fIdx]) this.loraData.folders[fIdx].loras.splice(lIdx, 1);
+                    this.renderEmbeddedList(); this.updateWidget();
+                }, true, 'trash');
+
+                document.body.appendChild(menu);
+                const r = menu.getBoundingClientRect();
+                if (r.right > window.innerWidth) menu.style.left = (window.innerWidth - r.width - 6) + "px";
+                if (r.bottom > window.innerHeight) menu.style.top = (window.innerHeight - r.height - 6) + "px";
+
+                const closeHandler = (ev) => {
+                    if (menu.contains(ev.target)) return;
+                    menu.remove();
+                    cleanup();
+                };
+                const cleanup = () => {
+                    document.removeEventListener("mousedown", closeHandler, true);
+                    document.removeEventListener("pointerdown", closeHandler, true);
+                    document.removeEventListener("wheel", closeHandler, true);
+                    window.removeEventListener("blur", onBlur);
+                    document.removeEventListener("visibilitychange", onVisibility, true);
+                };
+                const onBlur = () => { if (menu.parentNode) menu.remove(); cleanup(); };
+                const onVisibility = () => { if (document.hidden) { if (menu.parentNode) menu.remove(); cleanup(); } };
+                setTimeout(() => {
+                    document.addEventListener("mousedown", closeHandler, true);
+                    document.addEventListener("pointerdown", closeHandler, true);
+                    document.addEventListener("wheel", closeHandler, true);
+                    window.addEventListener("blur", onBlur);
+                    document.addEventListener("visibilitychange", onVisibility, true);
+                }, 0);
+            };
+
+            nodeType.prototype._editCardLora = function(f) {
+                const tempLora = {
+                    name: f,
+                    enabled: true,
+                    weight: 1.0,
+                    tags: '',
+                    note: '',
+                    triggerWords: '',
+                    jsonInfo: '',
+                    logInfo: ''
+                };
+                let existingLora = null;
+                let existingType = null;
+                let existingFIdx = -1;
+                let existingLIdx = -1;
+
+                for (let i = 0; i < this.loraData.loras.length; i++) {
+                    if (this.loraData.loras[i].name === f) {
+                        existingLora = this.loraData.loras[i];
+                        existingType = 'root';
+                        existingLIdx = i;
+                        break;
+                    }
+                }
+                if (!existingLora) {
+                    for (let fi = 0; fi < this.loraData.folders.length; fi++) {
+                        const folder = this.loraData.folders[fi];
+                        for (let li = 0; li < folder.loras.length; li++) {
+                            if (folder.loras[li].name === f) {
+                                existingLora = folder.loras[li];
+                                existingType = 'folder';
+                                existingFIdx = fi;
+                                existingLIdx = li;
+                                break;
+                            }
+                        }
+                        if (existingLora) break;
+                    }
+                }
+                const loraToEdit = existingLora || tempLora;
+                this.showLoraEditModal(
+                    loraToEdit,
+                    existingType || 'root',
+                    existingFIdx,
+                    existingLIdx,
+                    f
+                );
+            };
+
+            nodeType.prototype.showAddLoraCardContextMenu = function(loraName, x, y, fetchTargets) {
+                const old = document.querySelector('.mpl-ctx-menu');
+                if (old) old.remove();
+                const menu = document.createElement("div");
+                menu.className = "mpl-ctx-menu";
+                menu.style.cssText = "position:fixed;z-index:10030;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.72);padding:5px;min-width:170px;font-size:12.5px;color:#f4f4f5;";
+                menu.style.left = x + "px";
+                menu.style.top = y + "px";
+
+                const mkItem = (label, fn, danger, icon) => {
+                    const it = document.createElement("div");
+                    it.style.cssText = "padding:8px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s;display:flex;align-items:center;gap:8px;" + (danger ? "color:#f87171;" : "color:#d4d4d8;");
+                    it.innerHTML = (icon ? '<span style="display:inline-flex;opacity:.85;">' + mplIcon(icon, 15) + '</span>' : '') + '<span>' + label + '</span>';
+                    it.onmouseenter = () => it.style.background = danger ? "rgba(239,68,68,0.14)" : "rgba(99,102,241,0.16)";
+                    it.onmouseleave = () => it.style.background = "transparent";
+                    it.onclick = (ev) => { ev.stopPropagation(); menu.remove(); cleanup(); fn(); };
+                    menu.appendChild(it);
+                    return it;
+                };
+                const targets = (Array.isArray(fetchTargets) ? fetchTargets : []).filter(Boolean);
+                if (targets.length) {
+                    mkItem(targets.length > 1 ? `爬取信息（已选 ${targets.length} 个）` : "爬取信息", () => {
+                        this.showBatchEditModal(targets);
+                    }, false, 'download');
+                }
+                mkItem("在 Civitai 打开", () => {
+                    this.openLoraCivitai(loraName);
+                }, false, 'link');
+                mkItem("编辑信息/触发词", () => {
+                    this._editCardLora(loraName);
+                }, false, 'edit');
+
+                document.body.appendChild(menu);
+                const r = menu.getBoundingClientRect();
+                if (r.right > window.innerWidth) menu.style.left = (window.innerWidth - r.width - 6) + "px";
+                if (r.bottom > window.innerHeight) menu.style.top = (window.innerHeight - r.height - 6) + "px";
+
+                const closeHandler = (ev) => {
+                    if (menu.contains(ev.target)) return;
+                    menu.remove();
+                    cleanup();
+                };
+                const cleanup = () => {
+                    document.removeEventListener("mousedown", closeHandler, true);
+                    document.removeEventListener("pointerdown", closeHandler, true);
+                    document.removeEventListener("wheel", closeHandler, true);
+                    window.removeEventListener("blur", onBlur);
+                    document.removeEventListener("visibilitychange", onVisibility, true);
+                };
+                const onBlur = () => { if (menu.parentNode) menu.remove(); cleanup(); };
+                const onVisibility = () => { if (document.hidden) { if (menu.parentNode) menu.remove(); cleanup(); } };
+                setTimeout(() => {
+                    document.addEventListener("mousedown", closeHandler, true);
+                    document.addEventListener("pointerdown", closeHandler, true);
+                    document.addEventListener("wheel", closeHandler, true);
+                    window.addEventListener("blur", onBlur);
+                    document.addEventListener("visibilitychange", onVisibility, true);
+                }, 0);
+            };
+
+            nodeType.prototype.openLoraCivitai = async function(loraName) {
+                const toast = document.createElement("div");
+                toast.style.cssText = "position:fixed;left:50%;top:20px;transform:translateX(-50%);z-index:10080;background:#111114;border:1px solid rgba(255,255,255,0.14);color:#f4f4f5;padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:0 12px 32px rgba(0,0,0,0.7);";
+                toast.textContent = "正在查询 Civitai…";
+                document.body.appendChild(toast);
+                try {
+                    const resp = await api.fetchApi("/ma/lora/civitai_url", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ lora_name: loraName }),
+                    });
+                    let data = {};
+                    try { data = await resp.json(); } catch (e) {}
+                    if (data && data.ok && data.url) {
+                        toast.textContent = "已打开 Civitai";
+                        window.open(data.url, "_blank", "noopener,noreferrer");
+                    } else {
+                        toast.textContent = "未找到 Civitai 地址：" + ((data && data.error) || ("HTTP " + resp.status));
+                    }
+                } catch (e) {
+                    toast.textContent = "查询失败：" + (e && e.message ? e.message : e);
+                }
+                setTimeout(() => toast.remove(), 2600);
+            };
+
+            nodeType.prototype.showFolderContextMenu = function(folder, fDiv, x, y) {
+                const old = document.querySelector('.mpl-ctx-menu');
+                if (old) old.remove();
+                const menu = document.createElement("div");
+                menu.className = "mpl-ctx-menu";
+                menu.style.cssText = "position:fixed;z-index:10030;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.72);padding:6px;min-width:180px;font-size:12.5px;color:#f4f4f5;";
+                menu.style.left = x + "px";
+                menu.style.top = y + "px";
+
+                const mkItem = (label, fn, danger, icon) => {
+                    const it = document.createElement("div");
+                    it.style.cssText = "padding:8px 10px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s;display:flex;align-items:center;gap:8px;" + (danger ? "color:#f87171;" : "color:#d4d4d8;");
+                    it.innerHTML = (icon ? '<span style="display:inline-flex;opacity:.85;">' + mplIcon(icon, 15) + '</span>' : '') + '<span>' + label + '</span>';
+                    it.onmouseenter = () => it.style.background = danger ? "rgba(239,68,68,0.14)" : "rgba(99,102,241,0.16)";
+                    it.onmouseleave = () => it.style.background = "transparent";
+                    it.onclick = (ev) => { ev.stopPropagation(); menu.remove(); fn(); };
+                    menu.appendChild(it);
+                };
+                mkItem("颜色设置", () => {
+                    this.showFolderColorModal(folder, fDiv);
+                }, false, 'palette');
+                mkItem("重命名", () => {
+                    const newName = prompt("Rename:", folder.name);
+                    if (newName) { folder.name = newName; this.renderEmbeddedList(); this.updateWidget(); }
+                }, false, 'edit');
+                mkItem("删除文件夹", () => {
+                    if (confirm("Delete folder?")) {
+                        if (this._previewTimeout) { clearTimeout(this._previewTimeout); this._previewTimeout = null; }
+                        if (this._previewDiv) { this._previewDiv.remove(); this._previewDiv = null; }
+                        document.querySelectorAll('.mpl-lora-preview').forEach(p => p.remove());
+                        const idx = this.loraData.folders.indexOf(folder);
+                        if (idx >= 0) this.loraData.folders.splice(idx, 1);
+                        this.renderEmbeddedList();
+                        this.updateWidget();
+                    }
+                }, true, 'trash');
+
+                document.body.appendChild(menu);
+                const r = menu.getBoundingClientRect();
+                if (r.right > window.innerWidth) menu.style.left = (window.innerWidth - r.width - 6) + "px";
+                if (r.bottom > window.innerHeight) menu.style.top = (window.innerHeight - r.height - 6) + "px";
+
+                const closeHandler = (ev) => {
+                    if (menu.contains(ev.target)) return;
+                    menu.remove();
+                    cleanup();
+                };
+                const cleanup = () => {
+                    document.removeEventListener("mousedown", closeHandler, true);
+                    document.removeEventListener("pointerdown", closeHandler, true);
+                    document.removeEventListener("wheel", closeHandler, true);
+                    window.removeEventListener("blur", onBlur);
+                    document.removeEventListener("visibilitychange", onVisibility, true);
+                };
+                const onBlur = () => { if (menu.parentNode) menu.remove(); cleanup(); };
+                const onVisibility = () => { if (document.hidden) { if (menu.parentNode) menu.remove(); cleanup(); } };
+                setTimeout(() => {
+                    document.addEventListener("mousedown", closeHandler, true);
+                    document.addEventListener("pointerdown", closeHandler, true);
+                    document.addEventListener("wheel", closeHandler, true);
+                    window.addEventListener("blur", onBlur);
+                    document.addEventListener("visibilitychange", onVisibility, true);
+                }, 0);
+            };
+
+            nodeType.prototype.showLoraImagePreview = function(lora) {
+                const existing = document.querySelector('.mpl-img-preview-overlay');
+                if (existing) existing.remove();
+                const overlay = document.createElement("div");
+                overlay.className = "mpl-img-preview-overlay";
+                overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:10020;display:flex;align-items:center;justify-content:center;cursor:zoom-out;";
+                const img = document.createElement("img");
+                img.src = api.apiURL(`/ma/lora/image?name=${encodeURIComponent(lora.name)}&t=${Date.now()}`);
+                img.style.cssText = "max-width:80vw;max-height:80vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.8);background:#18181c;";
+                img.onerror = () => { overlay.innerHTML = '<div style="color:#a1a1aa;font-size:15px;">无预览图</div>'; };
+                overlay.appendChild(img);
+                overlay.onclick = () => overlay.remove();
+                document.body.appendChild(overlay);
+            };
+
             nodeType.prototype.addFolder = function() {
-                // 获取所有现有文件夹名称
                 const existingNames = this.loraData.folders.map(f => f.name);
-                
-                // 查找所有以"空白文件夹"开头的文件夹，提取编号
                 const blankFolderPattern = /^空白文件夹(\d+)$/;
                 const blankFolderNumbers = existingNames
                     .map(name => {
@@ -4678,34 +6519,26 @@ app.registerExtension({
                     .filter(num => num !== null)
                     .sort((a, b) => a - b);
                 
-                // 确定新文件夹的编号
                 let newNumber = 1;
                 if (blankFolderNumbers.length > 0) {
-                    // 找到连续编号中的最大编号
                     let maxNumber = blankFolderNumbers[blankFolderNumbers.length - 1];
-                    // 检查是否有缺失的编号（比如有1,2,4，缺失3）
                     for (let i = 1; i <= maxNumber; i++) {
                         if (!blankFolderNumbers.includes(i)) {
                             newNumber = i;
                             break;
                         }
                     }
-                    // 如果没有缺失的编号，使用最大编号+1
                     if (newNumber === 1 && blankFolderNumbers.includes(1)) {
                         newNumber = maxNumber + 1;
                     }
                 }
                 
-                // 创建新文件夹名称
                 const newFolderName = `空白文件夹${newNumber}`;
-                
-                // 确保不会重名（双重检查）
                 if (!existingNames.includes(newFolderName)) {
                     this.loraData.folders.push({ name: newFolderName, loras: [], collapsed: false });
                     this.renderEmbeddedList();
                     this.updateWidget();
                 } else {
-                    // 如果意外重名，尝试下一个编号
                     let fallbackNumber = newNumber + 1;
                     while (existingNames.includes(`空白文件夹${fallbackNumber}`)) {
                         fallbackNumber++;
@@ -4718,27 +6551,22 @@ app.registerExtension({
 
             nodeType.prototype.showAddLoraModal = async function() {
                 try {
-                    // 刷新全局图片列表缓存（类似参考代码的loadImageList）
-                    await loadLoraImageList();
-                    
-                    // 生成时间戳来强制刷新所有图片缓存
                     let cacheTimestamp = new Date().getTime();
                     
                     const resp = await api.fetchApi("/ma/lora/list");
                     const data = await resp.json();
                     const allFiles = data.files || [];
+                    let allMtimes = data.mtimes || {};
+                    allFiles.forEach(f => { if (allMtimes[f] === undefined) allMtimes[f] = 0; });
                     mplSetLoraNameList(allFiles);
                     
-                    // 构建文件夹树结构
                     const folderTree = {};
                     const rootFiles = [];
-                    
                     allFiles.forEach(file => {
-                        const parts = file.split(/[/\\]/);
+                        const parts = String(file).split(/[/\\]/);
                         if (parts.length === 1) {
                             rootFiles.push(file);
                         } else {
-                            // 构建文件夹路径
                             let current = folderTree;
                             for (let i = 0; i < parts.length - 1; i++) {
                                 const folderName = parts[i];
@@ -4746,10 +6574,8 @@ app.registerExtension({
                                     current[folderName] = { files: [], folders: {} };
                                 }
                                 if (i === parts.length - 2) {
-                                    // 最后一个文件夹，添加文件
                                     current[folderName].files.push(file);
                                 } else {
-                                    // 继续深入到子文件夹
                                     if (!current[folderName].folders) {
                                         current[folderName].folders = {};
                                     }
@@ -4759,18 +6585,36 @@ app.registerExtension({
                         }
                     });
                     
-                    // 当前路径状态（恢复上次打开的文件夹 / 全部模式 / 自动添加触发词开关）
                     const savedBrowserState = mplLoadBrowserState();
                     let currentPath = mplSanitizeFolderPath(folderTree, savedBrowserState.path);
                     let selectedFiles = new Set();
                     let autoAddTag = savedBrowserState.autoAddTag;
-                    let showAllMode = savedBrowserState.showAll; // 全部模式：显示所有lora，不按路径分类
+                    let showAllMode = savedBrowserState.showAll;
+                    let sortMode = "name";
+                    let sortDir = "desc";
+                    try { const _sp = JSON.parse(localStorage.getItem("MA_LORA_SORT")||"null"); if (_sp){ if(_sp.mode) sortMode=_sp.mode; if(_sp.dir) sortDir=_sp.dir; } } catch(e){}
+                    const sortPersist = () => { try { localStorage.setItem("MA_LORA_SORT", JSON.stringify({ mode: sortMode, dir: sortDir })); } catch(e){} };
                     
                     const dialog = document.createElement("div");
-                    // 初始居中定位，拖拽后会改为transform定位
-                    const centerX = window.innerWidth / 2 - 400;
-                    const centerY = window.innerHeight / 2 - 400;
-                    dialog.style.cssText = `position:fixed;top:${centerY}px;left:${centerX}px;width:800px;height:800px;background:#25292d;border:1px solid #4a515a;z-index:9999;display:flex;flex-direction:column;border-radius:8px;box-shadow:0 8px 25px rgba(0,0,0,0.6);font-family: sans-serif;`;
+                    let _dpos = null;
+                    try { _dpos = JSON.parse(localStorage.getItem("MA_ADD_LORA_WIN") || "null"); } catch(e) { _dpos = null; }
+                    let _dw = 860, _dh = 800, _dl, _dt;
+                    if (_dpos && typeof _dpos.w === "number" && typeof _dpos.left === "number") {
+                        _dw = _dpos.w; _dh = _dpos.h; _dl = _dpos.left; _dt = _dpos.top;
+                    } else {
+                        _dw = 860; _dh = 800;
+                        _dl = Math.max(16, window.innerWidth / 2 - 430);
+                        _dt = Math.max(16, window.innerHeight / 2 - 400);
+                    }
+                    _dl = Math.max(0, Math.min(_dl, window.innerWidth - 120));
+                    _dt = Math.max(0, Math.min(_dt, window.innerHeight - 80));
+                    dialog.style.cssText = `position:fixed;top:${_dt}px;left:${_dl}px;width:${_dw}px;height:${_dh}px;max-width:96vw;max-height:92vh;background:#111114;border:1px solid rgba(255,255,255,0.12);z-index:9999;display:flex;flex-direction:column;border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,0.78), 0 0 0 1px rgba(255,255,255,0.05) inset;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;overflow:hidden;`;
+                    dialog.__maSaveWinPos = () => {
+                        try {
+                            const r = dialog.getBoundingClientRect();
+                            localStorage.setItem("MA_ADD_LORA_WIN", JSON.stringify({ left: r.left, top: r.top, w: r.width, h: r.height }));
+                        } catch(e) {}
+                    };
                     
                     dialog.addEventListener("wheel", (e) => { e.stopPropagation(); }, { passive: false });
                     const stopEvent = (e) => { e.stopPropagation(); };
@@ -4780,116 +6624,90 @@ app.registerExtension({
                     dialog.addEventListener("mousedown", stopEvent);
                     dialog.addEventListener("keydown", stopEvent);
 
-                    // 标题栏
                     const header = document.createElement("div");
-                    header.style.cssText = "padding:10px 15px;border-bottom:1px solid #333;display:flex;gap:10px;align-items:center;background:#1a1a1a;border-radius:8px 8px 0 0;cursor:move;user-select:none;";
+                    header.style.cssText = "padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;gap:10px;align-items:center;background:#151519;border-radius:14px 14px 0 0;cursor:move;user-select:none;";
                     
                     const title = document.createElement("div");
                     title.textContent = "添加 Lora";
-                    title.style.cssText = "color:#e0e0e0;font-weight:bold;font-size:14px;white-space:nowrap;flex:1;";
+                    title.style.cssText = "color:#f4f4f5;font-weight:650;font-size:15px;white-space:nowrap;flex:1;letter-spacing:-0.01em;";
                     
                     header.appendChild(title);
                     dialog.appendChild(header);
                     
-                    // 路径导航栏
                     const pathBar = document.createElement("div");
-                    pathBar.style.cssText = "padding:8px 15px;border-bottom:1px solid #333;background:#222;display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+                    pathBar.style.cssText = "padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.06);background:#0d0d10;display:flex;align-items:center;gap:10px;flex-wrap:wrap;";
                     
+                    const allTabIdleStyle = "padding:4px 10px;background:#18181c;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#d4d4d8;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.15s;";
+                    const allTabActiveStyle = "padding:4px 10px;background:rgba(239,68,68,0.16);border:1px solid rgba(239,68,68,0.45);border-radius:6px;color:#fca5a5;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s;";
                     const allTab = document.createElement("div");
                     allTab.textContent = "全部";
-                    allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                    allTab.style.cssText = allTabIdleStyle;
                     allTab.onclick = () => {
                         if (showAllMode) {
-                            // 取消全部模式，回到路径选择模式
                             showAllMode = false;
                             allTab.textContent = "全部";
-                            allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                            allTab.style.cssText = allTabIdleStyle;
                             currentPath = [];
                             renderContent();
                         } else {
-                            // 进入全部模式，显示所有lora
                             showAllMode = true;
                             allTab.textContent = "取消全部";
-                            allTab.style.cssText = "padding:4px 8px;background:#f44336;border:1px solid #f44336;border-radius:4px;color:#fff;cursor:pointer;font-size:12px;";
+                            allTab.style.cssText = allTabActiveStyle;
                             renderContent();
                         }
                     };
-                    // 恢复上次的「全部」模式时同步按钮外观
                     if (showAllMode) {
                         allTab.textContent = "取消全部";
-                        allTab.style.cssText = "padding:4px 8px;background:#f44336;border:1px solid #f44336;border-radius:4px;color:#fff;cursor:pointer;font-size:12px;";
+                        allTab.style.cssText = allTabActiveStyle;
                     }
                     pathBar.appendChild(allTab);
                     
                     const pathDisplay = document.createElement("div");
-                    pathDisplay.style.cssText = "color:#888;font-size:12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;";
+                    pathDisplay.style.cssText = "color:#a1a1aa;font-size:12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;";
                     
                     const updatePathDisplay = () => {
                         pathDisplay.innerHTML = "";
-                        if (showAllMode) {
-                            // 全部模式下不显示路径
-                            return;
-                        }
-                        if (currentPath.length === 0) {
-                            const rootSpan = document.createElement("span");
-                            rootSpan.textContent = "根目录";
-                            rootSpan.style.cssText = "color:#4CAF50;cursor:pointer;text-decoration:underline;";
-                            rootSpan.onclick = () => {
-                                if (showAllMode) {
-                                    showAllMode = false;
-                                    allTab.textContent = "全部";
-                                    allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
-                                }
-                                currentPath = [];
-                                renderContent();
-                            };
-                            rootSpan.onmouseenter = () => rootSpan.style.color = "#5CBF60";
-                            rootSpan.onmouseleave = () => rootSpan.style.color = "#4CAF50";
-                            pathDisplay.appendChild(rootSpan);
-                        } else {
-                            // 添加"根目录"作为第一个可点击项
-                            const rootSpan = document.createElement("span");
-                            rootSpan.textContent = "根目录";
-                            rootSpan.style.cssText = "color:#4CAF50;cursor:pointer;text-decoration:underline;";
-                            rootSpan.onclick = () => {
-                                if (showAllMode) {
-                                    showAllMode = false;
-                                    allTab.textContent = "全部";
-                                    allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
-                                }
-                                currentPath = [];
-                                renderContent();
-                            };
-                            rootSpan.onmouseenter = () => rootSpan.style.color = "#5CBF60";
-                            rootSpan.onmouseleave = () => rootSpan.style.color = "#4CAF50";
-                            pathDisplay.appendChild(rootSpan);
-                            
+                        if (showAllMode) return;
+                        const rootSpan = document.createElement("span");
+                        rootSpan.textContent = "根目录";
+                        rootSpan.style.cssText = "color:#818cf8;cursor:pointer;font-weight:500;";
+                        rootSpan.onclick = () => {
+                            if (showAllMode) {
+                                showAllMode = false;
+                                allTab.textContent = "全部";
+                                allTab.style.cssText = allTabIdleStyle;
+                            }
+                            currentPath = [];
+                            renderContent();
+                        };
+                        rootSpan.onmouseenter = () => rootSpan.style.color = "#a5b4fc";
+                        rootSpan.onmouseleave = () => rootSpan.style.color = "#818cf8";
+                        pathDisplay.appendChild(rootSpan);
+                        if (currentPath.length > 0) {
                             const separator1 = document.createElement("span");
                             separator1.textContent = " > ";
-                            separator1.style.cssText = "color:#666;";
+                            separator1.style.cssText = "color:#52525b;";
                             pathDisplay.appendChild(separator1);
-                            
                             currentPath.forEach((folderName, index) => {
                                 const pathItem = document.createElement("span");
                                 pathItem.textContent = folderName;
-                                pathItem.style.cssText = "color:#4CAF50;cursor:pointer;text-decoration:underline;";
+                                pathItem.style.cssText = "color:#818cf8;cursor:pointer;font-weight:500;";
                                 pathItem.onclick = () => {
                                     if (showAllMode) {
                                         showAllMode = false;
                                         allTab.textContent = "全部";
-                                        allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                                        allTab.style.cssText = allTabIdleStyle;
                                     }
                                     currentPath = currentPath.slice(0, index + 1);
                                     renderContent();
                                 };
-                                pathItem.onmouseenter = () => pathItem.style.color = "#5CBF60";
-                                pathItem.onmouseleave = () => pathItem.style.color = "#4CAF50";
+                                pathItem.onmouseenter = () => pathItem.style.color = "#a5b4fc";
+                                pathItem.onmouseleave = () => pathItem.style.color = "#818cf8";
                                 pathDisplay.appendChild(pathItem);
-                                
                                 if (index < currentPath.length - 1) {
                                     const separator = document.createElement("span");
                                     separator.textContent = " > ";
-                                    separator.style.cssText = "color:#666;";
+                                    separator.style.cssText = "color:#52525b;";
                                     pathDisplay.appendChild(separator);
                                 }
                             });
@@ -4898,119 +6716,143 @@ app.registerExtension({
                     
                     updatePathDisplay();
                     pathBar.appendChild(pathDisplay);
-                    
                     dialog.appendChild(pathBar);
                     
-                    // 搜索和工具栏
                     const toolbar = document.createElement("div");
-                    toolbar.style.cssText = "padding:10px 15px;border-bottom:1px solid #333;background:#1a1a1a;display:flex;gap:10px;align-items:center;";
+                    toolbar.style.cssText = "padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.08);background:#111114;display:flex;gap:12px;align-items:center;flex-wrap:wrap;";
                     
-                    // 搜索框（缩小）
                     const search = document.createElement("input");
-                    search.placeholder = "🔍 搜索当前目录...（如需全部搜索请打开“全部”开关）";
-                    search.style.cssText = "width:400px;padding:6px 10px;background:#121212;color:#fff;border:1px solid #444;border-radius:4px;outline:none;font-size:13px;";
+                    search.placeholder = "🔍 搜索当前目录（支持文件名与标题）...";
+                    search.className = "ma-input";
+                    // 宽度要能完整显示提示语，但不再无限撑满
+                    search.style.cssText = "flex:1 1 320px;min-width:300px;max-width:460px;padding:7px 11px;font-size:12.5px;";
                     search.addEventListener("keydown", (e) => { e.stopPropagation(); });
                     search.addEventListener("pointerdown", (e) => { e.stopPropagation(); });
+
+                    // 一个下拉搞定排序（名称/时间 × 正序/倒序），不再额外堆箭头按钮
+                    const sortContainer = document.createElement("div");
+                    sortContainer.style.cssText = "display:flex;align-items:center;gap:6px;flex:0 0 auto;";
+                    const sortLabel = document.createElement("span");
+                    sortLabel.textContent = "排序:";
+                    sortLabel.style.cssText = "color:#a1a1aa;font-size:12px;white-space:nowrap;";
+                    const sortSelect = document.createElement("select");
+                    sortSelect.className = "ma-select";
+                    sortSelect.style.cssText = "padding:6px 9px;font-size:12px;width:auto;";
+                    sortSelect.title = "排序方式";
+                    sortSelect.innerHTML = [
+                        '<option value="name:asc">按名称 A→Z</option>',
+                        '<option value="name:desc">按名称 Z→A</option>',
+                        '<option value="time:desc">按修改时间 最新</option>',
+                        '<option value="time:asc">按修改时间 最早</option>',
+                    ].join("");
+                    sortSelect.value = sortMode + ":" + sortDir;
+                    if (!sortSelect.value) sortSelect.value = "name:asc";
+                    sortSelect.onchange = () => {
+                        const parts = sortSelect.value.split(":");
+                        sortMode = parts[0] || "name";
+                        sortDir = parts[1] || "asc";
+                        sortPersist();
+                        renderContent();
+                    };
+                    sortContainer.append(sortLabel, sortSelect);
+
+                    const mplSortList = (arr) => {
+                        const copy = arr.slice();
+                        const dir = (sortDir === "asc") ? 1 : -1;
+                        if (sortMode === "time") {
+                            copy.sort((a, b) => {
+                                const ma = allMtimes[a] || 0;
+                                const mb = allMtimes[b] || 0;
+                                if (ma !== mb) return (ma - mb) * dir;
+                                return String(a).localeCompare(String(b), "zh");
+                            });
+                        } else {
+                            copy.sort((a, b) => String(a).localeCompare(String(b), "zh") * dir);
+                        }
+                        return copy;
+                    };
                     
-                    // 自动添加tag开关
                     const autoTagContainer = document.createElement("div");
-                    autoTagContainer.style.cssText = "display:flex;align-items:center;gap:8px;";
-                    
+                    autoTagContainer.style.cssText = "display:flex;align-items:center;gap:6px;";
                     const autoTagLabel = document.createElement("span");
-                    autoTagLabel.textContent = "自动添加已获取的触发词";
-                    autoTagLabel.style.cssText = "color:#ccc;font-size:12px;";
-                    
+                    autoTagLabel.textContent = "自动添加触发词";
+                    autoTagLabel.style.cssText = "color:#a1a1aa;font-size:12px;font-weight:500;";
                     const autoTagToggle = document.createElement("label");
-                    autoTagToggle.style.cssText = `
-                        position: relative;
-                        display: inline-block;
-                        width: 44px;
-                        height: 24px;
-                        cursor: pointer;
-                    `;
-                    
+                    autoTagToggle.style.cssText = "position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;";
                     const toggleInput = document.createElement("input");
                     toggleInput.type = "checkbox";
                     toggleInput.style.cssText = "opacity:0;width:0;height:0;";
                     toggleInput.checked = autoAddTag;
-                    
                     const toggleSlider = document.createElement("span");
-                    toggleSlider.style.cssText = `
-                        position: absolute;
-                        cursor: pointer;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        bottom: 0;
-                        background-color: #444;
-                        transition: .4s;
-                        border-radius: 24px;
-                    `;
-                    
+                    toggleSlider.style.cssText = "position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#27272a;border:1px solid rgba(255,255,255,0.12);transition:.25s;border-radius:20px;";
                     const toggleKnob = document.createElement("span");
-                    toggleKnob.style.cssText = `
-                        position: absolute;
-                        content: "";
-                        height: 18px;
-                        width: 18px;
-                        left: 3px;
-                        bottom: 3px;
-                        background-color: white;
-                        transition: .4s;
-                        border-radius: 50%;
-                    `;
-                    
+                    toggleKnob.style.cssText = "position:absolute;height:14px;width:14px;left:2px;bottom:2px;background-color:white;transition:.25s;border-radius:50%;";
                     if (autoAddTag) {
-                        toggleSlider.style.backgroundColor = "#4CAF50";
-                        toggleKnob.style.transform = "translateX(20px)";
+                        toggleSlider.style.backgroundColor = "#6366f1";
+                        toggleKnob.style.transform = "translateX(16px)";
                     }
-                    
                     toggleInput.onchange = (e) => {
                         autoAddTag = e.target.checked;
                         mplSaveBrowserState({ autoAddTag });
                         if (autoAddTag) {
-                            toggleSlider.style.backgroundColor = "#4CAF50";
-                            toggleKnob.style.transform = "translateX(20px)";
+                            toggleSlider.style.backgroundColor = "#6366f1";
+                            toggleKnob.style.transform = "translateX(16px)";
                         } else {
-                            toggleSlider.style.backgroundColor = "#444";
+                            toggleSlider.style.backgroundColor = "#27272a";
                             toggleKnob.style.transform = "translateX(0)";
                         }
                     };
-                    
                     toggleSlider.appendChild(toggleKnob);
-                    autoTagToggle.appendChild(toggleInput);
-                    autoTagToggle.appendChild(toggleSlider);
+                    autoTagToggle.append(toggleInput, toggleSlider);
+                    autoTagContainer.append(autoTagLabel, autoTagToggle);
+
+                    const refreshBtn = document.createElement("button");
+                    refreshBtn.type = "button";
+                    refreshBtn.className = "ma-btn";
+                    refreshBtn.innerHTML = mplIcon("refresh", 14) + '<span style="margin-left:4px;">刷新</span>';
+                    refreshBtn.title = "重新扫描 LoRA 目录，显示新加入的本地文件";
+                    refreshBtn.style.cssText = "padding:6px 10px;font-size:12px;display:inline-flex;align-items:center;";
+                    refreshBtn.onclick = async (e) => {
+                        e.stopPropagation();
+                        if (refreshBtn.disabled) return;
+                        refreshBtn.disabled = true;
+                        const label = refreshBtn.querySelector("span");
+                        if (label) label.textContent = "扫描中…";
+                        try { await refreshFileList(); }
+                        finally {
+                            refreshBtn.disabled = false;
+                            if (label) label.textContent = "刷新";
+                        }
+                    };
                     
-                    autoTagContainer.appendChild(autoTagLabel);
-                    autoTagContainer.appendChild(autoTagToggle);
-                    
-                    toolbar.appendChild(search);
-                    toolbar.appendChild(autoTagContainer);
+                    // 右侧控件成组靠右：搜索在左、排序/开关/刷新在右，互不挤压
+                    const toolbarRight = document.createElement("div");
+                    toolbarRight.style.cssText = "display:flex;align-items:center;gap:12px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;";
+                    toolbarRight.append(sortContainer, autoTagContainer, refreshBtn);
+                    toolbar.append(search, toolbarRight);
                     dialog.appendChild(toolbar);
                     
-                    // 内容区域
                     const content = document.createElement("div");
-                    content.style.cssText = "flex:1;overflow-y:auto;padding:10px;background:#1f1f1f;display:grid;grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));grid-auto-rows:165px;gap:8px;align-content:start;overscroll-behavior: contain;";
+                    content.className = "mpl-add-scroll";
+                    content.style.cssText = "flex:1;overflow-y:auto;padding:14px 18px;background:#09090b;display:grid;grid-template-columns:repeat(auto-fill, minmax(118px, 1fr));grid-auto-rows:172px;gap:10px;align-content:start;overscroll-behavior: contain;";
                     dialog.appendChild(content);
                     
-                    // 底部状态栏
                     const footer = document.createElement("div");
-                    footer.style.cssText = "padding:10px 15px;border-top:1px solid #333;background:#1a1a1a;display:flex;align-items:center;justify-content:space-between;border-radius:0 0 8px 8px;";
+                    footer.style.cssText = "padding:12px 18px;border-top:1px solid rgba(255,255,255,0.08);background:#151519;display:flex;align-items:center;justify-content:space-between;border-radius:0 0 14px 14px;";
                     
                     const selectedCount = document.createElement("div");
-                    selectedCount.style.cssText = "color:#ccc;font-size:13px;";
+                    selectedCount.style.cssText = "color:#a1a1aa;font-size:12.5px;font-weight:500;";
                     selectedCount.textContent = "已选择 0 个 LoRA";
                     
                     const footerButtons = document.createElement("div");
-                    footerButtons.style.cssText = "display:flex;gap:10px;align-items:center;";
+                    footerButtons.style.cssText = "display:flex;gap:8px;align-items:center;";
                     
                     const detectBtn = document.createElement("button");
                     detectBtn.type = "button";
+                    detectBtn.className = "ma-btn";
                     detectBtn.textContent = "🚨 LoRA 检测";
                     detectBtn.title = "检测重复文件（哈希）与 LoRA 更新（Civitai）";
-                    detectBtn.style.cssText = "padding:8px 16px;background:#455a64;border:1px solid #607d8b;color:#eceff1;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap;";
-                    detectBtn.onmouseenter = () => { detectBtn.style.background = "#546e7a"; detectBtn.style.borderColor = "#78909c"; };
-                    detectBtn.onmouseleave = () => { detectBtn.style.background = "#455a64"; detectBtn.style.borderColor = "#607d8b"; };
+                    detectBtn.style.cssText = "padding:7px 14px;font-size:12.5px;white-space:nowrap;";
                     detectBtn.onclick = (e) => {
                         e.stopPropagation();
                         this.showLoraDetectModal({
@@ -5022,17 +6864,24 @@ app.registerExtension({
                     };
                     
                     const addBtn = document.createElement("button");
+                    addBtn.className = "ma-btn ma-btn-primary";
                     addBtn.textContent = "添加选中 LoRA";
-                    addBtn.style.cssText = "padding:8px 16px;background:#4CAF50;border:none;color:white;border-radius:4px;cursor:pointer;font-size:13px;";
-                    addBtn.onmouseenter = () => addBtn.style.background = "#5CBF60";
-                    addBtn.onmouseleave = () => addBtn.style.background = "#4CAF50";
+                    addBtn.style.cssText = "padding:7px 16px;font-size:12.5px;";
                     
                     const closeBtn = document.createElement("button");
+                    closeBtn.className = "ma-btn";
                     closeBtn.textContent = "关闭";
-                    closeBtn.style.cssText = "padding:8px 16px;background:#666;border:none;color:white;border-radius:4px;cursor:pointer;font-size:13px;";
-                    closeBtn.onmouseenter = () => closeBtn.style.background = "#777";
-                    closeBtn.onmouseleave = () => closeBtn.style.background = "#666";
-                    
+                    closeBtn.style.cssText = "padding:7px 14px;font-size:12.5px;";
+
+                    // 未选中任何文件时按钮半透明，避免误点
+                    const updateAddBtn = () => {
+                        const empty = selectedFiles.size === 0;
+                        addBtn.disabled = empty;
+                        addBtn.style.opacity = empty ? "0.55" : "1";
+                        addBtn.style.cursor = empty ? "not-allowed" : "pointer";
+                    };
+                    updateAddBtn();
+
                     footerButtons.appendChild(detectBtn);
                     footerButtons.appendChild(addBtn);
                     footerButtons.appendChild(closeBtn);
@@ -5040,182 +6889,158 @@ app.registerExtension({
                     footer.appendChild(footerButtons);
                     dialog.appendChild(footer);
                     
-                    // 创建Lora卡片
                     const createLoraCard = (f) => {
-                            const card = document.createElement("div");
-                            const isSelected = selectedFiles.has(f);
-                            card.style.cssText = `
-                                width:100%;
-                                height:100%;
-                                background:${isSelected ? '#2a3a2a' : '#2a2a2a'};
-                                border-radius:6px;
-                                overflow:hidden;
-                                cursor:pointer;
-                                border:${isSelected ? '3px solid #4CAF50' : '2px solid #444'};
-                                transition:all 0.3s;
-                                position:relative;
-                                display:flex;
-                                flex-direction:column;
-                                box-shadow:${isSelected ? '0 0 16px rgba(76, 175, 80, 0.4)' : 'none'};
-                                transform:${isSelected ? 'scale(0.98)' : 'scale(1)'};
-                            `;
-                            card.title = f;
-                            card.dataset.selected = isSelected;
+                        const card = document.createElement("div");
+                        const isSelected = selectedFiles.has(f);
+                        card.style.cssText = `
+                            width:100%;
+                            height:100%;
+                            background:${isSelected ? 'rgba(99, 102, 241, 0.14)' : '#18181c'};
+                            border-radius:10px;
+                            overflow:hidden;
+                            cursor:pointer;
+                            border:${isSelected ? '2px solid #6366f1' : '1px solid rgba(255,255,255,0.1)'};
+                            transition:all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                            position:relative;
+                            display:flex;
+                            flex-direction:column;
+                            box-shadow:${isSelected ? '0 0 0 2px rgba(99, 102, 241, 0.28), 0 8px 20px rgba(0,0,0,0.45)' : '0 2px 8px rgba(0,0,0,0.3)'};
+                            transform:${isSelected ? 'scale(0.98)' : 'scale(1)'};
+                        `;
+                        card.title = f;
+                        card.dataset.selected = isSelected;
                         
-                        // 点击卡片切换选中状态
                         card.onclick = (e) => {
-                            // 如果点击的是编辑按钮，不切换选中状态
                             if (e.target.closest('button') && e.target.closest('button').innerHTML === "✎") {
                                 return;
                             }
                             e.stopPropagation();
-                            const wasSelected = selectedFiles.has(f);
-                            if (wasSelected) {
+                            if (selectedFiles.has(f)) {
                                 selectedFiles.delete(f);
                             } else {
                                 selectedFiles.add(f);
                             }
-                            // 更新卡片样式
                             const nowSelected = selectedFiles.has(f);
                             card.dataset.selected = nowSelected;
-                            card.style.background = nowSelected ? '#2a3a2a' : '#2a2a2a';
-                            card.style.border = nowSelected ? '3px solid #4CAF50' : '2px solid #444';
-                            card.style.boxShadow = nowSelected ? '0 0 16px rgba(76, 175, 80, 0.4)' : 'none';
+                            card.style.background = nowSelected ? 'rgba(99, 102, 241, 0.14)' : '#18181c';
+                            card.style.border = nowSelected ? '2px solid #6366f1' : '1px solid rgba(255,255,255,0.1)';
+                            card.style.boxShadow = nowSelected ? '0 0 0 2px rgba(99, 102, 241, 0.28), 0 8px 20px rgba(0,0,0,0.45)' : '0 2px 8px rgba(0,0,0,0.3)';
                             card.style.transform = nowSelected ? 'scale(0.98)' : 'scale(1)';
                             updateSelectedCount();
+                            updateAddBtn();
+                        };
+
+                        card.oncontextmenu = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const targets = selectedFiles.has(f) && selectedFiles.size
+                                ? Array.from(selectedFiles)
+                                : [f];
+                            this.showAddLoraCardContextMenu(f, e.clientX, e.clientY, targets);
                         };
                         
                         card.onmouseover = () => { 
                             if (!selectedFiles.has(f)) {
-                                card.style.borderColor = "#4CAF50"; 
-                                card.style.boxShadow = "0 0 12px rgba(76, 175, 80, 0.3)"; 
+                                card.style.borderColor = "rgba(99, 102, 241, 0.6)"; 
+                                card.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.5)"; 
                             } else {
-                                card.style.boxShadow = "0 0 20px rgba(76, 175, 80, 0.5)";
+                                card.style.boxShadow = "0 0 0 2px rgba(99, 102, 241, 0.4), 0 8px 24px rgba(0,0,0,0.5)";
                             }
                         };
                         card.onmouseout = () => { 
-                            const isSelected = selectedFiles.has(f);
-                            card.style.borderColor = isSelected ? "#4CAF50" : "#444"; 
-                            card.style.boxShadow = isSelected ? "0 0 16px rgba(76, 175, 80, 0.4)" : "none"; 
+                            const isSel = selectedFiles.has(f);
+                            card.style.borderColor = isSel ? "#6366f1" : "rgba(255,255,255,0.1)"; 
+                            card.style.boxShadow = isSel ? "0 0 0 2px rgba(99, 102, 241, 0.28), 0 8px 20px rgba(0,0,0,0.45)" : "0 2px 8px rgba(0,0,0,0.3)"; 
                         };
                             
-                            const imgBox = document.createElement("div");
-                            imgBox.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;background:#111;z-index:0;";
-                            
-                            const img = document.createElement("img");
-                            img.style.cssText = "width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 0.3s;display:block;";
-                            img.loading = "lazy";
+                        const imgBox = document.createElement("div");
+                        imgBox.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;background:#09090b;z-index:0;";
+                        
+                        const img = document.createElement("img");
+                        img.style.cssText = "width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 0.25s;display:block;";
+                        img.loading = "lazy";
+                        img.decoding = "async";
                         const spinner = document.createElement("div"); 
                         spinner.className = "mpl-spinner"; 
                         imgBox.appendChild(spinner);
-                            const safeName = encodeURIComponent(f);
-                            // 添加时间戳来强制刷新缓存
-                            img.src = api.apiURL(`/ma/lora/image?name=${safeName}&t=${cacheTimestamp}`);
-                            img.onload = () => { img.style.opacity = "1"; spinner.remove(); };
-                            img.onerror = () => {
-                                img.style.display = "none"; spinner.remove();
+                        const safeName = encodeURIComponent(f);
+                        img.src = api.apiURL(`/ma/lora/image?name=${safeName}&w=320${mplBustSuffix(f)}`);
+                        img.onload = () => { img.style.opacity = "1"; spinner.remove(); };
+                        img.onerror = () => {
+                            img.style.display = "none"; spinner.remove();
                             const fallback = document.createElement("div"); 
                             fallback.innerHTML = "No Image";
-                                fallback.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#444;font-size:12px;background:#252525;";
-                                imgBox.appendChild(fallback);
-                            };
-                            imgBox.appendChild(img);
-                            
-                            const nameBox = document.createElement("div");
-                            nameBox.style.cssText = "position:absolute;bottom:0;left:0;width:100%;padding:4px 6px;font-size:11px;color:#eee;background:rgba(0,0,0,0.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;z-index:1;text-align:center;backdrop-filter:blur(2px);";
-                        nameBox.textContent = f.split(/[/\\]/).pop().replace(/\.(safetensors|pt|ckpt)$/, "");
+                            fallback.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#52525b;font-size:11px;background:#111114;";
+                            imgBox.appendChild(fallback);
+                        };
+                        imgBox.appendChild(img);
+                        
+                        const nameBox = document.createElement("div");
+                        nameBox.style.cssText = "position:absolute;bottom:0;left:0;width:100%;padding:5px 6px;font-size:11px;color:#f4f4f5;background:rgba(9,9,11,0.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;z-index:1;text-align:center;backdrop-filter:blur(6px);border-top:1px solid rgba(255,255,255,0.06);";
+                        const titleText = mplTitleFor(f);
+                        nameBox.textContent = titleText || f.split(/[/\\]/).pop().replace(/\.(safetensors|pt|ckpt)$/, "");
 
-                        // 编辑按钮（右上角，蓝色方形，铅笔图标）
                         const editBtn = document.createElement("button");
                         editBtn.innerHTML = "✎";
                         editBtn.style.cssText = `
                             position: absolute;
-                            top: 4px;
-                            right: 4px;
+                            top: 6px;
+                            right: 6px;
                             width: 24px;
                             height: 24px;
-                            background: #2196F3;
-                            border: none;
-                            border-radius: 4px;
-                            color: white;
+                            background: rgba(17, 17, 20, 0.78);
+                            backdrop-filter: blur(6px);
+                            border: 1px solid rgba(255, 255, 255, 0.16);
+                            border-radius: 6px;
+                            color: #e4e4e7;
                             cursor: pointer;
-                            font-size: 14px;
+                            font-size: 13px;
                             display: flex;
                             align-items: center;
                             justify-content: center;
                             z-index: 10;
                             padding: 0;
                             line-height: 1;
+                            transition: all 0.15s;
                         `;
                         editBtn.onclick = (e) => {
                             e.stopPropagation();
-                            // 创建临时lora对象用于编辑
-                            const tempLora = {
-                                name: f,
-                                enabled: true,
-                                weight: 1.0,
-                                tags: '',
-                                note: '',
-                                triggerWords: '',
-                                jsonInfo: '',
-                                logInfo: ''
-                            };
-                            // 检查是否已经在节点中
-                            let existingLora = null;
-                            let existingType = null;
-                            let existingFIdx = -1;
-                            let existingLIdx = -1;
-                            
-                            // 在根loras中查找
-                            for (let i = 0; i < this.loraData.loras.length; i++) {
-                                if (this.loraData.loras[i].name === f) {
-                                    existingLora = this.loraData.loras[i];
-                                    existingType = 'root';
-                                    existingLIdx = i;
-                                    break;
-                                }
-                            }
-                            
-                            // 在文件夹中查找
-                            if (!existingLora) {
-                                for (let fi = 0; fi < this.loraData.folders.length; fi++) {
-                                    const folder = this.loraData.folders[fi];
-                                    for (let li = 0; li < folder.loras.length; li++) {
-                                        if (folder.loras[li].name === f) {
-                                            existingLora = folder.loras[li];
-                                            existingType = 'folder';
-                                            existingFIdx = fi;
-                                            existingLIdx = li;
-                                            break;
-                                        }
-                                    }
-                                    if (existingLora) break;
-                                }
-                            }
-                            
-                            // 如果找到了，使用现有的lora；否则使用临时的
-                            const loraToEdit = existingLora || tempLora;
-                            
-                            // 打开编辑弹窗
-                            this.showLoraEditModal(
-                                loraToEdit, 
-                                existingType || 'root', 
-                                existingFIdx, 
-                                existingLIdx,
-                                f  // 传递文件路径，用于判断是否需要添加
-                            );
+                            this._editCardLora(f);
                         };
-                        editBtn.onmouseenter = () => editBtn.style.background = "#42A5F5";
-                        editBtn.onmouseleave = () => editBtn.style.background = "#2196F3";
+                        editBtn.onmouseenter = () => { editBtn.style.background = "#6366f1"; editBtn.style.color = "#fff"; editBtn.style.borderColor = "#818cf8"; };
+                        editBtn.onmouseleave = () => { editBtn.style.background = "rgba(17, 17, 20, 0.78)"; editBtn.style.color = "#e4e4e7"; editBtn.style.borderColor = "rgba(255, 255, 255, 0.16)"; };
                         editBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
 
-                            card.appendChild(imgBox);
-                            card.appendChild(nameBox);
+                        card.appendChild(imgBox);
+                        card.appendChild(nameBox);
                         card.appendChild(editBtn);
                         return card;
                     };
+
+                    let _renderToken = 0;
+                    let _pendingScrollTop = null;
+                    const appendCardsChunked = (taskList, batch = 48) => {
+                        const token = ++_renderToken;
+                        let idx = 0;
+                        const runBatch = () => {
+                            if (token !== _renderToken) return;
+                            const end = Math.min(idx + batch, taskList.length);
+                            const frag = document.createDocumentFragment();
+                            for (; idx < end; idx++) {
+                                const card = taskList[idx]();
+                                if (card) frag.appendChild(card);
+                            }
+                            content.appendChild(frag);
+                            if (_pendingScrollTop != null) content.scrollTop = _pendingScrollTop;
+                            if (idx < taskList.length) {
+                                requestAnimationFrame(runBatch);
+                            } else {
+                                _pendingScrollTop = null;
+                            }
+                        };
+                        runBatch();
+                    };
                     
-                    // 获取当前路径下的文件和文件夹
                     const getCurrentFolder = () => {
                         if (currentPath.length === 0) {
                             return { files: rootFiles, folders: folderTree };
@@ -5225,10 +7050,8 @@ app.registerExtension({
                             const folderName = currentPath[i];
                             if (current[folderName]) {
                                 if (i === currentPath.length - 1) {
-                                    // 到达目标文件夹
                                     return { files: current[folderName].files || [], folders: current[folderName].folders || {} };
                                 } else {
-                                    // 继续深入
                                     current = current[folderName].folders || {};
                                 }
                             } else {
@@ -5237,88 +7060,77 @@ app.registerExtension({
                         }
                         return { files: [], folders: {} };
                     };
+
+                    const currentSubtreeFiles = () => {
+                        const norm = (s) => String(s).replace(/\\/g, "/");
+                        if (!currentPath.length) return allFiles.slice();
+                        const prefix = norm(currentPath.join("/")) + "/";
+                        return allFiles.filter(f => norm(f).startsWith(prefix));
+                    };
                     
-                    // 渲染内容
-                    const renderContent = () => {
+                    const renderContent = (preserveScroll = false) => {
+                        _renderToken++;
+                        _pendingScrollTop = preserveScroll ? content.scrollTop : null;
                         content.innerHTML = "";
-                        const filter = search.value.toLowerCase();
-                        
-                        // 记住当前文件夹 / 全部模式，下次打开弹窗时恢复
+                        const filter = search.value.trim().toLowerCase();
                         mplSaveBrowserState({ path: currentPath.slice(), showAll: showAllMode });
-                        
-                        // 更新路径显示
                         updatePathDisplay();
                         
-                        // 全部模式：显示所有lora文件
                         if (showAllMode) {
-                            allFiles.forEach(f => {
-                                if (filter && !f.toLowerCase().includes(filter)) return;
-                                
-                                const card = createLoraCard(f);
-                                content.appendChild(card);
-                            });
+                            const hits = mplSortList(allFiles.filter(f => !filter || mplLoraMatchesText(f, filter)));
+                            appendCardsChunked(hits.map(f => () => createLoraCard(f)));
+                            return;
+                        }
+                        if (filter) {
+                            const hits = mplSortList(currentSubtreeFiles().filter(f => mplLoraMatchesText(f, filter)));
+                            appendCardsChunked(hits.map(f => () => createLoraCard(f)));
                             return;
                         }
                         
-                        // 路径选择模式：显示当前路径下的文件夹和文件
                         const current = getCurrentFolder();
-                        const folders = Object.keys(current.folders || {});
-                        const files = current.files || [];
+                        const folders = mplSortList(Object.keys(current.folders || {}));
+                        const files = mplSortList(current.files || []);
                         
-                        // 显示文件夹
                         folders.forEach(folderName => {
                             const folderCard = document.createElement("div");
-                            folderCard.style.cssText = "width:100%;height:100%;background:#2a2a2a;border-radius:4px;overflow:hidden;cursor:pointer;border:1px solid #444;transition:0.2s;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;";
-                            
+                            folderCard.style.cssText = "width:100%;height:100%;background:#18181c;border-radius:10px;overflow:hidden;cursor:pointer;border:1px solid rgba(255,255,255,0.09);transition:all 0.18s;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;";
                             const folderIcon = document.createElement("div");
                             folderIcon.textContent = "📁";
-                            folderIcon.style.cssText = "font-size:48px;margin-bottom:8px;";
-                            
+                            folderIcon.style.cssText = "font-size:44px;margin-bottom:8px;";
                             const folderNameEl = document.createElement("div");
                             folderNameEl.textContent = folderName;
-                            folderNameEl.style.cssText = "color:#eee;font-size:11px;text-align:center;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;";
-                            
-                            folderCard.appendChild(folderIcon);
-                            folderCard.appendChild(folderNameEl);
+                            folderNameEl.style.cssText = "color:#e4e4e7;font-size:11.5px;font-weight:500;text-align:center;padding:0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;box-sizing:border-box;";
+                            folderCard.append(folderIcon, folderNameEl);
                             folderCard.onclick = () => {
                                 if (showAllMode) {
                                     showAllMode = false;
                                     allTab.textContent = "全部";
-                                    allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                                    allTab.style.cssText = allTabIdleStyle;
                                 }
                                 currentPath.push(folderName);
                                 renderContent();
                             };
-                            folderCard.onmouseover = () => { folderCard.style.borderColor = "#4CAF50"; };
-                            folderCard.onmouseout = () => { folderCard.style.borderColor = "#444"; };
-                            
+                            folderCard.onmouseover = () => { folderCard.style.borderColor = "#6366f1"; folderCard.style.background = "#222228"; };
+                            folderCard.onmouseout = () => { folderCard.style.borderColor = "rgba(255,255,255,0.09)"; folderCard.style.background = "#18181c"; };
                             content.appendChild(folderCard);
                         });
                         
-                        // 显示文件
-                        files.forEach(f => {
-                            if (filter && !f.toLowerCase().includes(filter)) return;
-                            
-                            const card = createLoraCard(f);
-                            content.appendChild(card);
-                        });
+                        appendCardsChunked(files.map(f => () => createLoraCard(f)));
                     };
                     
-                    // 刷新文件列表的函数（用于删除后刷新）
                     const refreshFileList = async () => {
                         try {
-                            // 重新获取文件列表
                             const resp = await api.fetchApi("/ma/lora/list");
                             const data = await resp.json();
                             const newAllFiles = data.files || [];
+                            allMtimes = data.mtimes || {};
+                            newAllFiles.forEach(f => { if (allMtimes[f] === undefined) allMtimes[f] = 0; });
                             mplSetLoraNameList(newAllFiles);
                             
-                            // 重新构建文件夹树结构
                             const newFolderTree = {};
                             const newRootFiles = [];
-                            
                             newAllFiles.forEach(file => {
-                                const parts = file.split(/[/\\]/);
+                                const parts = String(file).split(/[/\\]/);
                                 if (parts.length === 1) {
                                     newRootFiles.push(file);
                                 } else {
@@ -5340,7 +7152,6 @@ app.registerExtension({
                                 }
                             });
                             
-                            // 更新变量
                             allFiles.length = 0;
                             allFiles.push(...newAllFiles);
                             Object.keys(folderTree).forEach(key => delete folderTree[key]);
@@ -5348,60 +7159,46 @@ app.registerExtension({
                             rootFiles.length = 0;
                             rootFiles.push(...newRootFiles);
                             cacheTimestamp = Date.now();
-                            
-                            // 重新渲染
-                            renderContent();
+                            renderContent(true);
                         } catch (e) {
                             console.error("刷新文件列表时出错:", e);
                         }
                     };
                     
-                    // 保存renderContent函数引用，以便在爬取成功后可以调用
                     this._renderContentFunc = renderContent;
-                    // 保存refreshFileList函数引用，以便在删除后可以调用
                     this._refreshFileListFunc = refreshFileList;
                     this._addLoraModal = dialog;
                     
-                    // 更新选中数量
                     const updateSelectedCount = () => {
                         selectedCount.textContent = `已选择 ${selectedFiles.size} 个 LoRA`;
                     };
                     
-                    // 搜索功能
                     search.oninput = () => {
                         renderContent();
                     };
                     
-                    // 添加按钮
                     addBtn.onclick = async () => {
-                        // 辅助函数：从.log文件中解析preferred weight
                         const parsePreferredWeight = (logContent) => {
                             if (!logContent || !logContent.trim()) return null;
                             try {
-                                // 首先尝试作为JSON解析
                                 try {
                                     const jsonData = JSON.parse(logContent);
-                                    // 查找 preferred weight 字段（支持多种可能的字段名）
                                     const preferredWeight = jsonData["preferred weight"] || 
                                                           jsonData["preferredWeight"] || 
                                                           jsonData["preferred_weight"] ||
                                                           jsonData["weight"];
-                                    
                                     if (preferredWeight !== undefined && !isNaN(parseFloat(preferredWeight))) {
                                         const weightValue = parseFloat(preferredWeight);
-                                        // 确保权重值在合理范围内 (-10 到 10)
                                         if (weightValue >= -10 && weightValue <= 10) {
                                             return weightValue;
                                         }
                                     }
                                 } catch (jsonError) {
-                                    // 如果不是JSON格式，尝试使用正则表达式匹配
                                     const weightPattern = /preferred\s+weight[:\s=]+([+-]?\d*\.?\d+)/i;
                                     const match = logContent.match(weightPattern);
                                     if (match && match[1]) {
                                         const weight = parseFloat(match[1]);
                                         if (!isNaN(weight)) {
-                                            // 限制权重范围在-10到10之间
                                             return Math.max(-10, Math.min(10, weight));
                                         }
                                     }
@@ -5412,7 +7209,6 @@ app.registerExtension({
                             return null;
                         };
                         
-                        // 并行读取所有选中lora的.log文件，获取preferred weight
                         const weightPromises = Array.from(selectedFiles).map(async (fileName) => {
                             try {
                                 const response = await api.fetchApi('/ma/lora/get_lora_file', {
@@ -5432,16 +7228,12 @@ app.registerExtension({
                         });
                         
                         const weightResults = await Promise.all(weightPromises);
-                        
-                        // 创建weight映射，方便查找
                         const weightMap = new Map();
                         weightResults.forEach(({ fileName, preferredWeight }) => {
                             weightMap.set(fileName, preferredWeight);
                         });
                         
-                        // 如果启用了自动添加触发词，需要先读取所有选中lora的.txt文件
                         if (autoAddTag) {
-                            // 并行读取所有选中lora的.txt文件
                             const readPromises = Array.from(selectedFiles).map(async (fileName) => {
                                 try {
                                     const response = await api.fetchApi('/ma/lora/get_lora_file', {
@@ -5460,49 +7252,43 @@ app.registerExtension({
                             });
                             
                             const tagResults = await Promise.all(readPromises);
-                            
-                            // 创建tag映射，方便查找
                             const tagMap = new Map();
                             tagResults.forEach(({ fileName, tags }) => {
                                 tagMap.set(fileName, tags);
                             });
                             
-                            // 添加lora，使用读取到的tags和preferred weight
                             selectedFiles.forEach(fileName => {
                                 const preferredWeight = weightMap.get(fileName);
-                                this.loraData.loras.push({ 
+                                this.loraData.loras.push(mplDecorateNewLora({ 
                                     name: fileName, 
                                     weight: preferredWeight !== null ? preferredWeight : 1.0, 
                                     enabled: true, 
                                     tags: tagMap.get(fileName) || "", 
                                     note: "" 
-                                });
+                                }));
                             });
                         } else {
-                            // 不启用自动添加，直接添加lora，但使用preferred weight
                             selectedFiles.forEach(fileName => {
                                 const preferredWeight = weightMap.get(fileName);
-                                this.loraData.loras.push({ 
+                                this.loraData.loras.push(mplDecorateNewLora({ 
                                     name: fileName, 
                                     weight: preferredWeight !== null ? preferredWeight : 1.0, 
                                     enabled: true, 
                                     tags: "", 
                                     note: "" 
-                                });
+                                }));
                             });
                         }
                         
-                                this.renderEmbeddedList();
-                                this.updateWidget();
-                                document.body.removeChild(dialog);
-                            };
+                        this.renderEmbeddedList();
+                        this.updateWidget();
+                        document.body.removeChild(dialog);
+                    };
                     
-                    // 关闭按钮
                     closeBtn.onclick = () => {
                         document.body.removeChild(dialog);
                     };
                     
-                    // ESC键关闭
                     const handleEsc = (e) => {
                         if (e.key === "Escape") {
                             document.body.removeChild(dialog);
@@ -5511,12 +7297,18 @@ app.registerExtension({
                     };
                     document.addEventListener("keydown", handleEsc);
                     
-                    // 初始渲染
-                    renderContent();
                     document.body.appendChild(dialog);
-                    
-                    // 使弹窗可拖拽
+                    const focusSearch = () => {
+                        try {
+                            if (dialog.isConnected && !dialog.contains(document.activeElement)) search.focus();
+                        } catch (e) {}
+                    };
+                    setTimeout(focusSearch, 0);
+                    setTimeout(focusSearch, 150);
                     this.makeDialogDraggable(dialog, header);
+                    requestAnimationFrame(() => {
+                        try { renderContent(); } catch(e) { console.error(e); }
+                    });
                 } catch(e) { alert("Error: "+e); }
             };
 
@@ -5540,48 +7332,51 @@ app.registerExtension({
 
                     // 直接挂 body，不用 overlay（参考 magic_resolution.js 的做法）
                     const dialog = document.createElement("div");
+                    dialog.className = "ma-modal";
                     dialog.style.cssText = `
                         position: fixed;
                         top: 50%; left: 50%;
                         transform: translate(-50%, -50%);
-                        width: min(720px, 96vw);
+                        width: min(740px, 96vw);
                         max-height: 88vh;
-                        background: #25292d;
-                        border: 1px solid #4a515a;
-                        border-radius: 8px;
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.75);
+                        background: #111114;
+                        border: 1px solid rgba(255, 255, 255, 0.12);
+                        border-radius: 14px;
+                        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
                         display: flex;
                         flex-direction: column;
-                        font-family: sans-serif;
-                        color: #e0e0e0;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+                        color: #f4f4f5;
                         z-index: 10050;
                         overflow: hidden;
                     `;
 
                     const header = document.createElement("div");
-                    header.style.cssText = "padding:12px 16px;border-bottom:1px solid #333;background:#1a1a1a;border-radius:8px 8px 0 0;cursor:move;user-select:none;display:flex;justify-content:space-between;align-items:center;";
+                    header.style.cssText = "padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.08);background:#151519;border-radius:14px 14px 0 0;cursor:move;user-select:none;display:flex;justify-content:space-between;align-items:center;";
                     const title = document.createElement("div");
                     title.textContent = "LoRA 检测（重复 + 更新）";
-                    title.style.cssText = "font-weight:bold;font-size:15px;";
+                    title.style.cssText = "font-weight:650;font-size:15px;color:#f4f4f5;";
                     const closeX = document.createElement("button");
+                    closeX.className = "ma-modal-close";
                     closeX.textContent = "✕";
-                    closeX.style.cssText = "background:none;border:none;color:#aaa;cursor:pointer;font-size:18px;padding:0 8px;";
                     header.appendChild(title);
                     header.appendChild(closeX);
 
                     const pathBar = document.createElement("div");
-                    pathBar.style.cssText = "padding:8px 16px;border-bottom:1px solid #333;background:#222;display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+                    pathBar.style.cssText = "padding:8px 18px;border-bottom:1px solid rgba(255,255,255,0.06);background:#0d0d10;display:flex;align-items:center;gap:8px;flex-wrap:wrap;";
+                    const detectTabIdleStyle = "padding:4px 10px;background:#18181c;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#d4d4d8;cursor:pointer;font-size:12px;font-weight:500;";
+                    const detectTabActiveStyle = "padding:4px 10px;background:rgba(239,68,68,0.16);border:1px solid rgba(239,68,68,0.45);border-radius:6px;color:#fca5a5;cursor:pointer;font-size:12px;font-weight:600;";
                     const allTab = document.createElement("div");
                     allTab.textContent = "全部";
-                    allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                    allTab.style.cssText = detectTabIdleStyle;
                     const pathDisplay = document.createElement("div");
-                    pathDisplay.style.cssText = "color:#888;font-size:12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:1;";
+                    pathDisplay.style.cssText = "color:#a1a1aa;font-size:12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:1;";
 
                     const scopeHint = document.createElement("div");
-                    scopeHint.style.cssText = "padding:8px 16px;background:#1e2428;font-size:12px;color:#90caf9;border-bottom:1px solid #333;";
+                    scopeHint.style.cssText = "padding:8px 18px;background:rgba(99,102,241,0.08);font-size:12px;color:#a5b4fc;border-bottom:1px solid rgba(255,255,255,0.06);";
 
                     const folderRow = document.createElement("div");
-                    folderRow.style.cssText = "padding:8px 16px;border-bottom:1px solid #333;background:#1a1a1a;display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-height:100px;overflow-y:auto;";
+                    folderRow.style.cssText = "padding:8px 18px;border-bottom:1px solid rgba(255,255,255,0.08);background:#111114;display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-height:100px;overflow-y:auto;";
 
                     const fmtSize = (n) => {
                         if (n == null) return "";
@@ -5599,13 +7394,13 @@ app.registerExtension({
                         if (showAllMode) {
                             scopeHint.textContent = "检测范围：全部 LoRA 文件（可能较慢）";
                             allTab.textContent = "取消全部";
-                            allTab.style.cssText = "padding:4px 8px;background:#f44336;border:1px solid #f44336;border-radius:4px;color:#fff;cursor:pointer;font-size:12px;";
+                            allTab.style.cssText = detectTabActiveStyle;
                             pathDisplay.innerHTML = "";
-                            folderRow.innerHTML = "<span style='color:#888;font-size:12px;'>全部模式下可点击下方「开始检测」扫描所有目录。</span>";
+                            folderRow.innerHTML = "<span style='color:#71717a;font-size:12px;'>全部模式下可点击下方「开始检测」扫描所有目录。</span>";
                             return;
                         }
                         allTab.textContent = "全部";
-                        allTab.style.cssText = "padding:4px 8px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                        allTab.style.cssText = detectTabIdleStyle;
                         if (currentPath.length === 0) {
                             scopeHint.textContent = "检测范围：根目录 — 仅 loras 根下的文件（不包含子文件夹内文件）。进入子文件夹可检测该文件夹及其下所有子目录。";
                         } else {
@@ -5614,17 +7409,17 @@ app.registerExtension({
                         pathDisplay.innerHTML = "";
                         const rootSpan = document.createElement("span");
                         rootSpan.textContent = "根目录";
-                        rootSpan.style.cssText = "color:#4CAF50;cursor:pointer;text-decoration:underline;";
+                        rootSpan.style.cssText = "color:#818cf8;cursor:pointer;font-weight:500;";
                         rootSpan.onclick = () => { showAllMode = false; currentPath = []; updateScopeUI(); };
                         pathDisplay.appendChild(rootSpan);
                         currentPath.forEach((folderName, index) => {
                             const sep = document.createElement("span");
                             sep.textContent = " > ";
-                            sep.style.color = "#666";
+                            sep.style.color = "#52525b";
                             pathDisplay.appendChild(sep);
                             const sp = document.createElement("span");
                             sp.textContent = folderName;
-                            sp.style.cssText = "color:#4CAF50;cursor:pointer;text-decoration:underline;";
+                            sp.style.cssText = "color:#818cf8;cursor:pointer;font-weight:500;";
                             sp.onclick = () => { currentPath = currentPath.slice(0, index + 1); updateScopeUI(); };
                             pathDisplay.appendChild(sp);
                         });
@@ -5632,7 +7427,7 @@ app.registerExtension({
                         const subs = mplGetSubfolderNames(folderTree, currentPath);
                         if (!subs.length) {
                             const t = document.createElement("span");
-                            t.style.cssText = "color:#666;font-size:12px;";
+                            t.style.cssText = "color:#71717a;font-size:12px;";
                             t.textContent = "当前层级无子文件夹，可直接开始检测。";
                             folderRow.appendChild(t);
                         } else {
@@ -5640,7 +7435,9 @@ app.registerExtension({
                                 const b = document.createElement("button");
                                 b.type = "button";
                                 b.textContent = "📁 " + name;
-                                b.style.cssText = "padding:4px 10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px;";
+                                b.style.cssText = "padding:4px 10px;background:#18181c;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#d4d4d8;cursor:pointer;font-size:12px;transition:all 0.15s;";
+                                b.onmouseenter = () => { b.style.background = "#222228"; b.style.borderColor = "#6366f1"; };
+                                b.onmouseleave = () => { b.style.background = "#18181c"; b.style.borderColor = "rgba(255,255,255,0.1)"; };
                                 b.onclick = () => { currentPath = currentPath.concat([name]); updateScopeUI(); };
                                 folderRow.appendChild(b);
                             });
@@ -5661,43 +7458,43 @@ app.registerExtension({
                     pathBar.appendChild(pathDisplay);
 
                     const bodyScroll = document.createElement("div");
-                    bodyScroll.style.cssText = "flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:14px;min-height:220px;";
+                    bodyScroll.style.cssText = "flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:14px;min-height:220px;background:#0d0d10;";
 
                     const mkSectionTitle = (txt, color) => {
                         const d = document.createElement("div");
                         d.textContent = txt;
-                        d.style.cssText = "font-size:13px;font-weight:600;color:" + (color || "#fff") + ";margin-bottom:4px;";
+                        d.style.cssText = "font-size:13px;font-weight:600;color:" + (color || "#f4f4f5") + ";margin-bottom:4px;";
                         return d;
                     };
                     const dupBox = document.createElement("div");
-                    dupBox.style.cssText = "min-height:72px;padding:10px;background:#1f2428;border-radius:6px;border:1px solid #444;";
-                    dupBox.innerHTML = "<div style='color:#888;font-size:12px;'>点击右下角「开始检测」后显示：内容完全相同（SHA256 一致）的重复 LoRA。</div>";
+                    dupBox.style.cssText = "min-height:72px;padding:12px;background:#18181c;border-radius:10px;border:1px solid rgba(255,255,255,0.08);";
+                    dupBox.innerHTML = "<div style='color:#71717a;font-size:12px;'>点击右下角「开始检测」后显示：内容完全相同（SHA256 一致）的重复 LoRA。</div>";
                     const updBox = document.createElement("div");
-                    updBox.style.cssText = "min-height:72px;padding:10px;background:#1f2428;border-radius:6px;border:1px solid #444;";
-                    updBox.innerHTML = "<div style='color:#888;font-size:12px;'>点击右下角「检测 LoRA 更新」后，通过 SHA256 查询 Civitai，匹配到则对比本地版本与 Civitai 最新版本号，显示有更新的 LoRA。</div>";
+                    updBox.style.cssText = "min-height:72px;padding:12px;background:#18181c;border-radius:10px;border:1px solid rgba(255,255,255,0.08);";
+                    updBox.innerHTML = "<div style='color:#71717a;font-size:12px;'>点击右下角「检测 LoRA 更新」后，通过 SHA256 查询 Civitai，匹配到则对比本地版本与 Civitai 最新版本号，显示有更新的 LoRA。</div>";
 
-                    bodyScroll.appendChild(mkSectionTitle("① 重复 LoRA（哈希相同）", "#ef9a9a"));
+                    bodyScroll.appendChild(mkSectionTitle("① 重复 LoRA（哈希相同）", "#fca5a5"));
                     bodyScroll.appendChild(dupBox);
-                    bodyScroll.appendChild(mkSectionTitle("② LoRA 更新（Civitai）", "#81c784"));
+                    bodyScroll.appendChild(mkSectionTitle("② LoRA 更新（Civitai）", "#6ee7b7"));
                     bodyScroll.appendChild(updBox);
 
                     const footer = document.createElement("div");
-                    footer.style.cssText = "padding:12px 16px;border-top:1px solid #333;background:#1a1a1a;border-radius:0 0 8px 8px;display:flex;justify-content:flex-end;align-items:center;gap:10px;";
+                    footer.style.cssText = "padding:12px 18px;border-top:1px solid rgba(255,255,255,0.08);background:#151519;border-radius:0 0 14px 14px;display:flex;justify-content:flex-end;align-items:center;gap:10px;";
 
                     const dupBtn = document.createElement("button");
                     dupBtn.type = "button";
+                    dupBtn.className = "ma-btn ma-btn-danger";
                     dupBtn.textContent = "🔍 检测重复 LoRA";
-                    dupBtn.style.cssText = "padding:8px 16px;background:#d32f2f;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;";
 
                     const updBtn = document.createElement("button");
                     updBtn.type = "button";
+                    updBtn.className = "ma-btn ma-btn-primary";
                     updBtn.textContent = "🌐 检测 LoRA 更新";
-                    updBtn.style.cssText = "padding:8px 16px;background:#1976D2;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;";
 
                     const allBtn = document.createElement("button");
                     allBtn.type = "button";
+                    allBtn.className = "ma-btn ma-btn-success";
                     allBtn.textContent = "🚀 全部检测";
-                    allBtn.style.cssText = "padding:8px 16px;background:#4CAF50;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;";
 
                     const parseJsonResp = async (resp) => {
                         const status = resp.status;
@@ -5716,24 +7513,24 @@ app.registerExtension({
 
                     const renderDupResults = (data) => {
                         if (!data || !data.ok) {
-                            dupBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>检测失败：" + (data && data.error ? data.error : "未知错误") + "</div>";
+                            dupBox.innerHTML = "<div style='color:#f87171;font-size:12px;'>检测失败：" + (data && data.error ? data.error : "未知错误") + "</div>";
                             return;
                         }
-                        const summary = "<div style='color:#888;font-size:11px;margin-bottom:8px;'>本次扫描：范围内 " + data.scoped_count + " 个 LoRA 路径，已读取 " + data.scanned + " 个文件。</div>";
+                        const summary = "<div style='color:#71717a;font-size:11px;margin-bottom:8px;'>本次扫描：范围内 " + data.scoped_count + " 个 LoRA 路径，已读取 " + data.scanned + " 个文件。</div>";
                         dupBox.innerHTML = summary;
                         if (!data.duplicates || !data.duplicates.length) {
-                            dupBox.innerHTML += "<div style='color:#a5d6a7;font-size:12px;'>未发现内容完全相同的重复文件。</div>";
+                            dupBox.innerHTML += "<div style='color:#6ee7b7;font-size:12px;'>未发现内容完全相同的重复文件。</div>";
                         } else {
                             data.duplicates.forEach(g => {
                                 const div = document.createElement("div");
-                                div.style.cssText = "margin-bottom:10px;padding:8px;background:#332a2a;border-radius:6px;border-left:3px solid #f44336;";
+                                div.style.cssText = "margin-bottom:10px;padding:10px;background:rgba(239,68,68,0.08);border-radius:8px;border:1px solid rgba(239,68,68,0.25);border-left:3px solid #ef4444;";
                                 const h = document.createElement("div");
-                                h.style.cssText = "color:#ffab91;font-size:11px;margin-bottom:6px;word-break:break-all;";
+                                h.style.cssText = "color:#fca5a5;font-size:11px;font-weight:600;margin-bottom:6px;word-break:break-all;";
                                 h.textContent = "相同 SHA256 · " + (g.hash || "").slice(0, 24) + "…";
                                 div.appendChild(h);
                                 (g.files || []).forEach(f => {
                                     const row = document.createElement("div");
-                                    row.style.cssText = "color:#ccc;font-size:11px;padding:2px 0;word-break:break-all;";
+                                    row.style.cssText = "color:#d4d4d8;font-size:11px;padding:2px 0;word-break:break-all;";
                                     row.textContent = (f.path || "") + "  ·  " + fmtTime(f.mtime) + "  ·  " + fmtSize(f.size);
                                     div.appendChild(row);
                                 });
@@ -5744,35 +7541,34 @@ app.registerExtension({
 
                     const renderUpdResults = (data) => {
                         if (!data || !data.ok) {
-                            updBox.innerHTML = "<div style='color:#f44336;font-size:12px;'>检测失败：" + (data && data.error ? data.error : "未知错误") + "</div>";
+                            updBox.innerHTML = "<div style='color:#f87171;font-size:12px;'>检测失败：" + (data && data.error ? data.error : "未知错误") + "</div>";
                             return;
                         }
-                        const summary = "<div style='color:#888;font-size:11px;margin-bottom:8px;'>本次扫描：范围内 " + data.scoped_count + " 个 LoRA 路径，已读取 " + data.scanned + " 个文件，查询 Civitai 中…</div>";
+                        const summary = "<div style='color:#71717a;font-size:11px;margin-bottom:8px;'>本次扫描：范围内 " + data.scoped_count + " 个 LoRA 路径，已读取 " + data.scanned + " 个文件，查询 Civitai 中…</div>";
                         updBox.innerHTML = summary;
                         if (!data.updates || !data.updates.length) {
-                            updBox.innerHTML += "<div style='color:#a5d6a7;font-size:12px;'>所有 LoRA 都已是 Civitai 上的最新版本，或无法在 Civitai 找到匹配记录。</div>";
+                            updBox.innerHTML += "<div style='color:#6ee7b7;font-size:12px;'>所有 LoRA 都已是 Civitai 上的最新版本，或无法在 Civitai 找到匹配记录。</div>";
                         } else {
                             data.updates.forEach(u => {
                                 const div = document.createElement("div");
-                                div.style.cssText = "margin-bottom:10px;padding:8px;background:#2a332a;border-radius:6px;border-left:3px solid #4CAF50;";
+                                div.style.cssText = "margin-bottom:10px;padding:10px;background:rgba(16,185,129,0.08);border-radius:8px;border:1px solid rgba(16,185,129,0.25);border-left:3px solid #10b981;";
                                 const t = document.createElement("div");
-                                t.style.cssText = "color:#a5d6a7;font-size:11px;margin-bottom:4px;word-break:break-all;";
+                                t.style.cssText = "color:#6ee7b7;font-size:11px;font-weight:600;margin-bottom:4px;word-break:break-all;";
                                 const lat = (u.latest_label && String(u.latest_label).trim()) ? String(u.latest_label).trim() : ("v" + u.latest_version);
                                 const locv = (u.local_label && String(u.local_label).trim()) ? String(u.local_label).trim() : ("v" + u.local_version);
                                 t.textContent = (u.model_name || u.path) + "  ·  Civitai 最新: " + lat;
                                 div.appendChild(t);
                                 const loc = document.createElement("div");
-                                loc.style.cssText = "color:#fff;font-size:11px;margin-bottom:2px;";
+                                loc.style.cssText = "color:#e4e4e7;font-size:11px;margin-bottom:4px;";
                                 let locText = "本地版本: " + locv + "  ·  文件: " + u.path;
                                 if (u.local_base_model) locText += "  ·  Base: " + u.local_base_model;
                                 loc.textContent = locText;
-                                div.appendChild(loc);
                                 div.appendChild(loc);
                                 if (u.model_url) {
                                     const lnk = document.createElement("a");
                                     lnk.href = u.model_url;
                                     lnk.target = "_blank";
-                                    lnk.style.cssText = "color:#90caf9;font-size:11px;";
+                                    lnk.style.cssText = "color:#818cf8;font-size:11px;text-decoration:none;font-weight:500;";
                                     lnk.textContent = "在 Civitai 查看 →";
                                     div.appendChild(lnk);
                                 }
@@ -5985,13 +7781,17 @@ app.registerExtension({
                 if(!name) return;
                 try {
                     await api.fetchApi("/ma/lora/save_preset", {
-                        method: "POST", body: JSON.stringify({ name, content: { folders: [folder] } })
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name, content: { folders: [folder] } })
                     });
+                    await mplLoadSidebar(true);
+                    mplRefreshAllSidebars();
                     alert("Saved!");
                 } catch(e) { alert(e); }
             };
 
-            nodeType.prototype.showSettingsModal = function() {
+            nodeType.prototype.showSettingsModal = function(initialTab = "mode") {
                 // 从节点 / 属性 / 隐藏 widget 读取并归一化（避免 adaptive_mode 为字符串 "false" 时 !this.adaptiveMode 误判）
                 const parseAdaptive = (v) => v === true || v === "true" || v === 1;
                 const sdnqRaw = this.sdnqMode ?? this.properties["sdnq_mode"] ?? this._sdnqModeWidget?.value ?? "none";
@@ -6015,13 +7815,13 @@ app.registerExtension({
                 
                 // 创建遮罩层
                 const overlay = document.createElement("div");
+                overlay.className = "ma-modal-backdrop";
                 overlay.style.cssText = `
                     position: fixed;
                     top: 0;
                     left: 0;
                     width: 100%;
                     height: 100%;
-                    background: rgba(0, 0, 0, 0.5);
                     z-index: 10001;
                     display: flex;
                     align-items: center;
@@ -6030,19 +7830,16 @@ app.registerExtension({
 
                 // 创建弹窗（一比一参考 magic_resolution.js：fixed + translate(-50%,-50%) 居中）
                 const dialog = document.createElement("div");
+                dialog.className = "ma-modal";
                 dialog.style.cssText = `
                     position: fixed;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    background: #2a2a2a;
-                    border: 1px solid #555;
-                    border-radius: 8px;
                     padding: 0;
                     width: 580px;
                     max-width: 96vw;
                     max-height: 85vh;
-                    box-shadow: 0 8px 25px rgba(0,0,0,0.8);
                     z-index: 10002;
                     display: flex;
                     flex-direction: column;
@@ -6053,14 +7850,14 @@ app.registerExtension({
                 const title = document.createElement("div");
                 title.textContent = "设置";
                 title.style.cssText = `
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #eee;
-                    padding: 12px 20px;
-                    border-bottom: 1px solid #444;
+                    font-size: 15px;
+                    font-weight: 650;
+                    color: #f4f4f5;
+                    padding: 14px 20px;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
                     cursor: move;
                     user-select: none;
-                    background: #252525;
+                    background: #151519;
                     flex-shrink: 0;
                 `;
 
@@ -6068,8 +7865,9 @@ app.registerExtension({
                 const tabBar = document.createElement("div");
                 tabBar.style.cssText = `
                     display: flex;
-                    background: #1f1f1f;
-                    border-bottom: 1px solid #444;
+                    background: #111114;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                    padding: 0 12px;
                     flex-shrink: 0;
                 `;
                 const tabButtons = {};
@@ -6078,7 +7876,7 @@ app.registerExtension({
                     { id: "mode", label: "模式切换" },
                     { id: "layout", label: "布局样式" },
                 ];
-                let currentTab = "mode";
+                let currentTab = initialTab === "layout" ? "layout" : "mode";
                 tabDefs.forEach((tab) => {
                     const btn = document.createElement("button");
                     btn.textContent = tab.label;
@@ -6087,20 +7885,20 @@ app.registerExtension({
                     btn.style.cssText = `
                         flex: 1;
                         padding: 10px 16px;
-                        background: ${active ? "#2a2a2a" : "transparent"};
+                        background: transparent;
                         border: none;
-                        border-bottom: 3px solid ${active ? "#2196F3" : "transparent"};
-                        color: ${active ? "#fff" : "#888"};
+                        border-bottom: 2px solid ${active ? "#6366f1" : "transparent"};
+                        color: ${active ? "#f4f4f5" : "#a1a1aa"};
                         cursor: pointer;
                         font-size: 13px;
-                        font-weight: ${active ? "500" : "400"};
+                        font-weight: ${active ? "600" : "500"};
                         transition: all 0.15s;
                     `;
                     btn.onmouseenter = () => {
-                        if (currentTab !== tab.id) btn.style.color = "#ccc";
+                        if (currentTab !== tab.id) btn.style.color = "#e4e4e7";
                     };
                     btn.onmouseleave = () => {
-                        if (currentTab !== tab.id) btn.style.color = "#888";
+                        if (currentTab !== tab.id) btn.style.color = "#a1a1aa";
                     };
                     btn.onclick = () => {
                         currentTab = tab.id;
@@ -6108,10 +7906,9 @@ app.registerExtension({
                             const b = tabButtons[t.id];
                             const c = tabContents[t.id];
                             const isActive = t.id === currentTab;
-                            b.style.background = isActive ? "#2a2a2a" : "transparent";
-                            b.style.borderBottomColor = isActive ? "#2196F3" : "transparent";
-                            b.style.color = isActive ? "#fff" : "#888";
-                            b.style.fontWeight = isActive ? "500" : "400";
+                            b.style.borderBottomColor = isActive ? "#6366f1" : "transparent";
+                            b.style.color = isActive ? "#f4f4f5" : "#a1a1aa";
+                            b.style.fontWeight = isActive ? "600" : "500";
                             c.style.display = isActive ? "block" : "none";
                         });
                     };
@@ -6121,11 +7918,11 @@ app.registerExtension({
 
                 // 内容区域（可滚动）
                 const content = document.createElement("div");
-                content.style.cssText = "flex: 1; overflow-y: auto; padding: 16px 20px; min-height: 0;";
+                content.style.cssText = "flex: 1; overflow-y: auto; padding: 18px 20px; min-height: 0; background: #111114;";
 
                 // 按钮容器
                 const buttonContainer = document.createElement("div");
-                buttonContainer.style.cssText = "display: flex; gap: 10px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid #444; flex-shrink: 0; background: #252525;";
+                buttonContainer.style.cssText = "display: flex; gap: 10px; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; background: #151519;";
 
                 // 设置项容器
                 const settingsContainer = document.createElement("div");
@@ -6133,37 +7930,39 @@ app.registerExtension({
                 
                 // ========== LoRA 加载模式 ==========
                 const defaultSection = document.createElement("div");
-                defaultSection.style.cssText = "display: flex; flex-direction: column; gap: 12px; margin-bottom: 10px;";
+                defaultSection.style.cssText = "display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px;";
 
                 const defaultTitle = document.createElement("div");
                 defaultTitle.textContent = "LoRA 加载模式";
                 defaultTitle.style.cssText = `
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
-                    color: #fff;
-                    margin-bottom: 8px;
+                    color: #f4f4f5;
+                    margin-bottom: 4px;
                 `;
 
                 const defaultModeContainer = document.createElement("div");
-                defaultModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+                defaultModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
+
+                const optionCardIdleCss = "display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 11px 14px; background: #18181c; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); transition: all 0.15s;";
 
                 // 自适应模式（单选按钮，排在最前面）
                 const adaptiveMode = document.createElement("label");
-                adaptiveMode.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                adaptiveMode.style.cssText = optionCardIdleCss;
                 const radioAdaptive = document.createElement("input");
                 radioAdaptive.type = "radio";
                 radioAdaptive.name = "global_mode";
                 radioAdaptive.value = "adaptive";
                 radioAdaptive.checked = primaryMode === "adaptive";
-                radioAdaptive.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                radioAdaptive.style.cssText = "width: 16px; height: 16px; cursor: pointer; accent-color: #10b981;";
                 const labelAdaptive = document.createElement("div");
                 labelAdaptive.style.cssText = "flex: 1;";
                 const labelAdaptiveTitle = document.createElement("div");
                 labelAdaptiveTitle.textContent = "自适应模式";
-                labelAdaptiveTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                labelAdaptiveTitle.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600;";
                 const labelAdaptiveDesc = document.createElement("div");
                 labelAdaptiveDesc.textContent = "自动检测模型类型并选择合适的加载模式（Klein→Nunchaku 原生 API，SDNQ→SDNQ，普通→标准；INT8/FP8 等量化模型走标准模式，由 ComfyUI 官方 model_patcher 自动处理）";
-                labelAdaptiveDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelAdaptiveDesc.style.cssText = "color: #a1a1aa; font-size: 11.5px; margin-top: 3px; line-height: 1.45;";
                 labelAdaptive.appendChild(labelAdaptiveTitle);
                 labelAdaptive.appendChild(labelAdaptiveDesc);
                 adaptiveMode.appendChild(radioAdaptive);
@@ -6172,21 +7971,21 @@ app.registerExtension({
 
                 // 默认模式（标准 LoRA）
                 const defaultMode = document.createElement("label");
-                defaultMode.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                defaultMode.style.cssText = optionCardIdleCss;
                 const radioDefault = document.createElement("input");
                 radioDefault.type = "radio";
                 radioDefault.name = "global_mode";
                 radioDefault.value = "default";
                 radioDefault.checked = primaryMode === "default";
-                radioDefault.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                radioDefault.style.cssText = "width: 16px; height: 16px; cursor: pointer; accent-color: #6366f1;";
                 const labelDefault = document.createElement("div");
                 labelDefault.style.cssText = "flex: 1;";
                 const labelDefaultTitle = document.createElement("div");
                 labelDefaultTitle.textContent = "默认模式（标准 LoRA）";
-                labelDefaultTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                labelDefaultTitle.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600;";
                 const labelDefaultDesc = document.createElement("div");
                 labelDefaultDesc.textContent = "使用 ComfyUI 标准 LoRA 加载方式，适用于所有模型类型（官方 model_patcher.py 已原生支持 INT8/FP8/INT4 等量化权重的 LoRA 应用）";
-                labelDefaultDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelDefaultDesc.style.cssText = "color: #a1a1aa; font-size: 11.5px; margin-top: 3px; line-height: 1.45;";
                 labelDefault.appendChild(labelDefaultTitle);
                 labelDefault.appendChild(labelDefaultDesc);
                 defaultMode.appendChild(radioDefault);
@@ -6197,19 +7996,19 @@ app.registerExtension({
                 const updateModeSelection = () => {
                     // 自适应模式
                     if (radioAdaptive.checked) {
-                        adaptiveMode.style.borderColor = "#4CAF50";
-                        adaptiveMode.style.background = "#2a3a2a";
+                        adaptiveMode.style.borderColor = "rgba(16, 185, 129, 0.55)";
+                        adaptiveMode.style.background = "rgba(16, 185, 129, 0.1)";
                     } else {
-                        adaptiveMode.style.borderColor = "transparent";
-                        adaptiveMode.style.background = "#333";
+                        adaptiveMode.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                        adaptiveMode.style.background = "#18181c";
                     }
                     // 默认模式
                     if (radioDefault.checked) {
-                        defaultMode.style.borderColor = "#2196F3";
-                        defaultMode.style.background = "#2a3a4a";
+                        defaultMode.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                        defaultMode.style.background = "rgba(99, 102, 241, 0.12)";
                     } else {
-                        defaultMode.style.borderColor = "transparent";
-                        defaultMode.style.background = "#333";
+                        defaultMode.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                        defaultMode.style.background = "#18181c";
                     }
                 };
 
@@ -6250,46 +8049,45 @@ app.registerExtension({
 
                 // ========== tonera-Klein-Nunchaku 模式设置区域 ==========
                 const kleinSection = document.createElement("div");
-                kleinSection.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+                kleinSection.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
 
                 const kleinTitle = document.createElement("div");
                 kleinTitle.textContent = "tonera-Klein-Nunchaku LoRA 模式";
                 kleinTitle.style.cssText = `
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
-                    color: #fff;
-                    margin-bottom: 8px;
+                    color: #f4f4f5;
                 `;
 
                 const kleinDesc = document.createElement("div");
                 kleinDesc.textContent = "专用于 tonera/FLUX.2-klein-9B-Nunchaku 量化模型的原生 LoRA 加载（普通 Klein 模型请用默认模式）";
                 kleinDesc.style.cssText = `
-                    font-size: 12px;
-                    color: #aaa;
-                    margin-bottom: 12px;
-                    line-height: 1.5;
+                    font-size: 11.5px;
+                    color: #a1a1aa;
+                    margin-bottom: 4px;
+                    line-height: 1.45;
                 `;
 
                 const kleinModeContainer = document.createElement("div");
-                kleinModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+                kleinModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
 
                 // tonera-Klein-Nunchaku 模式（选中时激活）
                 const kleinModeKlein = document.createElement("label");
-                kleinModeKlein.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                kleinModeKlein.style.cssText = optionCardIdleCss;
                 const radioKleinKlein = document.createElement("input");
                 radioKleinKlein.type = "radio";
                 radioKleinKlein.name = "klein_mode";
                 radioKleinKlein.value = "klein";
                 radioKleinKlein.checked = primaryMode === "klein";
-                radioKleinKlein.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                radioKleinKlein.style.cssText = "width: 16px; height: 16px; cursor: pointer; accent-color: #6366f1;";
                 const labelKleinKlein = document.createElement("div");
                 labelKleinKlein.style.cssText = "flex: 1;";
                 const labelKleinKleinTitle = document.createElement("div");
                 labelKleinKleinTitle.textContent = "tonera-Klein-Nunchaku 模式";
-                labelKleinKleinTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                labelKleinKleinTitle.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600;";
                 const labelKleinKleinDesc = document.createElement("div");
                 labelKleinKleinDesc.textContent = "使用 Nunchaku 原生 LoRA API（update_lora_params）加载 tonera FLUX.2-klein-9B-Nunchaku 专用 LoRA";
-                labelKleinKleinDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelKleinKleinDesc.style.cssText = "color: #a1a1aa; font-size: 11.5px; margin-top: 3px; line-height: 1.45;";
                 labelKleinKlein.appendChild(labelKleinKleinTitle);
                 labelKleinKlein.appendChild(labelKleinKleinDesc);
                 kleinModeKlein.appendChild(radioKleinKlein);
@@ -6300,11 +8098,11 @@ app.registerExtension({
                     [kleinModeKlein].forEach(mode => {
                         const radio = mode.querySelector('input[type="radio"]');
                         if (radio.checked) {
-                            mode.style.borderColor = "#2196F3";
-                            mode.style.background = "#2a3a4a";
+                            mode.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                            mode.style.background = "rgba(99, 102, 241, 0.12)";
                         } else {
-                            mode.style.borderColor = "transparent";
-                            mode.style.background = "#333";
+                            mode.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                            mode.style.background = "#18181c";
                         }
                     });
                 };
@@ -6334,47 +8132,46 @@ app.registerExtension({
 
                 // ========== SDNQ 模式设置区域 ==========
                 const sdnqSection = document.createElement("div");
-                sdnqSection.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+                sdnqSection.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
 
                 const sdnqTitle = document.createElement("div");
                 sdnqTitle.textContent = "SDNQ LoRA 模式";
                 sdnqTitle.style.cssText = `
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
-                    color: #fff;
-                    margin-bottom: 8px;
+                    color: #f4f4f5;
                 `;
 
                 const sdnqDesc = document.createElement("div");
                 sdnqDesc.textContent = "选择 SDNQ 量化模型（DiffusionPipeline）的 LoRA 加载方式";
                 sdnqDesc.style.cssText = `
-                    font-size: 12px;
-                    color: #aaa;
-                    margin-bottom: 12px;
-                    line-height: 1.5;
+                    font-size: 11.5px;
+                    color: #a1a1aa;
+                    margin-bottom: 4px;
+                    line-height: 1.45;
                 `;
 
                 // SDNQ 模式选择容器
                 const sdnqModeContainer = document.createElement("div");
-                sdnqModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+                sdnqModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
 
                 // SDNQ 模式
                 const sdnqModeSdnq = document.createElement("label");
-                sdnqModeSdnq.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                sdnqModeSdnq.style.cssText = optionCardIdleCss;
                 const radioSdnqSdnq = document.createElement("input");
                 radioSdnqSdnq.type = "radio";
                 radioSdnqSdnq.name = "sdnq_mode";
                 radioSdnqSdnq.value = "sdnq";
                 radioSdnqSdnq.checked = primaryMode === "sdnq";
-                radioSdnqSdnq.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                radioSdnqSdnq.style.cssText = "width: 16px; height: 16px; cursor: pointer; accent-color: #6366f1;";
                 const labelSdnqSdnq = document.createElement("div");
                 labelSdnqSdnq.style.cssText = "flex: 1;";
                 const labelSdnqSdnqTitle = document.createElement("div");
                 labelSdnqSdnqTitle.textContent = "SDNQ 模式";
-                labelSdnqSdnqTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                labelSdnqSdnqTitle.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600;";
                 const labelSdnqSdnqDesc = document.createElement("div");
                 labelSdnqSdnqDesc.textContent = "使用 diffusers PEFT adapter 系统加载 LoRA，支持多个 LoRA 并行应用，适用于 SDNQ 量化模型（DiffusionPipeline）";
-                labelSdnqSdnqDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelSdnqSdnqDesc.style.cssText = "color: #a1a1aa; font-size: 11.5px; margin-top: 3px; line-height: 1.45;";
                 labelSdnqSdnq.appendChild(labelSdnqSdnqTitle);
                 labelSdnqSdnq.appendChild(labelSdnqSdnqDesc);
                 sdnqModeSdnq.appendChild(radioSdnqSdnq);
@@ -6385,11 +8182,11 @@ app.registerExtension({
                     [sdnqModeSdnq].forEach(mode => {
                         const radio = mode.querySelector('input[type="radio"]');
                         if (radio.checked) {
-                            mode.style.borderColor = "#2196F3";
-                            mode.style.background = "#2a3a4a";
+                            mode.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                            mode.style.background = "rgba(99, 102, 241, 0.12)";
                         } else {
-                            mode.style.borderColor = "transparent";
-                            mode.style.background = "#333";
+                            mode.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                            mode.style.background = "#18181c";
                         }
                     });
                 };
@@ -6419,46 +8216,45 @@ app.registerExtension({
 
                 // ========== Anima 2.9B LoRA 模式设置区域（与 Klein/SDNQ 互斥，仅标准加载路径生效） ==========
                 const animaSection = document.createElement("div");
-                animaSection.style.cssText = "display: flex; flex-direction: column; gap: 12px;";
+                animaSection.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
 
                 const animaTitle = document.createElement("div");
                 animaTitle.textContent = "Anima 2.9B LoRA 模式";
                 animaTitle.style.cssText = `
-                    font-size: 14px;
+                    font-size: 13px;
                     font-weight: 600;
-                    color: #fff;
-                    margin-bottom: 8px;
+                    color: #f4f4f5;
                 `;
 
                 const animaDesc = document.createElement("div");
                 animaDesc.textContent = "专用于 Anima 2.9B（40 层）模型加载旧版 28 层 Anima LoRA：标准加载路径下自动在内存中暂存重映射（28→40 层），不写盘、不改原文件、不新增文件";
                 animaDesc.style.cssText = `
-                    font-size: 12px;
-                    color: #aaa;
-                    margin-bottom: 12px;
-                    line-height: 1.5;
+                    font-size: 11.5px;
+                    color: #a1a1aa;
+                    margin-bottom: 4px;
+                    line-height: 1.45;
                 `;
 
                 const animaModeContainer = document.createElement("div");
-                animaModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+                animaModeContainer.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
 
                 // Anima 2.9B 模式（选中时激活，与 Klein/SDNQ 互斥）
                 const animaModeAnima = document.createElement("label");
-                animaModeAnima.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                animaModeAnima.style.cssText = optionCardIdleCss;
                 const radioAnima = document.createElement("input");
                 radioAnima.type = "radio";
                 radioAnima.name = "anima_mode";
                 radioAnima.value = "anima";
                 radioAnima.checked = currentAnimaMode === "anima";
-                radioAnima.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                radioAnima.style.cssText = "width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7;";
                 const labelAnima = document.createElement("div");
                 labelAnima.style.cssText = "flex: 1;";
                 const labelAnimaTitle = document.createElement("div");
                 labelAnimaTitle.textContent = "Anima 2.9B 模式";
-                labelAnimaTitle.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                labelAnimaTitle.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600;";
                 const labelAnimaDesc = document.createElement("div");
                 labelAnimaDesc.textContent = "标准加载路径下自动把 28 层 Anima LoRA 重映射为 40 层（仅对 Anima LoRA 生效，其他 LoRA 原样加载）";
-                labelAnimaDesc.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                labelAnimaDesc.style.cssText = "color: #a1a1aa; font-size: 11.5px; margin-top: 3px; line-height: 1.45;";
                 labelAnima.appendChild(labelAnimaTitle);
                 labelAnima.appendChild(labelAnimaDesc);
                 animaModeAnima.appendChild(radioAnima);
@@ -6469,11 +8265,11 @@ app.registerExtension({
                     [animaModeAnima].forEach(mode => {
                         const radio = mode.querySelector('input[type="radio"]');
                         if (radio.checked) {
-                            mode.style.borderColor = "#9C27B0";
-                            mode.style.background = "#3a2a3a";
+                            mode.style.borderColor = "rgba(168, 85, 247, 0.55)";
+                            mode.style.background = "rgba(168, 85, 247, 0.12)";
                         } else {
-                            mode.style.borderColor = "transparent";
-                            mode.style.background = "#333";
+                            mode.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                            mode.style.background = "#18181c";
                         }
                     });
                 };
@@ -6502,45 +8298,45 @@ app.registerExtension({
 
                 // ========== 模式切换 Tab 内容 ==========
                 const modeTabContent = document.createElement("div");
-                modeTabContent.style.cssText = "display: block;";
+                modeTabContent.style.cssText = currentTab === "mode" ? "display: block;" : "display: none;";
                 modeTabContent.appendChild(settingsContainer);
                 tabContents["mode"] = modeTabContent;
 
                 // ========== 布局样式 Tab 内容 ==========
                 const layoutTabContent = document.createElement("div");
-                layoutTabContent.style.cssText = "display: none;";
+                layoutTabContent.style.cssText = currentTab === "layout" ? "display: block;" : "display: none;";
                 tabContents["layout"] = layoutTabContent;
 
                 const layoutContainer = document.createElement("div");
-                layoutContainer.style.cssText = "display: flex; flex-direction: column; gap: 18px;";
+                layoutContainer.style.cssText = "display: flex; flex-direction: column; gap: 16px;";
 
                 const layoutTitle = document.createElement("div");
                 layoutTitle.textContent = "权重控件样式";
-                layoutTitle.style.cssText = "font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px;";
+                layoutTitle.style.cssText = "font-size: 13px; font-weight: 600; color: #f4f4f5; margin-bottom: 2px;";
                 const layoutDesc = document.createElement("div");
                 layoutDesc.textContent = "选择 LoRA 列表中权重调节控件的样式。滑条模式下可直接拖动调整权重，数值仍可点击编辑。";
-                layoutDesc.style.cssText = "font-size: 12px; color: #aaa; margin-bottom: 12px; line-height: 1.5;";
+                layoutDesc.style.cssText = "font-size: 11.5px; color: #a1a1aa; margin-bottom: 8px; line-height: 1.45;";
 
                 const styleSection = document.createElement("div");
-                styleSection.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
+                styleSection.style.cssText = "display: flex; flex-direction: column; gap: 8px;";
 
                 const buildStyleOption = (value, label, desc) => {
                     const wrap = document.createElement("label");
-                    wrap.style.cssText = "display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; background: #333; border-radius: 4px; border: 2px solid transparent;";
+                    wrap.style.cssText = optionCardIdleCss;
                     const radio = document.createElement("input");
                     radio.type = "radio";
                     radio.name = "mpl_weight_style";
                     radio.value = value;
                     radio.checked = (this.layoutSettings?.weightStyle || "arrows") === value;
-                    radio.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+                    radio.style.cssText = "width: 16px; height: 16px; cursor: pointer; accent-color: #6366f1;";
                     const info = document.createElement("div");
                     info.style.cssText = "flex: 1;";
                     const t = document.createElement("div");
                     t.textContent = label;
-                    t.style.cssText = "color: #eee; font-size: 13px; font-weight: 500;";
+                    t.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600;";
                     const d = document.createElement("div");
                     d.textContent = desc;
-                    d.style.cssText = "color: #888; font-size: 11px; margin-top: 2px;";
+                    d.style.cssText = "color: #a1a1aa; font-size: 11.5px; margin-top: 3px; line-height: 1.45;";
                     info.appendChild(t);
                     info.appendChild(d);
                     wrap.appendChild(radio);
@@ -6554,11 +8350,11 @@ app.registerExtension({
                 styleSection.appendChild(styleSlider.wrap);
 
                 const sliderParamsSection = document.createElement("div");
-                sliderParamsSection.style.cssText = "display: flex; flex-direction: column; gap: 12px; padding: 12px; background: #2a2a2a; border-radius: 4px; border: 1px solid #444;";
+                sliderParamsSection.style.cssText = "display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #18181c; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);";
 
                 const sliderParamsTitle = document.createElement("div");
                 sliderParamsTitle.textContent = "滑条参数";
-                sliderParamsTitle.style.cssText = "color: #fff; font-size: 13px; font-weight: 500; margin-bottom: 4px;";
+                sliderParamsTitle.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600; margin-bottom: 2px;";
                 sliderParamsSection.appendChild(sliderParamsTitle);
 
                 const buildNumberRow = (labelText, key, min, max, step) => {
@@ -6566,14 +8362,15 @@ app.registerExtension({
                     row.style.cssText = "display: flex; align-items: center; gap: 10px;";
                     const lab = document.createElement("div");
                     lab.textContent = labelText;
-                    lab.style.cssText = "color: #ccc; font-size: 12px; min-width: 80px;";
+                    lab.style.cssText = "color: #d4d4d8; font-size: 12px; min-width: 90px;";
                     const input = document.createElement("input");
                     input.type = "number";
+                    input.className = "ma-input";
                     input.min = String(min);
                     input.max = String(max);
                     input.step = String(step);
                     input.value = String(this.layoutSettings?.[key] ?? 0);
-                    input.style.cssText = "flex: 1; padding: 4px 8px; background: #1a1a1a; border: 1px solid #555; border-radius: 3px; color: #fff; font-size: 12px;";
+                    input.style.cssText = "flex: 1; padding: 6px 10px; font-size: 12px;";
                     row.appendChild(lab);
                     row.appendChild(input);
                     return { row, input };
@@ -6590,14 +8387,14 @@ app.registerExtension({
 
                 const buildCheckboxRow = (labelText, key) => {
                     const row = document.createElement("label");
-                    row.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 0;";
+                    row.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 0;";
                     const cb = document.createElement("input");
                     cb.type = "checkbox";
                     cb.checked = this.layoutSettings?.[key] ?? true;
-                    cb.style.cssText = "width: 16px; height: 16px; cursor: pointer;";
+                    cb.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                     const lab = document.createElement("div");
                     lab.textContent = labelText;
-                    lab.style.cssText = "color: #ccc; font-size: 12px;";
+                    lab.style.cssText = "color: #d4d4d8; font-size: 12px;";
                     row.appendChild(cb);
                     row.appendChild(lab);
                     return { row, cb };
@@ -6610,11 +8407,11 @@ app.registerExtension({
                 const updateStyleSelection = () => {
                     [styleArrows, styleSlider].forEach((s) => {
                         if (s.radio.checked) {
-                            s.wrap.style.borderColor = "#2196F3";
-                            s.wrap.style.background = "#2a3a4a";
+                            s.wrap.style.borderColor = "rgba(99, 102, 241, 0.6)";
+                            s.wrap.style.background = "rgba(99, 102, 241, 0.12)";
                         } else {
-                            s.wrap.style.borderColor = "transparent";
-                            s.wrap.style.background = "#333";
+                            s.wrap.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                            s.wrap.style.background = "#18181c";
                         }
                     });
                     sliderParamsSection.style.display = styleSlider.radio.checked ? "flex" : "none";
@@ -6627,6 +8424,341 @@ app.registerExtension({
                 layoutContainer.appendChild(layoutDesc);
                 layoutContainer.appendChild(styleSection);
                 layoutContainer.appendChild(sliderParamsSection);
+
+                // ========== 主题配色与颜色预设（融合进布局样式 Tab） ==========
+                const colorDivider = document.createElement("div");
+                colorDivider.style.cssText = "height: 1px; background: rgba(255, 255, 255, 0.08); margin: 4px 0;";
+                layoutContainer.appendChild(colorDivider);
+
+                const DEF_LORA_COLOR = { selectBg: "#2b3b5e", selectBar: "#6366f1", selectText: "#eef1ff" };
+                const DEF_FOLDER_COLOR = { outer: "#18181c", inner: "#222228", bar: "#6366f1" };
+                const initCs = this.colorSettings || {};
+                const initFs = this.folderColorSettings || {};
+                let folderColorCustomized = !!(initFs.outer || initFs.inner || initFs.bar);
+
+                const colorHeaderRow = document.createElement("div");
+                colorHeaderRow.style.cssText = "display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;";
+                const colorHeaderLeft = document.createElement("div");
+                const colorTitle = document.createElement("div");
+                colorTitle.textContent = "主题配色与预设";
+                colorTitle.style.cssText = "font-size: 13px; font-weight: 600; color: #f4f4f5; margin-bottom: 3px;";
+                const colorDesc = document.createElement("div");
+                colorDesc.textContent = "点击预设卡片一键套用整套配色（LoRA 选中高亮 + 文件夹默认色），也可手动微调色值并另存为预设。";
+                colorDesc.style.cssText = "font-size: 11.5px; color: #a1a1aa; line-height: 1.45;";
+                colorHeaderLeft.appendChild(colorTitle);
+                colorHeaderLeft.appendChild(colorDesc);
+
+                const resetColorBtn = document.createElement("button");
+                resetColorBtn.type = "button";
+                resetColorBtn.textContent = "恢复默认配色";
+                resetColorBtn.className = "ma-btn";
+                resetColorBtn.style.cssText = "padding: 5px 10px; font-size: 11.5px; flex-shrink: 0; white-space: nowrap;";
+                colorHeaderRow.appendChild(colorHeaderLeft);
+                colorHeaderRow.appendChild(resetColorBtn);
+                layoutContainer.appendChild(colorHeaderRow);
+
+                // 实时预览与微调工作台卡片
+                const colorStudioCard = document.createElement("div");
+                colorStudioCard.style.cssText = "display: flex; flex-direction: column; gap: 12px; padding: 14px; background: #18181c; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08);";
+
+                // 1) 实时效果预览框
+                const livePreviewWrap = document.createElement("div");
+                livePreviewWrap.style.cssText = "border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); transition: all 0.15s;";
+                const liveFolderHead = document.createElement("div");
+                liveFolderHead.style.cssText = "padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: #f4f4f5;";
+                const liveFolderTitle = document.createElement("span");
+                liveFolderTitle.textContent = "📁 示例文件夹（默认配色预览）";
+                const liveFolderBadge = document.createElement("span");
+                liveFolderBadge.textContent = "2 个 LoRA";
+                liveFolderBadge.style.cssText = "font-size: 10.5px; color: #a1a1aa; font-weight: 500; background: rgba(0,0,0,0.28); padding: 1px 6px; border-radius: 999px;";
+                liveFolderHead.appendChild(liveFolderTitle);
+                liveFolderHead.appendChild(liveFolderBadge);
+
+                const liveFolderBody = document.createElement("div");
+                liveFolderBody.style.cssText = "padding: 7px 8px; display: flex; flex-direction: column; gap: 5px;";
+                const liveLoraSelected = document.createElement("div");
+                liveLoraSelected.style.cssText = "padding: 6px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; transition: all 0.15s;";
+                const liveLoraSelectedName = document.createElement("span");
+                liveLoraSelectedName.textContent = "✓ 示例 LoRA 模型（选中高亮状态）";
+                const liveLoraSelectedWeight = document.createElement("span");
+                liveLoraSelectedWeight.textContent = "1.00";
+                liveLoraSelectedWeight.style.cssText = "font-size: 10.5px; opacity: 0.9; background: rgba(0,0,0,0.22); padding: 1px 6px; border-radius: 4px; font-variant-numeric: tabular-nums;";
+                liveLoraSelected.appendChild(liveLoraSelectedName);
+                liveLoraSelected.appendChild(liveLoraSelectedWeight);
+
+                const liveLoraIdle = document.createElement("div");
+                liveLoraIdle.style.cssText = "padding: 5px 10px; border-radius: 6px; font-size: 11px; color: #a1a1aa; background: rgba(255,255,255,0.03); border-left: 3px solid transparent; display: flex; align-items: center; justify-content: space-between;";
+                const liveLoraIdleName = document.createElement("span");
+                liveLoraIdleName.textContent = "○ 普通 LoRA 模型（未选中状态）";
+                const liveLoraIdleWeight = document.createElement("span");
+                liveLoraIdleWeight.textContent = "0.75";
+                liveLoraIdleWeight.style.cssText = "font-size: 10.5px; color: #71717a; font-variant-numeric: tabular-nums;";
+                liveLoraIdle.appendChild(liveLoraIdleName);
+                liveLoraIdle.appendChild(liveLoraIdleWeight);
+
+                liveFolderBody.appendChild(liveLoraSelected);
+                liveFolderBody.appendChild(liveLoraIdle);
+                livePreviewWrap.appendChild(liveFolderHead);
+                livePreviewWrap.appendChild(liveFolderBody);
+                colorStudioCard.appendChild(livePreviewWrap);
+
+                // 2) 双栏色板微调区（LoRA 选中色 + 文件夹默认色）
+                const pickersGrid = document.createElement("div");
+                pickersGrid.style.cssText = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;";
+
+                const buildColorGroup = (groupTitle, items) => {
+                    const box = document.createElement("div");
+                    box.style.cssText = "background: #111114; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 9px 10px; display: flex; flex-direction: column; gap: 7px;";
+                    const gt = document.createElement("div");
+                    gt.textContent = groupTitle;
+                    gt.style.cssText = "font-size: 11.5px; font-weight: 600; color: #d4d4d8;";
+                    box.appendChild(gt);
+                    const pillsRow = document.createElement("div");
+                    pillsRow.style.cssText = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;";
+                    const inputs = {};
+                    items.forEach((it) => {
+                        const pill = document.createElement("label");
+                        pill.style.cssText = "display: flex; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 6px; background: #18181c; border: 1px solid rgba(255, 255, 255, 0.08); cursor: pointer; transition: border-color 0.15s;";
+                        pill.onmouseenter = () => { pill.style.borderColor = "rgba(99, 102, 241, 0.5)"; };
+                        pill.onmouseleave = () => { pill.style.borderColor = "rgba(255, 255, 255, 0.08)"; };
+                        const inp = document.createElement("input");
+                        inp.type = "color";
+                        inp.value = it.value;
+                        inp.style.cssText = "width: 18px; height: 18px; border: none; padding: 0; background: transparent; cursor: pointer; flex-shrink: 0;";
+                        const txt = document.createElement("span");
+                        txt.textContent = it.label;
+                        txt.style.cssText = "font-size: 11px; color: #d4d4d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
+                        pill.appendChild(inp);
+                        pill.appendChild(txt);
+                        pillsRow.appendChild(pill);
+                        inputs[it.key] = inp;
+                    });
+                    box.appendChild(pillsRow);
+                    return { box, inputs };
+                };
+
+                const loraGroup = buildColorGroup("LoRA 选中高亮", [
+                    { key: "selectBg", label: "背景", value: initCs.selectBg || DEF_LORA_COLOR.selectBg },
+                    { key: "selectBar", label: "色条", value: initCs.selectBar || DEF_LORA_COLOR.selectBar },
+                    { key: "selectText", label: "文字", value: initCs.selectText || DEF_LORA_COLOR.selectText },
+                ]);
+                const folderGroup = buildColorGroup("文件夹默认色", [
+                    { key: "inner", label: "标题栏", value: initFs.inner || DEF_FOLDER_COLOR.inner },
+                    { key: "outer", label: "底色", value: initFs.outer || DEF_FOLDER_COLOR.outer },
+                    { key: "bar", label: "色条", value: initFs.bar || DEF_FOLDER_COLOR.bar },
+                ]);
+                pickersGrid.appendChild(loraGroup.box);
+                pickersGrid.appendChild(folderGroup.box);
+                colorStudioCard.appendChild(pickersGrid);
+
+                // 3) 行内另存为预设输入栏
+                const savePresetBar = document.createElement("div");
+                savePresetBar.style.cssText = "display: flex; align-items: center; gap: 8px; padding-top: 2px;";
+                const savePresetInput = document.createElement("input");
+                savePresetInput.type = "text";
+                savePresetInput.className = "ma-input";
+                savePresetInput.placeholder = "输入预设名称（如：赛博霓虹），将当前配色保存为自定义预设...";
+                savePresetInput.style.cssText = "flex: 1; padding: 6px 10px; font-size: 12px;";
+                const savePresetBtn = document.createElement("button");
+                savePresetBtn.type = "button";
+                savePresetBtn.className = "ma-btn ma-btn-primary";
+                savePresetBtn.textContent = "另存当前配色为预设";
+                savePresetBtn.style.cssText = "padding: 6px 12px; font-size: 12px; flex-shrink: 0; white-space: nowrap;";
+                savePresetBar.appendChild(savePresetInput);
+                savePresetBar.appendChild(savePresetBtn);
+                colorStudioCard.appendChild(savePresetBar);
+
+                layoutContainer.appendChild(colorStudioCard);
+
+                // 4) 预设方案网格
+                const presetGridTitle = document.createElement("div");
+                presetGridTitle.textContent = "预设方案列表";
+                presetGridTitle.style.cssText = "font-size: 12px; font-weight: 600; color: #d4d4d8; margin-top: 2px; margin-bottom: -6px;";
+                layoutContainer.appendChild(presetGridTitle);
+
+                const presetGrid = document.createElement("div");
+                presetGrid.style.cssText = "display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;";
+                layoutContainer.appendChild(presetGrid);
+
+                const normHex = (v) => String(v || "").trim().toLowerCase();
+                const isPresetActive = (preset) => {
+                    const l = preset.lora || {};
+                    const f = preset.folder || {};
+                    return (
+                        normHex(loraGroup.inputs.selectBg.value) === normHex(l.selectBg || DEF_LORA_COLOR.selectBg) &&
+                        normHex(loraGroup.inputs.selectBar.value) === normHex(l.selectBar || DEF_LORA_COLOR.selectBar) &&
+                        normHex(loraGroup.inputs.selectText.value) === normHex(l.selectText || DEF_LORA_COLOR.selectText) &&
+                        normHex(folderGroup.inputs.outer.value) === normHex(f.outer || DEF_FOLDER_COLOR.outer) &&
+                        normHex(folderGroup.inputs.inner.value) === normHex(f.inner || DEF_FOLDER_COLOR.inner) &&
+                        normHex(folderGroup.inputs.bar.value) === normHex(f.bar || DEF_FOLDER_COLOR.bar)
+                    );
+                };
+
+                const updateLiveColorPreview = () => {
+                    const lBg = loraGroup.inputs.selectBg.value || DEF_LORA_COLOR.selectBg;
+                    const lBar = loraGroup.inputs.selectBar.value || DEF_LORA_COLOR.selectBar;
+                    const lTxt = loraGroup.inputs.selectText.value || DEF_LORA_COLOR.selectText;
+                    const fOuter = folderGroup.inputs.outer.value || DEF_FOLDER_COLOR.outer;
+                    const fInner = folderGroup.inputs.inner.value || DEF_FOLDER_COLOR.inner;
+                    const fBar = folderGroup.inputs.bar.value || DEF_FOLDER_COLOR.bar;
+
+                    livePreviewWrap.style.background = fOuter;
+                    livePreviewWrap.style.borderLeft = "4px solid " + fBar;
+                    liveFolderHead.style.background = fInner;
+                    liveLoraSelected.style.background = lBg;
+                    liveLoraSelected.style.color = lTxt;
+                    liveLoraSelected.style.borderLeft = "3px solid " + lBar;
+                };
+
+                const renderPresetCards = () => {
+                    presetGrid.innerHTML = "";
+                    const makeCard = (preset, isCustom, idx) => {
+                        const l = preset.lora || {};
+                        const f = preset.folder || {};
+                        const active = isPresetActive(preset);
+                        const card = document.createElement("div");
+                        card.style.cssText = `
+                            border: 1px solid ${active ? "rgba(99, 102, 241, 0.75)" : "rgba(255, 255, 255, 0.08)"};
+                            border-radius: 9px;
+                            overflow: hidden;
+                            cursor: pointer;
+                            background: ${active ? "rgba(99, 102, 241, 0.10)" : "#18181c"};
+                            transition: border-color 0.15s, background 0.15s, transform 0.1s;
+                            display: flex;
+                            flex-direction: column;
+                        `;
+                        card.onmouseenter = () => {
+                            if (!active) card.style.borderColor = "rgba(99, 102, 241, 0.5)";
+                        };
+                        card.onmouseleave = () => {
+                            if (!active) card.style.borderColor = "rgba(255, 255, 255, 0.08)";
+                        };
+
+                        // 顶部名称栏 + 色点
+                        const bar = document.createElement("div");
+                        bar.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; gap: 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.05);";
+                        const nameWrap = document.createElement("div");
+                        nameWrap.style.cssText = "display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;";
+                        const nm = document.createElement("span");
+                        nm.textContent = preset.name;
+                        nm.style.cssText = "font-size: 12px; font-weight: 600; color: #f4f4f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
+                        nameWrap.appendChild(nm);
+                        if (active) {
+                            const badge = document.createElement("span");
+                            badge.textContent = "当前使用";
+                            badge.style.cssText = "font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(99, 102, 241, 0.22); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.4); flex-shrink: 0;";
+                            nameWrap.appendChild(badge);
+                        }
+                        bar.appendChild(nameWrap);
+
+                        const rightTools = document.createElement("div");
+                        rightTools.style.cssText = "display: flex; align-items: center; gap: 4px; flex-shrink: 0;";
+                        [f.bar || l.selectBar || "#6366f1", f.inner || "#222228", l.selectBg || "#2b3b5e", l.selectBar || "#6366f1"].forEach((swColor) => {
+                            const dot = document.createElement("span");
+                            dot.style.cssText = `width: 10px; height: 10px; border-radius: 999px; background: ${swColor}; border: 1px solid rgba(255,255,255,0.22); display: inline-block;`;
+                            rightTools.appendChild(dot);
+                        });
+                        if (isCustom) {
+                            const del = document.createElement("span");
+                            del.textContent = "✕";
+                            del.title = "删除该自定义预设";
+                            del.style.cssText = "cursor: pointer; color: #f87171; font-size: 12px; padding: 0 2px 0 4px; line-height: 1;";
+                            del.onclick = (e) => {
+                                e.stopPropagation();
+                                const arr = this._loadCustomColorPresets();
+                                arr.splice(idx, 1);
+                                this._saveCustomColorPresets(arr);
+                                renderPresetCards();
+                            };
+                            rightTools.appendChild(del);
+                        }
+                        bar.appendChild(rightTools);
+                        card.appendChild(bar);
+
+                        // 迷你文件夹 + LoRA 选中预览块
+                        const pv = document.createElement("div");
+                        pv.style.cssText = "background: " + (f.outer || "#18181c") + "; border-left: 3px solid " + (f.bar || l.selectBar || "#6366f1") + "; margin: 7px 8px; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.06);";
+                        const ph = document.createElement("div");
+                        ph.style.cssText = "padding: 4px 8px; font-size: 10.5px; font-weight: 600; color: #e4e4e7; background: " + (f.inner || "#222228") + ";";
+                        ph.textContent = "📁 " + preset.name;
+                        const pl = document.createElement("div");
+                        pl.style.cssText = "margin: 5px 6px; padding: 3px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 500; background: " + (l.selectBg || "#2b3b5e") + "; color: " + (l.selectText || "#eef1ff") + "; border-left: 3px solid " + (l.selectBar || "#6366f1") + ";";
+                        pl.textContent = "LoRA 行（选中）";
+                        pv.appendChild(ph);
+                        pv.appendChild(pl);
+                        card.appendChild(pv);
+
+                        card.onclick = () => {
+                            loraGroup.inputs.selectBg.value = l.selectBg || DEF_LORA_COLOR.selectBg;
+                            loraGroup.inputs.selectBar.value = l.selectBar || DEF_LORA_COLOR.selectBar;
+                            loraGroup.inputs.selectText.value = l.selectText || DEF_LORA_COLOR.selectText;
+                            folderGroup.inputs.outer.value = f.outer || DEF_FOLDER_COLOR.outer;
+                            folderGroup.inputs.inner.value = f.inner || DEF_FOLDER_COLOR.inner;
+                            folderGroup.inputs.bar.value = f.bar || DEF_FOLDER_COLOR.bar;
+                            folderColorCustomized = !!(f.outer || f.inner || f.bar);
+                            updateLiveColorPreview();
+                            renderPresetCards();
+                            this._applyColorPreset(preset);
+                        };
+                        return card;
+                    };
+
+                    this._builtinColorPresets().forEach((p) => presetGrid.appendChild(makeCard(p, false, -1)));
+                    this._loadCustomColorPresets().forEach((p, i) => presetGrid.appendChild(makeCard(p, true, i)));
+                };
+
+                Object.values(loraGroup.inputs).forEach((inp) => {
+                    inp.addEventListener("input", () => {
+                        updateLiveColorPreview();
+                        renderPresetCards();
+                    });
+                });
+                Object.values(folderGroup.inputs).forEach((inp) => {
+                    inp.addEventListener("input", () => {
+                        folderColorCustomized = true;
+                        updateLiveColorPreview();
+                        renderPresetCards();
+                    });
+                });
+
+                resetColorBtn.onclick = () => {
+                    loraGroup.inputs.selectBg.value = DEF_LORA_COLOR.selectBg;
+                    loraGroup.inputs.selectBar.value = DEF_LORA_COLOR.selectBar;
+                    loraGroup.inputs.selectText.value = DEF_LORA_COLOR.selectText;
+                    folderGroup.inputs.outer.value = DEF_FOLDER_COLOR.outer;
+                    folderGroup.inputs.inner.value = DEF_FOLDER_COLOR.inner;
+                    folderGroup.inputs.bar.value = DEF_FOLDER_COLOR.bar;
+                    folderColorCustomized = false;
+                    updateLiveColorPreview();
+                    renderPresetCards();
+                };
+
+                savePresetBtn.onclick = () => {
+                    const name = (savePresetInput.value || "").trim() || prompt("给当前配色起个名字：", "我的配色");
+                    if (!name) return;
+                    const preset = {
+                        name: name.trim(),
+                        lora: {
+                            selectBg: loraGroup.inputs.selectBg.value || DEF_LORA_COLOR.selectBg,
+                            selectBar: loraGroup.inputs.selectBar.value || DEF_LORA_COLOR.selectBar,
+                            selectText: loraGroup.inputs.selectText.value || DEF_LORA_COLOR.selectText,
+                        },
+                        folder: {
+                            outer: folderGroup.inputs.outer.value || DEF_FOLDER_COLOR.outer,
+                            inner: folderGroup.inputs.inner.value || DEF_FOLDER_COLOR.inner,
+                            bar: folderGroup.inputs.bar.value || DEF_FOLDER_COLOR.bar,
+                        },
+                    };
+                    const arr = this._loadCustomColorPresets();
+                    arr.push(preset);
+                    this._saveCustomColorPresets(arr);
+                    savePresetInput.value = "";
+                    renderPresetCards();
+                };
+
+                updateLiveColorPreview();
+                renderPresetCards();
+
                 layoutTabContent.appendChild(layoutContainer);
 
                 content.appendChild(modeTabContent);
@@ -6650,8 +8782,8 @@ app.registerExtension({
 
                 // 确定按钮
                 const confirmBtn = document.createElement("button");
+                confirmBtn.className = "ma-btn ma-btn-primary";
                 confirmBtn.textContent = "确定";
-                confirmBtn.style.cssText = "padding:8px 16px;background:#2196F3;border:none;color:white;border-radius:4px;cursor:pointer;font-size:13px;";
                 confirmBtn.onclick = () => {
                     const isAdaptiveSelected = radioAdaptive.checked;
                     const isDefaultSelected = radioDefault.checked;
@@ -6693,6 +8825,24 @@ app.registerExtension({
                     this.layoutSettings = newLayout;
                     this.properties["layout_settings"] = newLayout;
 
+                    // 保存主题配色设置
+                    this.colorSettings = {
+                        selectBg: loraGroup.inputs.selectBg.value || DEF_LORA_COLOR.selectBg,
+                        selectBar: loraGroup.inputs.selectBar.value || DEF_LORA_COLOR.selectBar,
+                        selectText: loraGroup.inputs.selectText.value || DEF_LORA_COLOR.selectText,
+                    };
+                    this.folderColorSettings = folderColorCustomized
+                        ? {
+                              outer: folderGroup.inputs.outer.value || DEF_FOLDER_COLOR.outer,
+                              inner: folderGroup.inputs.inner.value || DEF_FOLDER_COLOR.inner,
+                              bar: folderGroup.inputs.bar.value || DEF_FOLDER_COLOR.bar,
+                          }
+                        : { outer: "", inner: "", bar: "" };
+                    this.properties["color_settings"] = this.colorSettings;
+                    this.properties["folder_color_settings"] = this.folderColorSettings;
+                    this.applyColorSettings?.();
+                    this.applyFolderColorSettings?.();
+
                     // 根据布局调整节点最小宽度（仅在用户未手动调大时）
                     // 箭头模式控件宽度约 80px，滑条模式约 sliderWidth + 46px
                     // 额外加 20px padding 确保按钮完全显示
@@ -6716,8 +8866,8 @@ app.registerExtension({
 
                 // 取消按钮
                 const cancelBtn = document.createElement("button");
+                cancelBtn.className = "ma-btn";
                 cancelBtn.textContent = "取消";
-                cancelBtn.style.cssText = "padding:8px 16px;background:#666;border:none;color:white;border-radius:4px;cursor:pointer;font-size:13px;";
                 cancelBtn.onclick = () => document.body.removeChild(overlay);
 
                 // 组装弹窗
@@ -6734,335 +8884,504 @@ app.registerExtension({
                 this.makeDialogDraggable(dialog, title);
             };
 
+            // 📂 预设与收藏中心：预设分类 + 收藏夹全部收进这个弹窗（节点内不再放左侧栏）
             nodeType.prototype.loadPresetModal = async function() {
-                // 创建遮罩层
                 const overlay = document.createElement("div");
-                overlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0, 0, 0, 0.5);
-                    z-index: 10001;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
-                
-                // 创建弹窗
+                overlay.className = "ma-modal-backdrop";
+                overlay.style.cssText = "position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);";
+
                 const dialog = document.createElement("div");
-                dialog.style.cssText = `
-                    background: #2a2a2a;
-                    border: 1px solid #555;
-                    border-radius: 8px;
-                    min-width: 500px;
-                    max-width: 700px;
-                    max-height: 600px;
-                    box-shadow: 0 8px 25px rgba(0,0,0,0.8);
-                    z-index: 10002;
-                    display: flex;
-                    flex-direction: column;
-                `;
-                
-                // 标题栏
+                dialog.className = "ma-modal";
+                dialog.style.cssText = "position:relative;width:min(880px,94vw);height:min(620px,88vh);display:flex;flex-direction:column;overflow:hidden;background:#111114;border:1px solid rgba(255,255,255,0.11);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,0.78);color:#f4f4f5;z-index:10002;font:12.5px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;";
+
+                // ---------------- 头部 ----------------
                 const header = document.createElement("div");
-                header.style.cssText = `
-                    padding: 15px 20px;
-                    border-bottom: 1px solid #444;
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    background: #1a1a1a;
-                    border-radius: 8px 8px 0 0;
-                    cursor: move;
-                    user-select: none;
-                `;
-                
+                header.style.cssText = "flex:0 0 auto;padding:12px 16px;display:flex;align-items:center;gap:10px;background:#151519;border-bottom:1px solid rgba(255,255,255,0.08);cursor:move;user-select:none;";
+
                 const title = document.createElement("div");
-                title.textContent = "LoRA预设";
-                title.style.cssText = `
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #eee;
-                    flex: 1;
-                `;
-                
-                const headerButtons = document.createElement("div");
-                headerButtons.style.cssText = "display: flex; gap: 10px;";
-                
-                // 刷新按钮
+                title.textContent = "📂 预设与收藏";
+                title.style.cssText = "font-size:15px;font-weight:650;letter-spacing:-0.01em;flex:0 0 auto;";
+
+                const tabBar = document.createElement("div");
+                tabBar.style.cssText = "display:flex;gap:3px;padding:3px;border-radius:9px;background:#0d0d10;border:1px solid rgba(255,255,255,0.08);";
+
+                const headRight = document.createElement("div");
+                headRight.style.cssText = "margin-left:auto;display:flex;align-items:center;gap:8px;";
+
                 const refreshBtn = document.createElement("button");
+                refreshBtn.type = "button";
                 refreshBtn.textContent = "刷新";
-                refreshBtn.style.cssText = `
-                    padding: 6px 12px;
-                    background: #444;
-                    border: 1px solid #555;
-                    color: #ccc;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                `;
-                refreshBtn.onmouseenter = () => refreshBtn.style.background = "#555";
-                refreshBtn.onmouseleave = () => refreshBtn.style.background = "#444";
-                
-                // 关闭按钮
+                refreshBtn.style.cssText = "padding:5px 12px;font-size:12px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:#18181c;color:#d4d4d8;cursor:pointer;";
+
                 const closeBtn = document.createElement("button");
+                closeBtn.type = "button";
                 closeBtn.textContent = "✕";
-                closeBtn.style.cssText = `
-                    width: 28px;
-                    height: 28px;
-                    background: #444;
-                    border: 1px solid #555;
-                    color: #ccc;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 16px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 0;
-                `;
-                closeBtn.onmouseenter = () => closeBtn.style.background = "#555";
-                closeBtn.onmouseleave = () => closeBtn.style.background = "#444";
-                
-                headerButtons.appendChild(refreshBtn);
-                headerButtons.appendChild(closeBtn);
-                header.appendChild(title);
-                header.appendChild(headerButtons);
-                
-                // 内容区域
-                const content = document.createElement("div");
-                content.style.cssText = `
-                    flex: 1;
-                    overflow-y: auto;
-                    padding: 10px;
-                    min-height: 200px;
-                `;
-                
-                // 加载预设列表的函数
-                const loadPresets = async () => {
-                    try {
-                        content.innerHTML = ""; // 清空内容
-                        
-                    const r = await api.fetchApi(`/ma/lora/get_presets?t=${Date.now()}`);
-                    const d = await r.json();
-                        const presets = d.presets || {};
-                        const keys = Object.keys(presets);
-                        
-                        if (!keys.length) {
-                            const emptyMsg = document.createElement("div");
-                            emptyMsg.textContent = "暂无预设";
-                            emptyMsg.style.cssText = `
-                                text-align: center;
-                                color: #888;
-                                padding: 40px;
-                                font-size: 14px;
-                            `;
-                            content.appendChild(emptyMsg);
+                closeBtn.style.cssText = "width:26px;height:26px;padding:0;border-radius:7px;border:1px solid transparent;background:transparent;color:#a1a1aa;cursor:pointer;font-size:14px;";
+                closeBtn.onmouseenter = () => { closeBtn.style.background = "#222228"; closeBtn.style.color = "#f4f4f5"; };
+                closeBtn.onmouseleave = () => { closeBtn.style.background = "transparent"; closeBtn.style.color = "#a1a1aa"; };
+
+                headRight.append(refreshBtn, closeBtn);
+                header.append(title, tabBar, headRight);
+
+                // ---------------- 主体：左侧筛选 + 右侧列表 ----------------
+                const body = document.createElement("div");
+                body.style.cssText = "flex:1 1 auto;min-height:0;display:flex;";
+
+                const filterCol = document.createElement("div");
+                filterCol.style.cssText = "flex:0 0 196px;width:196px;display:flex;flex-direction:column;min-height:0;background:#0d0d10;border-right:1px solid rgba(255,255,255,0.08);";
+
+                const filterHead = document.createElement("div");
+                filterHead.style.cssText = "flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,0.05);";
+
+                const filterTitle = document.createElement("span");
+                filterTitle.style.cssText = "font-size:11px;font-weight:600;letter-spacing:.03em;color:#a1a1aa;white-space:nowrap;";
+
+                const addBtn = document.createElement("button");
+                addBtn.type = "button";
+                addBtn.textContent = "+ 分类";
+                addBtn.style.cssText = "padding:3px 8px;font-size:11px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:#18181c;color:#d4d4d8;cursor:pointer;white-space:nowrap;";
+                addBtn.onmouseenter = () => { addBtn.style.borderColor = "rgba(99,102,241,0.55)"; addBtn.style.color = "#fff"; };
+                addBtn.onmouseleave = () => { addBtn.style.borderColor = "rgba(255,255,255,0.12)"; addBtn.style.color = "#d4d4d8"; };
+
+                const filterList = document.createElement("div");
+                filterList.style.cssText = "flex:1 1 auto;min-height:0;overflow-y:auto;padding:6px;";
+
+                filterHead.append(filterTitle, addBtn);
+                filterCol.append(filterHead, filterList);
+
+                const listCol = document.createElement("div");
+                listCol.style.cssText = "flex:1 1 auto;min-width:0;min-height:0;overflow-y:auto;padding:12px 14px;background:#09090b;";
+
+                body.append(filterCol, listCol);
+
+                const footer = document.createElement("div");
+                footer.style.cssText = "flex:0 0 auto;padding:8px 16px;display:flex;align-items:center;gap:10px;background:#151519;border-top:1px solid rgba(255,255,255,0.08);color:#71717a;font-size:11.5px;";
+                footer.textContent = "提示：节点里点文件夹标题栏的 💾 可保存为预设；右键左侧分类可以重命名 / 删除。";
+
+                dialog.append(header, body, footer);
+
+                // ---------------- 状态 ----------------
+                let activeTab = "presets"; // presets | favorites
+                let catFilter = "";        // "" = 全部, "__uncat__" = 未分类, 其他 = 分类名
+                let favFilter = "";        // "" = 全部收藏, 其他 = 收藏夹名
+
+                // ---------------- 小工具 ----------------
+                const emptyHint = (titleText, subText) => {
+                    const box = document.createElement("div");
+                    box.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:56px 20px;text-align:center;";
+                    const t = document.createElement("div");
+                    t.textContent = titleText;
+                    t.style.cssText = "font-size:13px;font-weight:600;color:#d4d4d8;";
+                    const s = document.createElement("div");
+                    s.textContent = subText;
+                    s.style.cssText = "font-size:11.5px;color:#71717a;max-width:400px;line-height:1.65;";
+                    box.append(t, s);
+                    return box;
+                };
+
+                const mkBtn = (label, titleText, cb, danger) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.textContent = label;
+                    b.title = titleText || label;
+                    b.style.cssText = "padding:4px 9px;font-size:11.5px;border-radius:6px;cursor:pointer;white-space:nowrap;border:1px solid " +
+                        (danger ? "rgba(239,68,68,0.35)" : "rgba(255,255,255,0.12)") + ";background:" +
+                        (danger ? "rgba(239,68,68,0.12)" : "#18181c") + ";color:" + (danger ? "#fca5a5" : "#d4d4d8") + ";";
+                    b.onmouseenter = () => { b.style.borderColor = danger ? "rgba(239,68,68,0.65)" : "rgba(99,102,241,0.55)"; b.style.color = "#fff"; };
+                    b.onmouseleave = () => { b.style.borderColor = danger ? "rgba(239,68,68,0.35)" : "rgba(255,255,255,0.12)"; b.style.color = danger ? "#fca5a5" : "#d4d4d8"; };
+                    b.onclick = (e) => { e.stopPropagation(); cb && cb(e); };
+                    return b;
+                };
+
+                const mkFilterRow = (label, count, active, onClick, onContext) => {
+                    const row = document.createElement("div");
+                    row.style.cssText = "display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;cursor:pointer;font-size:12px;" +
+                        (active ? "background:rgba(99,102,241,0.16);color:#e0e7ff;" : "color:#d4d4d8;");
+                    const nameEl = document.createElement("span");
+                    nameEl.textContent = label;
+                    nameEl.title = label;
+                    nameEl.style.cssText = "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+                    const badge = document.createElement("span");
+                    badge.textContent = String(count);
+                    badge.style.cssText = "flex:0 0 auto;min-width:18px;text-align:center;padding:0 5px;border-radius:9px;background:rgba(255,255,255,0.06);font-size:10px;line-height:15px;color:" + (active ? "#c7d2fe" : "#71717a") + ";";
+                    row.append(nameEl, badge);
+                    if (!active) {
+                        row.onmouseenter = () => { row.style.background = "rgba(255,255,255,0.05)"; };
+                        row.onmouseleave = () => { row.style.background = "transparent"; };
+                    }
+                    row.onclick = (e) => { e.stopPropagation(); onClick && onClick(); };
+                    if (onContext) {
+                        row.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); onContext(e); };
+                    }
+                    return row;
+                };
+
+                // ---------------- 数据刷新 ----------------
+                const doRefresh = async () => {
+                    try { await mplLoadSidebar(true); } catch (e) {}
+                    renderFilters();
+                    renderBody();
+                };
+                MPL_PRESET_MODAL_REFRESHERS.add(doRefresh);
+
+                // ---------------- 左侧筛选 ----------------
+                const renderFilters = () => {
+                    filterList.innerHTML = "";
+                    const st = MPL_SIDEBAR;
+                    if (activeTab === "presets") {
+                        filterTitle.textContent = "预设分类";
+                        addBtn.textContent = "+ 分类";
+                        addBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            this._mplNewPresetCategory();
+                            setTimeout(() => { try { renderFilters(); renderBody(); } catch (err) {} }, 60);
+                        };
+                        const allNames = Object.keys(st.presets || {});
+                        const cats = Array.isArray(st.categories) ? st.categories.slice() : [];
+                        const countOf = (cat) => allNames.filter(n => {
+                            const a = st.assignments[n] || "";
+                            if (cat === "") return true;
+                            if (cat === "__uncat__") return !a || !cats.includes(a);
+                            return a === cat;
+                        }).length;
+                        filterList.appendChild(mkFilterRow("全部预设", countOf(""), catFilter === "", () => {
+                            catFilter = "";
+                            renderFilters();
+                            renderBody();
+                        }));
+                        cats.forEach(cat => {
+                            filterList.appendChild(mkFilterRow(cat, countOf(cat), catFilter === cat, () => {
+                                catFilter = cat;
+                                renderFilters();
+                                renderBody();
+                            }, (e) => this._mplCategoryMenu(e, cat, true)));
+                        });
+                        filterList.appendChild(mkFilterRow("未分类", countOf("__uncat__"), catFilter === "__uncat__", () => {
+                            catFilter = "__uncat__";
+                            renderFilters();
+                            renderBody();
+                        }));
+                    } else {
+                        filterTitle.textContent = "收藏夹";
+                        addBtn.textContent = "+ 收藏夹";
+                        addBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            this._mplNewFavoriteCollection();
+                            setTimeout(() => { try { renderFilters(); renderBody(); } catch (err) {} }, 60);
+                        };
+                        const cols = Array.isArray(st.favorites) ? st.favorites : [];
+                        const seen = new Set();
+                        let total = 0;
+                        cols.forEach(c => (c.items || []).forEach(n => { if (!seen.has(n)) { seen.add(n); total++; } }));
+                        filterList.appendChild(mkFilterRow("全部收藏", total, favFilter === "", () => {
+                            favFilter = "";
+                            renderFilters();
+                            renderBody();
+                        }));
+                        cols.forEach(c => {
+                            filterList.appendChild(mkFilterRow(c.name, (c.items || []).length, favFilter === c.name, () => {
+                                favFilter = c.name;
+                                renderFilters();
+                                renderBody();
+                            }, (e) => this._mplFavoriteMenu(e, c.name)));
+                        });
+                        if (!cols.length) {
+                            const hint = document.createElement("div");
+                            hint.textContent = "还没有收藏夹，点上方「+ 收藏夹」新建一个。";
+                            hint.style.cssText = "padding:10px 8px;color:#52525b;font-size:11px;line-height:1.6;";
+                            filterList.appendChild(hint);
+                        }
+                    }
+                };
+
+                // ---------------- 右侧列表 ----------------
+                const buildPresetCard = (name) => {
+                    const st = MPL_SIDEBAR;
+                    const cats = Array.isArray(st.categories) ? st.categories.slice() : [];
+                    const folders = mplPresetFolders(st.presets[name]);
+                    const loraCount = folders.reduce((sum, f) => sum + ((f.loras || []).length), 0);
+
+                    const card = document.createElement("div");
+                    card.style.cssText = "display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;border-radius:10px;background:#18181c;border:1px solid rgba(255,255,255,0.08);transition:border-color .15s,background .15s;";
+                    card.onmouseenter = () => { card.style.borderColor = "rgba(99,102,241,0.45)"; card.style.background = "#1e1e24"; };
+                    card.onmouseleave = () => { card.style.borderColor = "rgba(255,255,255,0.08)"; card.style.background = "#18181c"; };
+
+                    const icon = document.createElement("span");
+                    icon.textContent = "📁";
+                    icon.style.cssText = "font-size:17px;flex:0 0 auto;";
+
+                    const info = document.createElement("div");
+                    info.style.cssText = "flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;";
+                    const nameEl = document.createElement("div");
+                    nameEl.textContent = name;
+                    nameEl.title = name;
+                    nameEl.style.cssText = "font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+                    const meta = document.createElement("div");
+                    meta.textContent = `${loraCount} 个 LoRA · ${folders.length} 个文件夹`;
+                    meta.style.cssText = "font-size:11px;color:#71717a;";
+                    info.append(nameEl, meta);
+
+                    const controls = document.createElement("div");
+                    controls.style.cssText = "flex:0 0 auto;display:flex;align-items:center;gap:6px;";
+
+                    const catSelect = document.createElement("select");
+                    catSelect.className = "ma-select";
+                    catSelect.title = "调整所属分类";
+                    catSelect.style.cssText = "padding:4px 8px;font-size:11.5px;max-width:118px;";
+                    const uncatOpt = document.createElement("option");
+                    uncatOpt.value = "";
+                    uncatOpt.textContent = "未分类";
+                    catSelect.appendChild(uncatOpt);
+                    cats.forEach(c => {
+                        const op = document.createElement("option");
+                        op.value = c;
+                        op.textContent = c;
+                        catSelect.appendChild(op);
+                    });
+                    const currentCat = st.assignments[name];
+                    catSelect.value = currentCat && cats.includes(currentCat) ? currentCat : "";
+                    catSelect.onchange = async (e) => {
+                        e.stopPropagation();
+                        if (catSelect.value) MPL_SIDEBAR.assignments[name] = catSelect.value;
+                        else delete MPL_SIDEBAR.assignments[name];
+                        await mplSavePresetMeta();
+                        renderFilters();
+                        renderBody();
+                    };
+
+                    const renameBtn = mkBtn("✎", "重命名预设", async () => {
+                        const nn = prompt("预设新名称：", name);
+                        if (!nn || !nn.trim() || nn.trim() === name) return;
+                        try {
+                            const resp = await api.fetchApi("/ma/lora/rename_preset", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ old: name, new: nn.trim() }),
+                            });
+                            const rj = await resp.json();
+                            if (!rj || rj.status !== "success") {
+                                alert("重命名失败：" + ((rj && rj.message) || "未知错误"));
+                                return;
+                            }
+                            await doRefresh();
+                        } catch (err) {
+                            alert("重命名失败：" + err);
+                        }
+                    });
+
+                    const sendBtn = mkBtn("发送到节点", "把这个预设的文件夹加入节点", () => {
+                        this._mplApplyPreset(name);
+                        sendBtn.textContent = "已发送 ✓";
+                        setTimeout(() => { try { sendBtn.textContent = "发送到节点"; } catch (e) {} }, 1200);
+                    });
+
+                    const delBtn = mkBtn("×", "删除预设", async () => {
+                        if (!confirm(`确定要删除预设 "${name}" 吗？`)) return; 
+                        try {
+                            await api.fetchApi("/ma/lora/delete_preset", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ name }),
+                            });
+                            delete MPL_SIDEBAR.presets[name];
+                            delete MPL_SIDEBAR.assignments[name];
+                            await doRefresh();
+                        } catch (err) {
+                            alert("删除失败：" + err);
+                        }
+                    }, true);
+
+                    controls.append(catSelect, renameBtn, sendBtn, delBtn);
+                    card.append(icon, info, controls);
+                    return card;
+                };
+
+                const buildFavRow = (name, collection) => {
+                    const row = document.createElement("div");
+                    row.style.cssText = "display:flex;align-items:center;gap:10px;padding:8px 12px;margin-bottom:6px;border-radius:9px;background:#18181c;border:1px solid rgba(255,255,255,0.08);transition:border-color .15s,background .15s;";
+                    row.onmouseenter = () => { row.style.borderColor = "rgba(99,102,241,0.45)"; row.style.background = "#1e1e24"; };
+                    row.onmouseleave = () => { row.style.borderColor = "rgba(255,255,255,0.08)"; row.style.background = "#18181c"; };
+
+                    const icon = document.createElement("span");
+                    icon.textContent = "⭐";
+                    icon.style.cssText = "font-size:14px;flex:0 0 auto;";
+
+                    const info = document.createElement("div");
+                    info.style.cssText = "flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;";
+                    const nameEl = document.createElement("div");
+                    nameEl.textContent = (String(name).split(/[/\\]/).pop() || String(name)).replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, "");
+                    nameEl.title = name;
+                    nameEl.style.cssText = "font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+                    const pathEl = document.createElement("div");
+                    pathEl.textContent = name;
+                    pathEl.title = name;
+                    pathEl.style.cssText = "font-size:10.5px;color:#52525b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+                    info.append(nameEl, pathEl);
+
+                    const controls = document.createElement("div");
+                    controls.style.cssText = "flex:0 0 auto;display:flex;align-items:center;gap:6px;";
+
+                    const addBtnEl = mkBtn("添加到节点", "把这个 LoRA 加入节点", () => {
+                        this._mplAddLoraByName(name);
+                        addBtnEl.textContent = "已添加 ✓";
+                        setTimeout(() => { try { addBtnEl.textContent = "添加到节点"; } catch (e) {} }, 1200);
+                    });
+                    const removeBtn = mkBtn("移除", "从当前收藏夹移除", () => {
+                        this._mplRemoveFavorite(name, collection);
+                        setTimeout(() => { try { renderFilters(); renderBody(); } catch (e) {} }, 60);
+                    }, true);
+
+                    controls.append(addBtnEl, removeBtn);
+                    row.append(icon, info, controls);
+                    return row;
+                };
+
+                const renderBody = () => {
+                    listCol.innerHTML = "";
+                    const st = MPL_SIDEBAR;
+                    if (activeTab === "presets") {
+                        const cats = Array.isArray(st.categories) ? st.categories.slice() : [];
+                        const all = Object.keys(st.presets || {});
+                        const ordered = [];
+                        (st.preset_order || []).forEach(n => { if (all.includes(n) && !ordered.includes(n)) ordered.push(n); });
+                        all.forEach(n => { if (!ordered.includes(n)) ordered.push(n); });
+                        const shown = ordered.filter(n => {
+                            const a = st.assignments[n] || "";
+                            if (catFilter === "") return true;
+                            if (catFilter === "__uncat__") return !a || !cats.includes(a);
+                            return a === catFilter;
+                        });
+                        if (!shown.length) {
+                            listCol.appendChild(emptyHint(
+                                all.length ? "这个分类里还没有预设" : "还没有任何预设",
+                                "在节点里配置好 LoRA 后，点文件夹标题栏的 💾 就能把它保存成预设；保存后的预设会出现在这里。"
+                            ));
                             return;
                         }
-                        
-                        // 创建预设列表
-                        keys.forEach(presetName => {
-                            const presetData = presets[presetName];
-                            
-                            // 计算LoRA数量
-                            let loraCount = 0;
-                            if (presetData.folders) {
-                                presetData.folders.forEach(folder => {
-                                    if (folder.loras) {
-                                        loraCount += folder.loras.length;
-                                    }
-                                });
-                            }
-                            
-                            const item = document.createElement("div");
-                            item.style.cssText = `
-                        display: flex; 
-                                align-items: center;
-                                gap: 10px;
-                                padding: 10px;
-                                background: #333;
-                                border-radius: 4px;
-                                margin-bottom: 8px;
-                        border: 1px solid #444; 
-                            `;
-                            
-                            // 文件夹图标
-                            const folderIcon = document.createElement("span");
-                            folderIcon.textContent = "📁";
-                            folderIcon.style.cssText = "font-size: 18px;";
-                            
-                            // 预设信息
-                            const info = document.createElement("div");
-                            info.style.cssText = "flex: 1;";
-                            
-                            const nameText = document.createElement("div");
-                            nameText.textContent = `${presetName} (${loraCount}个LoRA)`;
-                            nameText.style.cssText = `
-                                color: #eee;
-                                font-size: 14px;
-                                margin-bottom: 2px;
-                            `;
-                            
-                            info.appendChild(nameText);
-                            
-                            // 按钮容器
-                            const buttons = document.createElement("div");
-                            buttons.style.cssText = "display: flex; gap: 8px;";
-                            
-                            // 发送到节点按钮
-                            const sendBtn = document.createElement("button");
-                            sendBtn.textContent = "发送到节点";
-                            sendBtn.style.cssText = `
-                                padding: 6px 12px;
-                                background: #4CAF50;
-                                border: none;
-                                color: white;
-                                border-radius: 4px;
-                                cursor: pointer;
-                        font-size: 12px; 
-                            `;
-                            sendBtn.onmouseenter = () => sendBtn.style.background = "#5CBF60";
-                            sendBtn.onmouseleave = () => sendBtn.style.background = "#4CAF50";
-                            sendBtn.onclick = () => {
-                                if (presetData.folders) {
-                                    this.loraData.folders.push(...presetData.folders);
-                                    this.renderEmbeddedList();
-                                    this.updateWidget();
-                                }
-                                document.body.removeChild(overlay);
-                            };
-                            
-                            // 删除按钮
-                            const deleteBtn = document.createElement("button");
-                            deleteBtn.textContent = "删除";
-                            deleteBtn.style.cssText = `
-                                padding: 6px 12px;
-                                background: #f44336;
-                                border: none;
-                                color: white;
-                                border-radius: 4px;
-                                cursor: pointer;
-                                font-size: 12px;
-                            `;
-                            deleteBtn.onmouseenter = () => deleteBtn.style.background = "#f55";
-                            deleteBtn.onmouseleave = () => deleteBtn.style.background = "#f44336";
-                            deleteBtn.onclick = async () => {
-                                if (confirm(`确定要删除预设 "${presetName}" 吗？`)) {
-                                    try {
-                                        await api.fetchApi("/ma/lora/delete_preset", {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ name: presetName })
-                                        });
-                                        // 重新加载列表
-                                        await loadPresets();
-                                    } catch (e) {
-                                        alert("删除失败: " + e);
-                                    }
-                                }
-                            };
-                            
-                            buttons.appendChild(sendBtn);
-                            buttons.appendChild(deleteBtn);
-                            
-                            item.appendChild(folderIcon);
-                            item.appendChild(info);
-                            item.appendChild(buttons);
-                            content.appendChild(item);
-                        });
-                    } catch (e) {
-                        const errorMsg = document.createElement("div");
-                        errorMsg.textContent = "加载预设失败: " + e;
-                        errorMsg.style.cssText = `
-                            text-align: center;
-                            color: #f44336;
-                            padding: 20px;
-                            font-size: 14px;
-                        `;
-                        content.appendChild(errorMsg);
+                        shown.forEach(name => listCol.appendChild(buildPresetCard(name)));
+                        return;
                     }
-                };
-                
-                // 刷新按钮点击事件
-                refreshBtn.onclick = () => {
-                    loadPresets();
-                };
-                
-                // 关闭按钮点击事件
-                const closeModal = () => {
-                    document.body.removeChild(overlay);
-                };
-                closeBtn.onclick = closeModal;
-                
-                // 点击遮罩层关闭
-                overlay.onclick = (e) => {
-                    if (e.target === overlay) {
-                        closeModal();
+
+                    const cols = Array.isArray(st.favorites) ? st.favorites : [];
+                    const seen = new Map();
+                    cols.forEach(c => (c.items || []).forEach(n => { if (!seen.has(n)) seen.set(n, c.name); }));
+                    let entries = [];
+                    if (favFilter === "") {
+                        entries = Array.from(seen.entries()).map(([n, cname]) => ({ name: n, collection: cname }));
+                    } else {
+                        const col = cols.find(c => c.name === favFilter);
+                        entries = ((col && col.items) || []).map(n => ({ name: n, collection: favFilter }));
                     }
-                };
-                
-                // ESC键关闭
-                const handleEsc = (e) => {
-                    if (e.key === "Escape") {
-                        closeModal();
-                        document.removeEventListener("keydown", handleEsc);
+                    if (!entries.length) {
+                        listCol.appendChild(emptyHint(
+                            cols.length ? "这个收藏夹还是空的" : "还没有收藏的 LoRA",
+                            "在节点里右键 LoRA 行，选择「加入收藏夹」，就能把常用的 LoRA 收集到这里。"
+                        ));
+                        return;
                     }
+                    entries.forEach(({ name, collection }) => listCol.appendChild(buildFavRow(name, collection)));
                 };
+
+                // ---------------- 顶部标签 ----------------
+                const paintTabs = () => {
+                    [tabPresets, tabFavs].forEach(b => {
+                        const on = b.dataset.tab === activeTab;
+                        b.style.background = on ? "rgba(99,102,241,0.18)" : "transparent";
+                        b.style.borderColor = on ? "rgba(99,102,241,0.55)" : "transparent";
+                        b.style.color = on ? "#e0e7ff" : "#a1a1aa";
+                        b.style.fontWeight = on ? "600" : "500";
+                    });
+                };
+                const mkTab = (key, text) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.dataset.tab = key;
+                    b.textContent = text;
+                    b.style.cssText = "padding:5px 12px;font-size:12px;border-radius:7px;border:1px solid transparent;background:transparent;color:#a1a1aa;cursor:pointer;white-space:nowrap;transition:all .15s;";
+                    b.onclick = (e) => {
+                        e.stopPropagation();
+                        if (activeTab === key) return;
+                        activeTab = key;
+                        paintTabs();
+                        renderFilters();
+                        renderBody();
+                    };
+                    return b;
+                };
+                const tabPresets = mkTab("presets", "📁 预设分组");
+                const tabFavs = mkTab("favorites", "⭐ 收藏夹");
+                tabBar.append(tabPresets, tabFavs);
+                paintTabs();
+
+                // ---------------- 关闭 / 事件 ----------------
+                const cleanup = () => {
+                    MPL_PRESET_MODAL_REFRESHERS.delete(doRefresh);
+                    document.removeEventListener("keydown", handleEsc);
+                    overlay.remove();
+                };
+                const handleEsc = (e) => { if (e.key === "Escape") cleanup(); };
                 document.addEventListener("keydown", handleEsc);
-                
-                // 阻止事件冒泡
+                overlay.onclick = (e) => { if (e.target === overlay) cleanup(); };
+                closeBtn.onclick = () => cleanup();
+                refreshBtn.onclick = () => { void doRefresh(); };
+
                 const stopProp = (e) => { e.stopPropagation(); };
                 dialog.addEventListener("pointerdown", stopProp);
                 dialog.addEventListener("pointermove", stopProp);
                 dialog.addEventListener("pointerup", stopProp);
                 dialog.addEventListener("mousedown", stopProp);
                 dialog.addEventListener("wheel", stopProp, { passive: false });
-                
-                // 组装弹窗
-                dialog.appendChild(header);
-                dialog.appendChild(content);
+
                 overlay.appendChild(dialog);
                 document.body.appendChild(overlay);
-                
-                // 使弹窗可拖拽
+
+                // 点击标签/按钮时不要让弹窗被拖走
+                tabBar.addEventListener("pointerdown", stopProp);
+                headRight.addEventListener("pointerdown", stopProp);
+
                 this.makeDialogDraggable(dialog, header);
-                
-                // 加载预设列表
-                await loadPresets();
+
+                await mplLoadSidebar();
+                renderFilters();
+                renderBody();
             };
 
         }
     },
-    // 注入「lora串输出已连接」：根据 prompt 中是否有其他节点引用本节点的 lora串输出 判定链末端（未连接=末端）
+    // 注入「lora串输出已连接」：根据 prompt 中是否有其他【加载器】引用本节点的 lora串输出 判定链末端
     init(app) {
         const LORA_OUTPUT_INDEX = 4; // RETURN_NAMES: model, clip, lora_preview, tags_output, lora串输出
+        const MODEL_OUTPUT_INDEX = 0;
+        const CHAIN_LOADER_TYPES = new Set(["MagicPowerLoraLoader", "MAPowerLoraLoader"]);
         const originalQueuePrompt = api.queuePrompt;
         api.queuePrompt = async function (index, prompt, ...args) {
             if (prompt && prompt.output && typeof prompt.output === "object") {
                 const output = prompt.output;
-                const loraOutputConnectedIds = new Set();
-                // 从 prompt.output 已有的 inputs 中找出哪些节点的 lora串输出 已被连接
+                const consumers = new Map();
                 for (const nodeId of Object.keys(output)) {
-                    const node = output[nodeId];
-                    const inputs = node && node.inputs;
+                    const inputs = output[nodeId] && output[nodeId].inputs;
                     if (!inputs) continue;
                     for (const key of Object.keys(inputs)) {
                         const val = inputs[key];
-                        if (Array.isArray(val) && val.length >= 2 && val[1] === LORA_OUTPUT_INDEX) {
-                            loraOutputConnectedIds.add(String(val[0]));
-                        }
+                        if (!Array.isArray(val) || val.length < 2) continue;
+                        const src = String(val[0]);
+                        let entry = consumers.get(src);
+                        if (!entry) consumers.set(src, entry = { chain: new Set(), model: new Set() });
+                        if (val[1] === LORA_OUTPUT_INDEX) entry.chain.add(String(nodeId));
+                        else if (val[1] === MODEL_OUTPUT_INDEX) entry.model.add(String(nodeId));
                     }
                 }
-                // 注入「lora串输出已连接」（链末端判定）
                 for (const nodeId of Object.keys(output)) {
                     const node = output[nodeId];
-                    if (node && node.class_type === NODE_NAME) {
-                        if (!node.inputs) node.inputs = {};
-                        node.inputs["lora串输出已连接"] = loraOutputConnectedIds.has(String(nodeId));
-                    }
+                    if (!node || node.class_type !== NODE_NAME) continue;
+                    if (!node.inputs) node.inputs = {};
+                    const entry = consumers.get(String(nodeId));
+                    const continues = !!entry && Array.from(entry.chain).some((consumerId) => {
+                        const consumer = output[consumerId];
+                        if (entry.model.has(consumerId)) return true;
+                        return !!consumer && CHAIN_LOADER_TYPES.has(consumer.class_type);
+                    });
+                    node.inputs["lora串输出已连接"] = continues;
                 }
             }
             return originalQueuePrompt.apply(api, [index, prompt, ...args]);

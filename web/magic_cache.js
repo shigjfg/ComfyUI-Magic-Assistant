@@ -1,4 +1,5 @@
 import { app } from "../../scripts/app.js";
+import "./magic_ui_shared.js";
 
 const NODE_NAME = "MagicCache";
 
@@ -172,43 +173,43 @@ app.registerExtension({
             nodeType.prototype.showSettingsDialog = function() {
                 // 创建弹窗容器
                 const dialog = document.createElement("div");
-                dialog.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0, 0, 0, 0.7);
-                    z-index: 10000;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
+                dialog.className = "ma-modal-backdrop";
                 
                 const content = document.createElement("div");
+                content.className = "ma-modal";
                 content.style.cssText = `
                     position: fixed;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    background: #2d2d2d;
-                    border-radius: 8px;
-                    padding: 20px;
-                    max-width: 800px;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    color: #fff;
-                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+                    width: 640px;
+                    max-width: 92vw;
+                    max-height: 88vh;
                 `;
                 
-                // 标题
+                // 标题栏
+                const header = document.createElement("div");
+                header.className = "ma-modal-header";
+                
                 const title = document.createElement("h2");
                 title.textContent = t("⚡ Magic Cache 设置");
-                title.style.cssText = "margin: 0 0 20px 0; color: #4CAF50; cursor: move; user-select: none;";
-                content.appendChild(title);
+                title.className = "ma-modal-title";
+                header.appendChild(title);
+
+                const closeX = document.createElement("button");
+                closeX.className = "ma-modal-close";
+                closeX.textContent = "✕";
+                closeX.onclick = () => document.body.removeChild(dialog);
+                header.appendChild(closeX);
+                content.appendChild(header);
+
+                const bodyWrap = document.createElement("div");
+                bodyWrap.className = "ma-modal-body";
+                bodyWrap.style.cssText = "display: flex; flex-direction: column; gap: 14px;";
+                content.appendChild(bodyWrap);
                 
                 // TeaCache设置区域
-                const teacacheSection = this.createSettingsSection(content, t("TeaCache 设置"), this.properties["teacache_params"], [
+                const teacacheSection = this.createSettingsSection(bodyWrap, t("TeaCache 设置"), this.properties["teacache_params"], [
                     { key: "model_type", label: t("模型类型"), type: "select", options: ["flux", "flux-kontext", "flux-klein-9b", "flux-klein-4b", "flux-klein-9b-sdnq", "flux-klein-4b-sdnq", "anima", "krea2", "sdxl", "sd15", "ltxv", "lumina_2", "hunyuan_video", "hidream_i1_full", "hidream_i1_dev", "hidream_i1_fast", "wan2.1_t2v_1.3B", "wan2.1_t2v_14B", "wan2.1_i2v_480p_14B", "wan2.1_i2v_720p_14B", "wan2.1_t2v_1.3B_ret_mode", "wan2.1_t2v_14B_ret_mode", "wan2.1_i2v_480p_14B_ret_mode", "wan2.1_i2v_720p_14B_ret_mode"] },
                     { key: "rel_l1_thresh", label: t("缓存强度阈值"), type: "number", min: 0.0, max: 10.0, step: 0.01 },
                     { key: "start_percent", label: t("开始百分比"), type: "number", min: 0.0, max: 1.0, step: 0.01 },
@@ -217,7 +218,7 @@ app.registerExtension({
                 ]);
                 
                 // FBCache设置区域
-                const fbcacheSection = this.createSettingsSection(content, t("FBCache 设置"), this.properties["fbcache_params"], [
+                const fbcacheSection = this.createSettingsSection(bodyWrap, t("FBCache 设置"), this.properties["fbcache_params"], [
                     { key: "object_to_patch", label: t("对象名称"), type: "text" },
                     { key: "residual_diff_threshold", label: t("残差差异阈值"), type: "number", min: 0.0, max: 1.0, step: 0.001 },
                     { key: "start", label: t("开始百分比"), type: "number", min: 0.0, max: 1.0, step: 0.01 },
@@ -227,18 +228,18 @@ app.registerExtension({
                 
                 // 按钮区域
                 const buttonContainer = document.createElement("div");
-                buttonContainer.style.cssText = "margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;";
+                buttonContainer.className = "ma-modal-footer";
                 
                 const cancelBtn = document.createElement("button");
                 cancelBtn.textContent = t("取消");
-                cancelBtn.style.cssText = "padding: 8px 16px; background: #555; color: #fff; border: none; border-radius: 4px; cursor: pointer;";
+                cancelBtn.className = "ma-btn";
                 cancelBtn.onclick = () => {
                     document.body.removeChild(dialog);
                 };
                 
                 const saveBtn = document.createElement("button");
                 saveBtn.textContent = t("保存");
-                saveBtn.style.cssText = "padding: 8px 16px; background: #4CAF50; color: #fff; border: none; border-radius: 4px; cursor: pointer;";
+                saveBtn.className = "ma-btn ma-btn-primary";
                 saveBtn.onclick = () => {
                     // 保存TeaCache参数
                     const teacacheInputs = teacacheSection.querySelectorAll("input, select");
@@ -311,7 +312,7 @@ app.registerExtension({
                 document.body.appendChild(dialog);
                 
                 // 启用拖拽功能
-                makeDialogDraggable(content, title);
+                makeDialogDraggable(content, header);
                 
                 // 点击背景关闭
                 dialog.onclick = (e) => {
@@ -324,25 +325,27 @@ app.registerExtension({
             // 创建设置区域
             nodeType.prototype.createSettingsSection = function(parent, title, params, fields) {
                 const section = document.createElement("div");
-                section.style.cssText = "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 4px;";
+                section.className = "ma-card";
+                section.style.cssText = "display: flex; flex-direction: column; gap: 10px;";
                 
                 const sectionTitle = document.createElement("h3");
                 sectionTitle.textContent = title;
-                sectionTitle.style.cssText = "margin: 0 0 15px 0; color: #4CAF50; font-size: 16px;";
+                sectionTitle.style.cssText = "margin: 0 0 4px 0; color: #f4f4f5; font-size: 13px; font-weight: 600; letter-spacing: -0.01em;";
                 section.appendChild(sectionTitle);
                 
                 fields.forEach(field => {
                     const row = document.createElement("div");
-                    row.style.cssText = "margin-bottom: 10px; display: flex; align-items: center; gap: 10px;";
+                    row.style.cssText = "display: flex; align-items: center; gap: 12px;";
                     
                     const label = document.createElement("label");
                     label.textContent = field.label + ":";
-                    label.style.cssText = "min-width: 150px; color: #ccc;";
+                    label.style.cssText = "min-width: 145px; color: #a1a1aa; font-size: 12.5px; font-weight: 500;";
                     row.appendChild(label);
                     
                     let input;
                     if (field.type === "select") {
                         input = document.createElement("select");
+                        input.className = "ma-select";
                         field.options.forEach(opt => {
                             const option = document.createElement("option");
                             option.value = opt;
@@ -352,6 +355,7 @@ app.registerExtension({
                         });
                     } else if (field.type === "number") {
                         input = document.createElement("input");
+                        input.className = "ma-input";
                         input.type = "number";
                         input.min = field.min;
                         input.max = field.max;
@@ -359,12 +363,13 @@ app.registerExtension({
                         input.value = params[field.key];
                     } else {
                         input = document.createElement("input");
+                        input.className = "ma-input";
                         input.type = "text";
                         input.value = params[field.key];
                     }
                     
                     input.dataset.key = field.key;
-                    input.style.cssText = "flex: 1; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;";
+                    input.style.flex = "1";
                     row.appendChild(input);
                     
                     section.appendChild(row);
@@ -432,63 +437,29 @@ app.registerExtension({
             nodeType.prototype.showHelpDialog = function() {
                 // 创建弹窗容器
                 const dialog = document.createElement("div");
-                dialog.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0, 0, 0, 0.7);
-                    z-index: 10000;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
+                dialog.className = "ma-modal-backdrop";
                 
                 const content = document.createElement("div");
+                content.className = "ma-modal";
                 content.style.cssText = `
                     position: fixed;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    background: #2d2d2d;
-                    border-radius: 8px;
-                    width: 900px;
-                    max-width: 90vw;
+                    width: 880px;
+                    max-width: 92vw;
                     height: 600px;
-                    max-height: 90vh;
-                    display: flex;
-                    flex-direction: column;
-                    color: #fff;
-                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-                    overflow: hidden;
+                    max-height: 88vh;
                 `;
                 
                 // 标题栏
                 const title = document.createElement("div");
-                title.style.cssText = `
-                    padding: 15px 20px;
-                    background: #1e1e1e;
-                    border-bottom: 1px solid #444;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    cursor: move;
-                    user-select: none;
-                `;
-                title.innerHTML = `<b style="color: #4CAF50; font-size: 18px;">${t("📖 Magic Cache 使用说明")}</b>`;
+                title.className = "ma-modal-header";
+                title.innerHTML = `<b class="ma-modal-title">${t("📖 Magic Cache 使用说明")}</b>`;
                 
                 const closeBtn = document.createElement("button");
+                closeBtn.className = "ma-modal-close";
                 closeBtn.textContent = "✕";
-                closeBtn.style.cssText = `
-                    background: none;
-                    border: none;
-                    color: #fff;
-                    cursor: pointer;
-                    font-size: 20px;
-                    padding: 0 10px;
-                    line-height: 1;
-                `;
                 closeBtn.onclick = () => document.body.removeChild(dialog);
                 title.appendChild(closeBtn);
                 content.appendChild(title);
@@ -499,26 +470,20 @@ app.registerExtension({
                     flex: 1;
                     display: flex;
                     overflow: hidden;
+                    min-height: 0;
                 `;
                 
                 // 左侧切换面板
                 const sidebar = document.createElement("div");
-                sidebar.style.cssText = `
-                    width: 200px;
-                    background: #1a1a1a;
-                    border-right: 1px solid #444;
-                    display: flex;
-                    flex-direction: column;
-                    padding: 10px 0;
-                `;
+                sidebar.className = "ma-sidebar";
+                sidebar.style.width = "195px";
                 
                 // 说明内容区域
                 const mainContent = document.createElement("div");
+                mainContent.className = "ma-modal-body";
                 mainContent.style.cssText = `
                     flex: 1;
-                    overflow-y: auto;
-                    padding: 20px;
-                    background: #2d2d2d;
+                    padding: 22px 26px;
                 `;
                 
                 // 当前选中的模式
@@ -528,38 +493,13 @@ app.registerExtension({
                 const createTabButton = (mode, label) => {
                     const btn = document.createElement("button");
                     btn.textContent = label;
-                    btn.style.cssText = `
-                        width: 100%;
-                        padding: 12px 20px;
-                        text-align: left;
-                        background: ${currentMode === mode ? "#2a2a2a" : "transparent"};
-                        border: none;
-                        border-left: 3px solid ${currentMode === mode ? "#4CAF50" : "transparent"};
-                        color: ${currentMode === mode ? "#4CAF50" : "#bbb"};
-                        cursor: pointer;
-                        font-weight: ${currentMode === mode ? "bold" : "normal"};
-                        transition: all 0.2s;
-                    `;
-                    btn.onmouseover = () => {
-                        if (currentMode !== mode) {
-                            btn.style.background = "#222";
-                        }
-                    };
-                    btn.onmouseout = () => {
-                        if (currentMode !== mode) {
-                            btn.style.background = "transparent";
-                        }
-                    };
+                    btn.className = "ma-sidebar-item" + (currentMode === mode ? " active" : "");
                     btn.onclick = () => {
                         currentMode = mode;
                         updateContent();
-                        // 更新所有按钮样式
                         sidebar.querySelectorAll("button").forEach((b, idx) => {
                             const btnMode = idx === 0 ? "TeaCache" : idx === 1 ? "FBCache" : "Both";
-                            b.style.background = currentMode === btnMode ? "#2a2a2a" : "transparent";
-                            b.style.borderLeft = currentMode === btnMode ? "3px solid #4CAF50" : "3px solid transparent";
-                            b.style.color = currentMode === btnMode ? "#4CAF50" : "#bbb";
-                            b.style.fontWeight = currentMode === btnMode ? "bold" : "normal";
+                            b.className = "ma-sidebar-item" + (currentMode === btnMode ? " active" : "");
                         });
                     };
                     return btn;
@@ -576,63 +516,68 @@ app.registerExtension({
                 // 更新内容函数
                 const updateContent = () => {
                     let html = "";
+                    const codeTag = `background: #09090b; border: 1px solid rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; color: #a5b4fc; font-family: var(--ma-font-mono); font-size: 12px;`;
+                    const h2Style = `color: #f4f4f5; font-size: 16px; font-weight: 600; margin-top: 0; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 10px;`;
+                    const h3Style = `color: #818cf8; font-size: 13.5px; font-weight: 600; margin: 18px 0 6px;`;
+                    const pStyle = `color: #a1a1aa; margin: 8px 0; font-size: 13px;`;
+                    const ulStyle = `color: #d4d4d8; margin: 8px 0; padding-left: 20px; font-size: 13px;`;
                     
                     if (currentMode === "TeaCache") {
                         html = `
-                            <div style="line-height: 1.8;">
-                                <h2 style="color: #4CAF50; margin-top: 0; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">
+                            <div style="line-height: 1.75;">
+                                <h2 style="${h2Style}">
                                     ${t("☕ TeaCache 模式说明")}
                                 </h2>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("工作原理")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
+                                <h3 style="${h3Style}">${t("工作原理")}</h3>
+                                <p style="${pStyle}">
                                     ${t("TeaCache 通过监测相邻时间步的输出差异，当差异低于设定阈值时，跳过计算并复用前一步的缓存结果，从而实现推理加速。")}
                                 </p>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("核心机制")}</h3>
-                                <ul style="color: #ddd; margin: 10px 0; padding-left: 20px;">
+                                <h3 style="${h3Style}">${t("核心机制")}</h3>
+                                <ul style="${ulStyle}">
                                     <li>${t("监测相邻时间步的输出波动（相对 L1 距离）")}</li>
-                                    <li>${t("当波动低于")} <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">rel_l1_thresh</code> ${t("阈值时，跳过计算")}</li>
+                                    <li>${t("当波动低于")} <code style="${codeTag}">rel_l1_thresh</code> ${t("阈值时，跳过计算")}</li>
                                     <li>${t("复用前一步的缓存结果，减少计算量")}</li>
                                     <li>${t("早期步骤稳定性高，更适合缓存复用")}</li>
                                 </ul>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("主要参数")}</h3>
-                                <ul style="color: #ddd; margin: 10px 0; padding-left: 20px;">
-                                    <li><strong>rel_l1_thresh</strong>：${t("相对 L1 阈值，控制缓存激进程度（值越大越激进，速度越快但可能影响质量）")}</li>
-                                    <li><strong>start_percent / end_percent</strong>：${t("缓存应用的步数范围（0.0-1.0）")}</li>
-                                    <li><strong>cache_device</strong>：${t("缓存存储设备（cuda 更快但占用显存，cpu 不占显存但稍慢）")}</li>
-                                    <li><strong>model_type</strong>：${t("模型类型，需与使用的模型匹配")}</li>
+                                <h3 style="${h3Style}">${t("主要参数")}</h3>
+                                <ul style="${ulStyle}">
+                                    <li><strong style="color:#f4f4f5;">rel_l1_thresh</strong>：${t("相对 L1 阈值，控制缓存激进程度（值越大越激进，速度越快但可能影响质量）")}</li>
+                                    <li><strong style="color:#f4f4f5;">start_percent / end_percent</strong>：${t("缓存应用的步数范围（0.0-1.0）")}</li>
+                                    <li><strong style="color:#f4f4f5;">cache_device</strong>：${t("缓存存储设备（cuda 更快但占用显存，cpu 不占显存但稍慢）")}</li>
+                                    <li><strong style="color:#f4f4f5;">model_type</strong>：${t("模型类型，需与使用的模型匹配")}</li>
                                 </ul>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("性能表现")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
-                                    ${t("通常可实现")} <strong style="color: #4CAF50;">1.5x - 3x</strong> ${t("的推理加速，具体取决于模型类型和参数设置。")}
-                                    ${t("对于 FLUX 模型，推荐")} <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">rel_l1_thresh=0.4</code>${t("，可实现约 2x 加速。")}
+                                <h3 style="${h3Style}">${t("性能表现")}</h3>
+                                <p style="${pStyle}">
+                                    ${t("通常可实现")} <strong style="color: #34d399;">1.5x - 3x</strong> ${t("的推理加速，具体取决于模型类型和参数设置。")}
+                                    ${t("对于 FLUX 模型，推荐")} <code style="${codeTag}">rel_l1_thresh=0.4</code>${t("，可实现约 2x 加速。")}
                                 </p>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("支持的模型")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
+                                <h3 style="${h3Style}">${t("支持的模型")}</h3>
+                                <p style="${pStyle}">
                                     ${t("FLUX、PuLID-FLUX、FLUX-Kontext、HiDream-I1、Lumina-Image-2.0、HunyuanVideo、LTX-Video、CogVideoX、Wan2.1、Krea2、SDXL、SD1.5 等。")}
                                 </p>
                                 
-                                <div style="margin-top: 15px; padding: 12px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #ff9800;">
-                                    <p style="margin: 0 0 8px 0; color: #ff9800; font-weight: bold; font-size: 14px;">
+                                <div style="margin-top: 16px; padding: 12px 14px; background: #18181c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #f59e0b;">
+                                    <p style="margin: 0 0 8px 0; color: #fbbf24; font-weight: 600; font-size: 13px;">
                                         ${t("✨ 本节点新增支持（已修改源项目代码）：")}
                                     </p>
-                                    <ul style="margin: 0; padding-left: 20px; color: #ddd; font-size: 14px;">
-                                        <li><strong style="color: #4CAF50;">${t("flux2klein")}</strong> - ${t("已支持")}</li>
-                                        <li><strong style="color: #4CAF50;">${t("最新 Anima 模型")}</strong> - ${t("已支持")}</li>
-                                        <li><strong style="color: #4CAF50;">${t("Krea2")}</strong> - ${t("已支持")}</li>
-                                        <li><strong style="color: #4CAF50;">${t("SDXL 模型")}</strong> - ${t(" - 已支持（原项目不支持）")}</li>
+                                    <ul style="margin: 0; padding-left: 20px; color: #d4d4d8; font-size: 12.5px;">
+                                        <li><strong style="color: #34d399;">${t("flux2klein")}</strong> - ${t("已支持")}</li>
+                                        <li><strong style="color: #34d399;">${t("最新 Anima 模型")}</strong> - ${t("已支持")}</li>
+                                        <li><strong style="color: #34d399;">${t("Krea2")}</strong> - ${t("已支持")}</li>
+                                        <li><strong style="color: #34d399;">${t("SDXL 模型")}</strong> - ${t(" - 已支持（原项目不支持）")}</li>
                                     </ul>
                                 </div>
                                 
-                                <div style="margin-top: 30px; padding: 15px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #4CAF50;">
-                                    <p style="margin: 0; color: #bbb; font-size: 14px;">
-                                        <strong style="color: #4CAF50;">${t("原作者：")}</strong>
+                                <div style="margin-top: 16px; padding: 12px 14px; background: #18181c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #6366f1;">
+                                    <p style="margin: 0; color: #a1a1aa; font-size: 12.5px;">
+                                        <strong style="color: #818cf8;">${t("原作者：")}</strong>
                                         <a href="https://github.com/welltop-cn/ComfyUI-TeaCache" target="_blank" 
-                                           style="color: #6ab7ff; text-decoration: none;">
+                                           style="color: #a5b4fc; text-decoration: none;">
                                             https://github.com/welltop-cn/ComfyUI-TeaCache
                                         </a>
                                     </p>
@@ -641,58 +586,58 @@ app.registerExtension({
                         `;
                     } else if (currentMode === "FBCache") {
                         html = `
-                            <div style="line-height: 1.8;">
-                                <h2 style="color: #4CAF50; margin-top: 0; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">
+                            <div style="line-height: 1.75;">
+                                <h2 style="${h2Style}">
                                     ${t("⚡ FBCache 模式说明")}
                                 </h2>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("工作原理")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
+                                <h3 style="${h3Style}">${t("工作原理")}</h3>
+                                <p style="${pStyle}">
                                     ${t("FBCache（Feature Block Cache）通过在指定步数范围内重用前一步的特征表示，跳过重复的特征计算，从而加速推理过程。")}
                                 </p>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("核心机制")}</h3>
-                                <ul style="color: #ddd; margin: 10px 0; padding-left: 20px;">
-                                    <li>${t("在")} <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">start</code> ${t("到")} <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">end</code> ${t("步数范围内启用特征缓存")}</li>
-                                    <li>${t("通过")} <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">residual_diff_threshold</code> ${t("控制特征重用灵敏度")}</li>
+                                <h3 style="${h3Style}">${t("核心机制")}</h3>
+                                <ul style="${ulStyle}">
+                                    <li>${t("在")} <code style="${codeTag}">start</code> ${t("到")} <code style="${codeTag}">end</code> ${t("步数范围内启用特征缓存")}</li>
+                                    <li>${t("通过")} <code style="${codeTag}">residual_diff_threshold</code> ${t("控制特征重用灵敏度")}</li>
                                     <li>${t("当残差差异低于阈值时，重用前一步的特征块")}</li>
-                                    <li>${t("支持限制最大连续缓存命中次数（")}<code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">max_consecutive_cache_hits</code>${t("）")}</li>
+                                    <li>${t("支持限制最大连续缓存命中次数（")}<code style="${codeTag}">max_consecutive_cache_hits</code>${t("）")}</li>
                                 </ul>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("主要参数")}</h3>
-                                <ul style="color: #ddd; margin: 10px 0; padding-left: 20px;">
-                                    <li><strong>residual_diff_threshold</strong>：${t("残差差异阈值，控制特征重用灵敏度（值越大越激进）")}</li>
-                                    <li><strong>start / end</strong>：${t("缓存应用的步数范围（0.0-1.0）")}</li>
-                                    <li><strong>max_consecutive_cache_hits</strong>：${t("最大连续缓存命中次数（-1 表示无限制）")}</li>
-                                    <li><strong>object_to_patch</strong>：${t("要打补丁的对象名称（通常为 \"diffusion_model\"）")}</li>
+                                <h3 style="${h3Style}">${t("主要参数")}</h3>
+                                <ul style="${ulStyle}">
+                                    <li><strong style="color:#f4f4f5;">residual_diff_threshold</strong>：${t("残差差异阈值，控制特征重用灵敏度（值越大越激进）")}</li>
+                                    <li><strong style="color:#f4f4f5;">start / end</strong>：${t("缓存应用的步数范围（0.0-1.0）")}</li>
+                                    <li><strong style="color:#f4f4f5;">max_consecutive_cache_hits</strong>：${t("最大连续缓存命中次数（-1 表示无限制）")}</li>
+                                    <li><strong style="color:#f4f4f5;">object_to_patch</strong>：${t("要打补丁的对象名称（通常为 \"diffusion_model\"）")}</li>
                                 </ul>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("性能表现")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
+                                <h3 style="${h3Style}">${t("性能表现")}</h3>
+                                <p style="${pStyle}">
                                     ${t("在合适的参数设置下，FBCache 可以实现显著的推理加速，特别是在中间步骤（如 20%-85% 范围）效果最佳。")}
                                 </p>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("支持的模型")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
+                                <h3 style="${h3Style}">${t("支持的模型")}</h3>
+                                <p style="${pStyle}">
                                     ${t("支持 UNetModel（SDXL、SD3.5 等）、Flux、Krea2、LTXV、HunyuanVideo、Anima 等基于 Transformer 块的模型。")}
                                 </p>
                                 
-                                <div style="margin-top: 15px; padding: 12px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #ff9800;">
-                                    <p style="margin: 0 0 8px 0; color: #ff9800; font-weight: bold; font-size: 14px;">
+                                <div style="margin-top: 16px; padding: 12px 14px; background: #18181c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #f59e0b;">
+                                    <p style="margin: 0 0 8px 0; color: #fbbf24; font-weight: 600; font-size: 13px;">
                                         ${t("✨ 本节点新增支持（已修改源项目代码）：")}
                                     </p>
-                                    <ul style="margin: 0; padding-left: 20px; color: #ddd; font-size: 14px;">
-                                        <li><strong style="color: #4CAF50;">${t("flux2klein")}</strong> - ${t("已支持")}</li>
-                                        <li><strong style="color: #4CAF50;">${t("最新 Anima 模型")}</strong> - ${t("已支持")}</li>
-                                        <li><strong style="color: #4CAF50;">${t("Krea2")}</strong> - ${t("已支持")}</li>
+                                    <ul style="margin: 0; padding-left: 20px; color: #d4d4d8; font-size: 12.5px;">
+                                        <li><strong style="color: #34d399;">${t("flux2klein")}</strong> - ${t("已支持")}</li>
+                                        <li><strong style="color: #34d399;">${t("最新 Anima 模型")}</strong> - ${t("已支持")}</li>
+                                        <li><strong style="color: #34d399;">${t("Krea2")}</strong> - ${t("已支持")}</li>
                                     </ul>
                                 </div>
                                 
-                                <div style="margin-top: 30px; padding: 15px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #4CAF50;">
-                                    <p style="margin: 0; color: #bbb; font-size: 14px;">
-                                        <strong style="color: #4CAF50;">${t("原作者：")}</strong>
+                                <div style="margin-top: 16px; padding: 12px 14px; background: #18181c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #6366f1;">
+                                    <p style="margin: 0; color: #a1a1aa; font-size: 12.5px;">
+                                        <strong style="color: #818cf8;">${t("原作者：")}</strong>
                                         <a href="https://github.com/chengzeyi/Comfy-WaveSpeed" target="_blank" 
-                                           style="color: #6ab7ff; text-decoration: none;">
+                                           style="color: #a5b4fc; text-decoration: none;">
                                             https://github.com/chengzeyi/Comfy-WaveSpeed
                                         </a>
                                     </p>
@@ -701,61 +646,61 @@ app.registerExtension({
                         `;
                     } else if (currentMode === "Both") {
                         html = `
-                            <div style="line-height: 1.8;">
-                                <h2 style="color: #4CAF50; margin-top: 0; border-bottom: 2px solid #4CAF50; padding-bottom: 10px;">
+                            <div style="line-height: 1.75;">
+                                <h2 style="${h2Style}">
                                     ${t("🚀 Both 模式（组合模式）说明")}
                                 </h2>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("工作原理")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
+                                <h3 style="${h3Style}">${t("工作原理")}</h3>
+                                <p style="${pStyle}">
                                     ${t("Both 模式同时启用 TeaCache 和 FBCache 两种缓存优化技术，通过组合使用实现更快的推理速度。")}
                                 </p>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("核心机制")}</h3>
-                                <ul style="color: #ddd; margin: 10px 0; padding-left: 20px;">
+                                <h3 style="${h3Style}">${t("核心机制")}</h3>
+                                <ul style="${ulStyle}">
                                     <li>${t("两层缓存逻辑按顺序组合执行")}</li>
-                                    <li>${t("TeaCache 包装在 FBCache 外层，形成嵌套结构：")}<code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">TeaCache(FBCache(原始UNet))</code></li>
+                                    <li>${t("TeaCache 包装在 FBCache 外层，形成嵌套结构：")}<code style="${codeTag}">TeaCache(FBCache(原始UNet))</code></li>
                                     <li>${t("在设定的步数范围内，两种缓存优化同时生效")}</li>
                                     <li>${t("TeaCache 负责时间步级别的缓存跳过，FBCache 负责特征块级别的缓存重用")}</li>
                                 </ul>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("执行流程")}</h3>
-                                <ol style="color: #ddd; margin: 10px 0; padding-left: 20px;">
+                                <h3 style="${h3Style}">${t("执行流程")}</h3>
+                                <ol style="${ulStyle}">
                                     <li>${t("首先应用 FBCache，在模型上设置特征块缓存逻辑")}</li>
                                     <li>${t("然后应用 TeaCache，将时间步缓存逻辑包装在外层")}</li>
                                     <li>${t("推理时，先经过 TeaCache 的时间步判断，再经过 FBCache 的特征块判断")}</li>
                                     <li>${t("两层缓存都会在各自设定的范围内生效")}</li>
                                 </ol>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("性能表现")}</h3>
-                                <p style="color: #ddd; margin: 10px 0;">
-                                    ${t("相比单独使用任意一种方法，组合模式通常提供")}<strong style="color: #4CAF50;">${t("更快的推理速度")}</strong>。
+                                <h3 style="${h3Style}">${t("性能表现")}</h3>
+                                <p style="${pStyle}">
+                                    ${t("相比单独使用任意一种方法，组合模式通常提供")}<strong style="color: #34d399;">${t("更快的推理速度")}</strong>。
                                     ${t("两种优化技术互补，可以在保持较好视觉质量的前提下实现更高的加速比。")}
                                 </p>
                                 
-                                <h3 style="color: #6ab7ff; margin-top: 20px;">${t("参数设置建议")}</h3>
-                                <ul style="color: #ddd; margin: 10px 0; padding-left: 20px;">
-                                    <li>TeaCache ${t("的")} <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">rel_l1_thresh</code> ${t("和")} FBCache ${t("的")} <code style="background: #1a1a1a; padding: 2px 6px; border-radius: 3px;">residual_diff_threshold</code> ${t("可以分别调整")}</li>
+                                <h3 style="${h3Style}">${t("参数设置建议")}</h3>
+                                <ul style="${ulStyle}">
+                                    <li>TeaCache ${t("的")} <code style="${codeTag}">rel_l1_thresh</code> ${t("和")} FBCache ${t("的")} <code style="${codeTag}">residual_diff_threshold</code> ${t("可以分别调整")}</li>
                                     <li>${t("建议先单独测试两种模式的效果，再组合使用")}</li>
                                     <li>${t("如果图像质量下降，可以适当降低阈值参数")}</li>
                                     <li>${t("两种模式的步数范围（start/end）可以设置不同，实现更精细的控制")}</li>
                                 </ul>
                                 
-                                <div style="margin-top: 30px; padding: 15px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #ff9800;">
-                                    <p style="margin: 0; color: #bbb; font-size: 14px;">
-                                        <strong style="color: #ff9800;">${t("✨ 新功能：")}</strong>${t("这是 Magic Cache 节点的新增功能，将两种缓存优化技术整合在一起，方便用户一键启用组合优化。")}
+                                <div style="margin-top: 16px; padding: 12px 14px; background: #18181c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #f59e0b;">
+                                    <p style="margin: 0; color: #a1a1aa; font-size: 12.5px;">
+                                        <strong style="color: #fbbf24;">${t("✨ 新功能：")}</strong>${t("这是 Magic Cache 节点的新增功能，将两种缓存优化技术整合在一起，方便用户一键启用组合优化。")}
                                     </p>
                                 </div>
                                 
-                                <div style="margin-top: 20px; padding: 15px; background: #1a1a1a; border-radius: 5px; border-left: 4px solid #4CAF50;">
-                                    <p style="margin: 0; color: #bbb; font-size: 14px;">
-                                        <strong style="color: #4CAF50;">${t("参考来源：")}</strong><br>
+                                <div style="margin-top: 14px; padding: 12px 14px; background: #18181c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #6366f1;">
+                                    <p style="margin: 0; color: #a1a1aa; font-size: 12.5px;">
+                                        <strong style="color: #818cf8;">${t("参考来源：")}</strong><br>
                                         TeaCache: <a href="https://github.com/welltop-cn/ComfyUI-TeaCache" target="_blank" 
-                                           style="color: #6ab7ff; text-decoration: none;">
+                                           style="color: #a5b4fc; text-decoration: none;">
                                             https://github.com/welltop-cn/ComfyUI-TeaCache
                                         </a><br>
                                         FBCache: <a href="https://github.com/chengzeyi/Comfy-WaveSpeed" target="_blank" 
-                                           style="color: #6ab7ff; text-decoration: none;">
+                                           style="color: #a5b4fc; text-decoration: none;">
                                             https://github.com/chengzeyi/Comfy-WaveSpeed
                                         </a>
                                     </p>

@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import "./magic_ui_shared.js";
 
 const NODE_NAME = "MagicLogicCompute";
 
@@ -173,21 +174,20 @@ function makeDialogDraggable(dialog, titleBar) {
 // --- 逻辑编辑器弹窗 ---
 function showLogicModal(node) {
     const dialog = document.createElement("div");
+    dialog.className = "ma-modal";
     dialog.style.cssText = `
         position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        width: 950px; height: 800px; background: #222; color: #ddd;
-        border: 1px solid #444; box-shadow: 0 0 20px rgba(0,0,0,0.8);
-        z-index: 10000; display: flex; flex-direction: column; font-family: monospace;
-        border-radius: 8px; overflow: hidden;
+        width: 960px; max-width: 94vw; height: 760px; max-height: 90vh;
+        z-index: 10000;
     `;
 
     const header = document.createElement("div");
-    header.style.cssText = "padding: 10px; background: #333; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; cursor: move; user-select: none;";
-    header.innerHTML = `<b>🧠 逻辑编辑器 (Magic Script)</b>`;
+    header.className = "ma-modal-header";
+    header.innerHTML = `<b class="ma-modal-title">🧠 逻辑编辑器 (Magic Script)</b>`;
 
     const closeBtn = document.createElement("button"); 
     closeBtn.textContent="✕";
-    closeBtn.style.cssText="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;padding:0 10px;";
+    closeBtn.className="ma-modal-close";
     preventConflict(closeBtn); 
     closeBtn.onclick=()=>document.body.removeChild(dialog);
     header.appendChild(closeBtn); 
@@ -197,43 +197,46 @@ function showLogicModal(node) {
     makeDialogDraggable(dialog, header);
 
     const body = document.createElement("div");
-    body.style.cssText = "flex: 1; display: flex; overflow: hidden;";
+    body.style.cssText = "flex: 1; display: flex; overflow: hidden; min-height: 0;";
     dialog.appendChild(body);
 
     const sidebar = document.createElement("div");
-    sidebar.style.cssText = "width: 220px; background: #1a1a1a; border-right: 1px solid #444; overflow-y: auto; padding: 10px;";
+    sidebar.className = "ma-sidebar";
+    sidebar.style.width = "220px";
     preventConflict(sidebar); body.appendChild(sidebar);
 
     const editor = document.createElement("div");
-    editor.style.cssText = "flex: 1; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #222;";
+    editor.style.cssText = "flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 12px; background: #111114; min-width: 0;";
     preventConflict(editor); body.appendChild(editor);
 
     const nameInput = document.createElement("input");
+    nameInput.className = "ma-input";
     nameInput.placeholder = "逻辑名称 (例如: My Upscale)";
-    nameInput.style.cssText = "padding: 8px; background: #111; color: #fff; border: 1px solid #444; border-radius: 4px;";
     preventConflict(nameInput); editor.appendChild(nameInput);
 
     // --- 📖 终极教程区域 ---
     const tutorialDiv = document.createElement("div");
-    tutorialDiv.style.cssText = "background: #2a2a2a; border-radius: 4px; border: 1px solid #444; overflow: hidden;";
+    tutorialDiv.style.cssText = "background: #18181c; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); overflow: hidden; flex-shrink: 0;";
     preventConflict(tutorialDiv);
     
     const tutHeader = document.createElement("div");
     tutHeader.textContent = "📖 魔法脚本使用手册 (点击展开/收起)";
-    tutHeader.style.cssText = "padding: 10px; background: #333; cursor: pointer; font-size: 13px; color: #4caf50; font-weight: bold;";
+    tutHeader.style.cssText = "padding: 10px 14px; background: #141418; cursor: pointer; font-size: 12.5px; color: #818cf8; font-weight: 600; transition: background 0.14s;";
+    tutHeader.onmouseenter = () => tutHeader.style.background = "#1c1c22";
+    tutHeader.onmouseleave = () => tutHeader.style.background = "#141418";
     tutorialDiv.appendChild(tutHeader);
 
     const tutContent = document.createElement("div");
-    tutContent.style.cssText = "padding: 15px; font-size: 13px; color: #ccc; display: none; line-height: 1.6; max-height: 350px; overflow-y: auto; background: #1e1e1e;";
+    tutContent.style.cssText = "padding: 15px 16px; font-size: 12.5px; color: #d4d4d8; display: none; line-height: 1.65; max-height: 320px; overflow-y: auto; background: #0d0d10; border-top: 1px solid rgba(255,255,255,0.06);";
     
     // 教程 HTML 内容
     tutContent.innerHTML = `
         <style>
-            .hl { color: #ff9800; background: #333; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
-            .var { color: #64b5f6; font-weight: bold; }
-            .section { margin-top: 15px; margin-bottom: 5px; font-weight: bold; color: #fff; border-bottom: 1px solid #444; padding-bottom: 4px;}
-            .comment { color: #777; font-style: italic; }
-            .tag { display:inline-block; border:1px solid #555; padding:0 4px; border-radius:4px; font-size:12px; margin-right:5px;}
+            .hl { color: #fbbf24; background: #18181c; border: 1px solid rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; font-family: var(--ma-font-mono); font-size: 12px; }
+            .var { color: #818cf8; font-weight: 600; font-family: var(--ma-font-mono); }
+            .section { margin-top: 14px; margin-bottom: 6px; font-weight: 600; color: #f4f4f5; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 4px;}
+            .comment { color: #71717a; font-style: italic; }
+            .tag { display:inline-block; background:#18181c; border:1px solid rgba(255,255,255,0.12); color:#a1a1aa; padding:0 6px; border-radius:4px; font-size:11px; margin-right:6px;}
         </style>
 
         <div class="section" style="margin-top:0">1. 数据来源 (哪里来的 w 和 h?)</div>
@@ -285,21 +288,23 @@ function showLogicModal(node) {
     };
 
     const codeArea = document.createElement("textarea");
+    codeArea.className = "ma-textarea ma-textarea-code";
     codeArea.placeholder = "在这里编写您的逻辑... (变量 w,h 会根据连接的图片自动获取)";
-    codeArea.style.cssText = "flex: 1; padding: 10px; background: #111; color: #0f0; border: 1px solid #444; border-radius: 4px; line-height: 1.5; font-family: monospace; font-size: 14px;";
+    codeArea.style.cssText = "flex: 1; padding: 12px; color: #34d399; resize: none;";
     preventConflict(codeArea); editor.appendChild(codeArea);
 
     const btnRow = document.createElement("div");
-    btnRow.style.cssText = "display: flex; gap: 10px; justify-content: flex-end;";
+    btnRow.style.cssText = "display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0;";
     
     const delBtn = document.createElement("button");
     delBtn.textContent = "🗑️ 删除";
-    delBtn.style.cssText = "padding: 8px 15px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;";
+    delBtn.className = "ma-btn ma-btn-danger";
+    delBtn.style.display = "none";
     preventConflict(delBtn);
 
     const saveBtn = document.createElement("button");
     saveBtn.textContent = "💾 保存 / 新增";
-    saveBtn.style.cssText = "padding: 8px 15px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;";
+    saveBtn.className = "ma-btn ma-btn-primary";
     preventConflict(saveBtn);
 
     btnRow.appendChild(delBtn); btnRow.appendChild(saveBtn); editor.appendChild(btnRow);
@@ -307,25 +312,30 @@ function showLogicModal(node) {
     const renderList = () => {
         sidebar.innerHTML = "";
         const keys = Object.keys(node.logic_data).sort();
-        const addDiv = document.createElement("div");
+        const addDiv = document.createElement("button");
+        addDiv.type = "button";
         addDiv.textContent = "+ 新建逻辑";
-        addDiv.style.cssText = "padding: 8px; cursor: pointer; color: #2196F3; font-weight: bold; border-bottom: 1px solid #333; margin-bottom: 5px;";
+        addDiv.className = "ma-btn ma-btn-primary";
+        addDiv.style.cssText = "width: 100%; margin-bottom: 6px; justify-content: center;";
         addDiv.onclick = () => {
             nameInput.value = ""; codeArea.value = ""; 
             nameInput.disabled = false; delBtn.style.display = "none";
+            sidebar.querySelectorAll(".ma-sidebar-item").forEach(el => el.classList.remove("active"));
         };
         sidebar.appendChild(addDiv);
 
         keys.forEach(key => {
-            const item = document.createElement("div");
+            const item = document.createElement("button");
+            item.type = "button";
             item.textContent = key;
-            item.style.cssText = "padding: 8px; cursor: pointer; color: #ddd; border-bottom: 1px solid #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
-            item.onmouseover = () => item.style.background = "#333";
-            item.onmouseout = () => item.style.background = "transparent";
+            item.className = "ma-sidebar-item" + (nameInput.value === key ? " active" : "");
+            item.style.cssText = "white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;";
             item.onclick = () => {
                 nameInput.value = key;
                 codeArea.value = node.logic_data[key];
-                delBtn.style.display = "block";
+                delBtn.style.display = "inline-flex";
+                sidebar.querySelectorAll(".ma-sidebar-item").forEach(el => el.classList.remove("active"));
+                item.classList.add("active");
             };
             sidebar.appendChild(item);
         });

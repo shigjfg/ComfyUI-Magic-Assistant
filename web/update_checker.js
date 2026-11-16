@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import "./magic_ui_shared.js";
 
 /**
  * Magic Assistant Update Checker
@@ -79,78 +80,30 @@ function showUpdateModal(updateData) {
     
     // 创建弹窗
     const overlay = document.createElement("div");
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 10000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    `;
+    overlay.className = "ma-modal-backdrop";
     
     const dialog = document.createElement("div");
+    dialog.className = "ma-modal ma-modal-static-anim";
     dialog.style.cssText = `
-        background: #2d2d2d;
-        border-radius: 8px;
-        padding: 0;
-        max-width: 700px;
-        max-height: 80vh;
+        max-width: 680px;
+        max-height: 82vh;
         width: 90%;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
     `;
     
     // 标题栏（可拖拽）
     const titleBar = document.createElement("div");
-    titleBar.style.cssText = `
-        background: #1e1e1e;
-        padding: 16px 20px;
-        border-bottom: 1px solid #444;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        cursor: move;
-        user-select: none;
-    `;
+    titleBar.className = "ma-modal-header";
     
     const title = document.createElement("div");
-    title.style.cssText = `
-        font-size: 18px;
-        font-weight: bold;
-        color: #fff;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    `;
+    title.className = "ma-modal-title";
     title.innerHTML = `
         <span>🔮</span>
         <span>Magic Assistant Update Available / 有新版本可用</span>
     `;
     
     const closeBtn = document.createElement("button");
-    closeBtn.innerHTML = "×";
-    closeBtn.style.cssText = `
-        background: none;
-        border: none;
-        color: #fff;
-        font-size: 24px;
-        cursor: pointer;
-        padding: 0;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 4px;
-    `;
-    closeBtn.onmouseover = () => closeBtn.style.background = "#444";
-    closeBtn.onmouseout = () => closeBtn.style.background = "none";
+    closeBtn.className = "ma-modal-close";
+    closeBtn.innerHTML = "✕";
     closeBtn.onclick = () => {
         document.body.removeChild(overlay);
     };
@@ -160,29 +113,26 @@ function showUpdateModal(updateData) {
     
     // 内容区域
     const content = document.createElement("div");
+    content.className = "ma-modal-body";
     content.style.cssText = `
         padding: 20px;
-        overflow-y: auto;
-        flex: 1;
-        color: #ddd;
-        line-height: 1.6;
+        color: #d4d4d8;
+        line-height: 1.65;
     `;
     
     // 版本信息
     const versionInfo = document.createElement("div");
+    versionInfo.className = "ma-card";
     versionInfo.style.cssText = `
-        margin-bottom: 20px;
-        padding: 12px;
-        background: #1e1e1e;
-        border-radius: 6px;
-        border-left: 4px solid #4CAF50;
+        margin-bottom: 18px;
+        border-left: 3px solid #6366f1;
     `;
     versionInfo.innerHTML = `
-        <div style="margin-bottom: 8px;">
-            <strong>Current Version / 当前版本:</strong> <span style="color: #4CAF50;">v${current_version}</span>
+        <div style="margin-bottom: 6px;">
+            <strong style="color:#a1a1aa;">Current Version / 当前版本:</strong> <span style="color: #34d399; font-family: var(--ma-font-mono); font-weight: 600;">v${current_version}</span>
         </div>
         <div>
-            <strong>Latest Version / 最新版本:</strong> <span style="color: #ff9800;">v${latest_version}</span>
+            <strong style="color:#a1a1aa;">Latest Version / 最新版本:</strong> <span style="color: #fbbf24; font-family: var(--ma-font-mono); font-weight: 600;">v${latest_version}</span>
         </div>
     `;
     content.appendChild(versionInfo);
@@ -190,10 +140,10 @@ function showUpdateModal(updateData) {
     // 更新信息
     if (update_info) {
         const updateSection = document.createElement("div");
-        updateSection.style.cssText = "margin-bottom: 20px;";
+        updateSection.style.cssText = "margin-bottom: 8px;";
         updateSection.innerHTML = `
-            <h3 style="color: #fff; margin-bottom: 12px; font-size: 16px;">Update Information / 更新内容:</h3>
-            <div style="background: #1e1e1e; padding: 16px; border-radius: 6px; max-height: 300px; overflow-y: auto;">
+            <h3 style="color: #f4f4f5; margin: 0 0 10px 0; font-size: 14px; font-weight: 600;">Update Information / 更新内容:</h3>
+            <div style="background: #09090b; border: 1px solid rgba(255,255,255,0.08); padding: 16px; border-radius: 8px; max-height: 300px; overflow-y: auto; font-size: 12.5px;">
                 ${parseUpdateInfo(update_info)}
             </div>
         `;
@@ -202,15 +152,8 @@ function showUpdateModal(updateData) {
     
     // 底部按钮区域
     const footer = document.createElement("div");
-    footer.style.cssText = `
-        padding: 16px 20px;
-        border-top: 1px solid #444;
-        background: #1e1e1e;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-    `;
+    footer.className = "ma-modal-footer";
+    footer.style.justifyContent = "space-between";
     
     // 忽略版本复选框
     const ignoreCheckboxContainer = document.createElement("label");
@@ -218,35 +161,24 @@ function showUpdateModal(updateData) {
         display: flex;
         align-items: center;
         gap: 8px;
-        color: #ddd;
+        color: #a1a1aa;
         cursor: pointer;
-        font-size: 14px;
+        font-size: 12.5px;
     `;
     const ignoreCheckbox = document.createElement("input");
     ignoreCheckbox.type = "checkbox";
-    ignoreCheckbox.style.cssText = "width: 18px; height: 18px; cursor: pointer;";
+    ignoreCheckbox.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
     ignoreCheckboxContainer.appendChild(ignoreCheckbox);
     ignoreCheckboxContainer.appendChild(document.createTextNode("Ignore this version / 忽略此版本"));
     
     // 按钮组
     const buttonGroup = document.createElement("div");
-    buttonGroup.style.cssText = "display: flex; gap: 12px;";
+    buttonGroup.style.cssText = "display: flex; gap: 10px;";
     
     // GitHub 地址按钮
     const githubBtn = document.createElement("button");
     githubBtn.textContent = "GitHub 地址 / GitHub Repository";
-    githubBtn.style.cssText = `
-        padding: 8px 16px;
-        background: #4CAF50;
-        border: none;
-        border-radius: 4px;
-        color: #fff;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: bold;
-    `;
-    githubBtn.onmouseover = () => githubBtn.style.background = "#45a049";
-    githubBtn.onmouseout = () => githubBtn.style.background = "#4CAF50";
+    githubBtn.className = "ma-btn ma-btn-primary";
     githubBtn.onclick = () => {
         window.open("https://github.com/shigjfg/ComfyUI-Magic-Assistant", "_blank");
     };
@@ -254,17 +186,7 @@ function showUpdateModal(updateData) {
     // 关闭按钮
     const cancelBtn = document.createElement("button");
     cancelBtn.textContent = "自行在manager中手动更新 / Update manually in Manager";
-    cancelBtn.style.cssText = `
-        padding: 8px 16px;
-        background: #666;
-        border: none;
-        border-radius: 4px;
-        color: #fff;
-        cursor: pointer;
-        font-size: 14px;
-    `;
-    cancelBtn.onmouseover = () => cancelBtn.style.background = "#777";
-    cancelBtn.onmouseout = () => cancelBtn.style.background = "#666";
+    cancelBtn.className = "ma-btn";
     cancelBtn.onclick = () => {
         // 如果勾选了忽略，保存忽略的版本
         if (ignoreCheckbox.checked) {

@@ -1,0 +1,458 @@
+/* ==========================================================================
+   Magic Assistant — Minimal High-End Dark UI Design System
+   Inspired by Linear / Vercel / ComfyUI Modern Dark Theme
+   ========================================================================== */
+
+:root {
+    --ma-bg-backdrop: rgba(4, 4, 7, 0.72);
+    --ma-bg-0: #09090b;
+    --ma-bg-1: #111114;
+    --ma-bg-2: #18181c;
+    --ma-bg-3: #222228;
+    --ma-bg-hover: #27272e;
+    --ma-bg-active: #2e2e38;
+    --ma-border-subtle: rgba(255, 255, 255, 0.07);
+    --ma-border: rgba(255, 255, 255, 0.11);
+    --ma-border-strong: rgba(255, 255, 255, 0.18);
+    --ma-border-focus: #6366f1;
+    --ma-text-1: #f4f4f5;
+    --ma-text-2: #a1a1aa;
+    --ma-text-3: #71717a;
+    --ma-accent: #6366f1;
+    --ma-accent-hover: #818cf8;
+    --ma-accent-soft: rgba(99, 102, 241, 0.14);
+    --ma-accent-border: rgba(99, 102, 241, 0.42);
+    --ma-success: #10b981;
+    --ma-success-soft: rgba(16, 185, 129, 0.14);
+    --ma-success-border: rgba(16, 185, 129, 0.38);
+    --ma-warning: #f59e0b;
+    --ma-warning-soft: rgba(245, 158, 11, 0.14);
+    --ma-warning-border: rgba(245, 158, 11, 0.38);
+    --ma-danger: #ef4444;
+    --ma-danger-soft: rgba(239, 68, 68, 0.14);
+    --ma-danger-border: rgba(239, 68, 68, 0.4);
+    --ma-radius-sm: 6px;
+    --ma-radius-md: 8px;
+    --ma-radius-lg: 12px;
+    --ma-radius-xl: 14px;
+    --ma-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.78), 0 4px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    --ma-shadow-float: 0 12px 32px rgba(0, 0, 0, 0.68), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --ma-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --ma-font-mono: "JetBrains Mono", "Cascadia Code", "Consolas", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Backdrop Overlay */
+.ma-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: var(--ma-bg-backdrop);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: ma-fade-in 0.14s ease-out;
+}
+
+/* Base Modal Window */
+.ma-modal {
+    background: var(--ma-bg-1);
+    color: var(--ma-text-1);
+    border: 1px solid var(--ma-border);
+    border-radius: var(--ma-radius-xl);
+    box-shadow: var(--ma-shadow-modal);
+    font-family: var(--ma-font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+    color-scheme: dark;
+    animation: ma-modal-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ma-modal *,
+.ma-modal *::before,
+.ma-modal *::after {
+    box-sizing: border-box;
+}
+
+@keyframes ma-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes ma-modal-pop {
+    from { opacity: 0.6; transform: translate(-50%, -48%) scale(0.98); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.ma-modal-static-anim {
+    animation: ma-fade-in 0.14s ease-out !important;
+}
+
+/* Scrollbar Styling */
+.ma-modal ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.ma-modal ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ma-modal ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+}
+
+.ma-modal ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.26);
+}
+
+/* Modal Header */
+.ma-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 18px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%), var(--ma-bg-1);
+    border-bottom: 1px solid var(--ma-border-subtle);
+    cursor: move;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.ma-modal-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ma-text-1);
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+/* Close Button */
+.ma-modal-close {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--ma-radius-sm);
+    background: transparent;
+    color: var(--ma-text-2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    line-height: 1;
+    transition: all 0.14s ease;
+    flex-shrink: 0;
+}
+
+.ma-modal-close:hover {
+    background: var(--ma-bg-3);
+    border-color: var(--ma-border);
+    color: var(--ma-text-1);
+}
+
+/* Modal Body & Footer */
+.ma-modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px;
+    background: var(--ma-bg-1);
+}
+
+.ma-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 18px;
+    background: var(--ma-bg-0);
+    border-top: 1px solid var(--ma-border-subtle);
+    flex-shrink: 0;
+}
+
+/* Sidebar Navigation */
+.ma-sidebar {
+    background: var(--ma-bg-0);
+    border-right: 1px solid var(--ma-border-subtle);
+    display: flex;
+    flex-direction: column;
+    padding: 10px 8px;
+    gap: 4px;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.ma-sidebar-item {
+    width: 100%;
+    padding: 8px 12px;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ma-radius-md);
+    color: var(--ma-text-2);
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 500;
+    transition: all 0.14s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ma-sidebar-item:hover {
+    background: var(--ma-bg-2);
+    color: var(--ma-text-1);
+}
+
+.ma-sidebar-item.active {
+    background: var(--ma-bg-3);
+    border-color: var(--ma-border);
+    color: var(--ma-text-1);
+    font-weight: 600;
+    box-shadow: inset 2px 0 0 var(--ma-accent);
+}
+
+/* Horizontal Tab Bar */
+.ma-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    background: var(--ma-bg-0);
+    border-bottom: 1px solid var(--ma-border-subtle);
+    flex-shrink: 0;
+}
+
+.ma-tab-btn {
+    padding: 6px 14px;
+    border-radius: var(--ma-radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ma-text-2);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.14s ease;
+}
+
+.ma-tab-btn:hover {
+    color: var(--ma-text-1);
+    background: var(--ma-bg-2);
+}
+
+.ma-tab-btn.active {
+    color: var(--ma-text-1);
+    background: var(--ma-bg-3);
+    border-color: var(--ma-border);
+    font-weight: 600;
+}
+
+/* Inputs, Selects, Textareas */
+.ma-input,
+.ma-select,
+.ma-textarea {
+    width: 100%;
+    padding: 7px 11px;
+    background: var(--ma-bg-0);
+    color: var(--ma-text-1);
+    border: 1px solid var(--ma-border);
+    border-radius: var(--ma-radius-sm);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.45;
+    outline: none;
+    transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+
+.ma-input:hover,
+.ma-select:hover,
+.ma-textarea:hover {
+    border-color: var(--ma-border-strong);
+}
+
+.ma-input:focus,
+.ma-select:focus,
+.ma-textarea:focus {
+    border-color: var(--ma-border-focus);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.22);
+    background: #0c0c0f;
+}
+
+.ma-input::placeholder,
+.ma-textarea::placeholder {
+    color: var(--ma-text-3);
+}
+
+.ma-select option {
+    background: var(--ma-bg-2);
+    color: var(--ma-text-1);
+}
+
+.ma-textarea-code {
+    font-family: var(--ma-font-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+}
+
+/* Buttons */
+.ma-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--ma-radius-sm);
+    border: 1px solid var(--ma-border);
+    background: var(--ma-bg-2);
+    color: var(--ma-text-1);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.ma-btn:hover:not(:disabled) {
+    background: var(--ma-bg-hover);
+    border-color: var(--ma-border-strong);
+}
+
+.ma-btn:active:not(:disabled) {
+    transform: translateY(0.5px);
+}
+
+.ma-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.ma-btn-primary {
+    background: var(--ma-accent);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.ma-btn-primary:hover:not(:disabled) {
+    background: var(--ma-accent-hover);
+    border-color: rgba(255, 255, 255, 0.24);
+}
+
+.ma-btn-success {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: var(--ma-success-border);
+    color: #34d399;
+    font-weight: 600;
+}
+
+.ma-btn-success:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.26);
+    border-color: #10b981;
+    color: #6ee7b7;
+}
+
+.ma-btn-danger {
+    background: var(--ma-danger-soft);
+    border-color: var(--ma-danger-border);
+    color: #f87171;
+    font-weight: 500;
+}
+
+.ma-btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.24);
+    border-color: #ef4444;
+    color: #fca5a5;
+}
+
+.ma-btn-warning {
+    background: var(--ma-warning-soft);
+    border-color: var(--ma-warning-border);
+    color: #fbbf24;
+    font-weight: 500;
+}
+
+.ma-btn-warning:hover:not(:disabled) {
+    background: rgba(245, 158, 11, 0.24);
+    border-color: #f59e0b;
+    color: #fcd34d;
+}
+
+.ma-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ma-text-2);
+}
+
+.ma-btn-ghost:hover:not(:disabled) {
+    background: var(--ma-bg-2);
+    border-color: var(--ma-border-subtle);
+    color: var(--ma-text-1);
+}
+
+/* Cards & Sections */
+.ma-card {
+    background: var(--ma-bg-2);
+    border: 1px solid var(--ma-border-subtle);
+    border-radius: var(--ma-radius-md);
+    padding: 14px 16px;
+}
+
+.ma-section-label {
+    display: block;
+    color: var(--ma-text-2);
+    font-size: 11.5px;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+/* Pill / Chip buttons */
+.ma-pill {
+    padding: 4px 10px;
+    background: var(--ma-bg-2);
+    color: var(--ma-text-2);
+    border: 1px solid var(--ma-border);
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.14s ease;
+}
+
+.ma-pill:hover {
+    background: var(--ma-bg-hover);
+    color: var(--ma-text-1);
+    border-color: var(--ma-border-strong);
+}
+
+/* List row items */
+.ma-list-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--ma-bg-2);
+    border: 1px solid var(--ma-border-subtle);
+    border-radius: var(--ma-radius-sm);
+    transition: all 0.12s ease;
+}
+
+.ma-list-row:hover {
+    background: var(--ma-bg-hover);
+    border-color: var(--ma-border);
+}

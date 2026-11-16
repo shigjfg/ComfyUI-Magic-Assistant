@@ -21,6 +21,7 @@ import asyncio
 import functools
 import math
 import stat
+import sqlite3
 import importlib.util
 from datetime import datetime, timezone
 from collections import defaultdict
@@ -51,6 +52,312 @@ identity_matches = _lora_state_module.identity_matches
 model_lock = _lora_state_module.model_lock
 field_state = _lora_state_module.field_state
 
+_lm_spec = importlib.util.spec_from_file_location(
+    __name__ + "_lm_sidecar", os.path.join(os.path.dirname(os.path.dirname(__file__)), "core", "lm_sidecar.py")
+)
+_lm_module = importlib.util.module_from_spec(_lm_spec)
+_lm_spec.loader.exec_module(_lm_module)
+lm_sidecar = _lm_module
+
+_LM_META_CACHE = {}
+
+
+def _lm_meta(lora_path):
+    """读 LM sidecar，按 mtime+size 缓存；文件变动后自动失效。"""
+    if not lora_path:
+        return None
+    path = lm_sidecar.sidecar_path(lora_path)
+    try:
+        st = os.stat(path)
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        _LM_META_CACHE.pop(path, None)
+        return None
+    hit = _LM_META_CACHE.get(path)
+    if hit and hit[0] == key:
+        return hit[1]
+    meta = lm_sidecar.read(lora_path)
+    if len(_LM_META_CACHE) > 4096:
+        _LM_META_CACHE.clear()
+    _LM_META_CACHE[path] = (key, meta)
+    return meta
+
+
+def _lm_info(lora_path):
+    meta = _lm_meta(lora_path)
+    if not meta:
+        return {}
+    return {
+        "title": lm_sidecar.title(meta),
+        "notes": lm_sidecar.notes(meta),
+        "trigger_words": lm_sidecar.trigger_words(meta),
+        "base_model": str(meta.get("base_model") or "").strip(),
+    }
+
+
+def _resolve_lora_preview(lora_path):
+    """预览图优先级：magicloradate 子目录 > LM sidecar > 同目录。"""
+    if not lora_path:
+        return None
+    dirname = os.path.dirname(lora_path)
+    stem = os.path.splitext(os.path.basename(lora_path))[0]
+    sub_dir = os.path.join(dirname, "magicloradate")
+    if os.path.isdir(sub_dir):
+        for ext in _LORA_PREVIEW_SUFFIXES:
+            candidate = os.path.join(sub_dir, stem + ext)
+            if os.path.isfile(candidate):
+                return candidate
+    meta = _lm_meta(lora_path)
+    if meta:
+        path = lm_sidecar.preview_path(lora_path, meta)
+        if path:
+            return path
+    for ext in _LORA_PREVIEW_SUFFIXES:
+        candidate = os.path.join(dirname, stem + ext)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+_LM_DB_CACHE = {"key": None, "map": {}}
+
+
+def _lm_db_path():
+    base = os.path.join(os.environ.get("LOCALAPPDATA", ""), "ComfyUI-LoRA-Manager")
+    for rel in (("cache", "model", "comfyui.sqlite"), ("model_cache", "comfyui.sqlite")):
+        path = os.path.join(base, *rel)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def _norm_db_path(path):
+    return str(path or "").replace("\\", "/").strip().lower()
+
+
+def _lm_db_map():
+    """只读读取 Lora-Manager 的模型库（file_path -> 记录），按文件 mtime 缓存。"""
+    path = _lm_db_path()
+    if not path:
+        return {}
+    try:
+        st = os.stat(path)
+        key = (path, st.st_mtime_ns, st.st_size)
+    except OSError:
+        return {}
+    if _LM_DB_CACHE.get("key") == key:
+        return _LM_DB_CACHE["map"]
+    rows = {}
+    try:
+        con = sqlite3.connect("file:" + path.replace("\\", "/") + "?mode=ro", uri=True)
+        con.row_factory = sqlite3.Row
+        for r in con.execute("SELECT file_path, file_name, civitai_id, civitai_model_id, civitai_name, "
+                             "trained_words, preview_url, base_model FROM models"):
+            rows[_norm_db_path(r["file_path"])] = dict(r)
+        con.close()
+    except Exception as e:
+        print(f"⚠️ [MagicPowerLora] 读取 Lora-Manager 数据库失败: {e}")
+        return {}
+    _LM_DB_CACHE["key"] = key
+    _LM_DB_CACHE["map"] = rows
+    return rows
+
+
+def _lm_db_row(lora_path):
+    return _lm_db_map().get(_norm_db_path(lora_path)) if lora_path else None
+
+
+def _lm_server_port():
+    try:
+        port = getattr(PromptServer.instance, "port", None)
+        if port:
+            return int(port)
+    except Exception:
+        pass
+    return 8188
+
+
+def _lm_push_preview(lora_path, preview_path):
+    """用 Lora-Manager 的 replace-preview 接口把已存在的预览登记进它的库。"""
+    try:
+        if not preview_path or not os.path.isfile(preview_path):
+            return False
+        if os.path.getsize(preview_path) <= 0:
+            return False
+        with open(preview_path, "rb") as f:
+            data = f.read()
+        ext = os.path.splitext(preview_path)[1].lower()
+        ctype = {".png": "image/png", ".webp": "image/webp"}.get(ext, "image/jpeg")
+        boundary = "----maPreview" + hashlib.md5((lora_path + str(time.time())).encode("utf-8")).hexdigest()
+        crlf = b"\r\n"
+        parts = []
+        parts.append(("--" + boundary).encode() + crlf)
+        parts.append(
+            ('Content-Disposition: form-data; name="preview_file"; filename="'
+             + os.path.basename(preview_path) + '"').encode() + crlf
+            + ("Content-Type: " + ctype).encode() + crlf + crlf
+        )
+        parts.append(data)
+        parts.append(crlf + ("--" + boundary).encode() + crlf)
+        parts.append(b'Content-Disposition: form-data; name="model_path"' + crlf + crlf)
+        parts.append(str(os.path.abspath(lora_path)).replace("\\", "/").encode())
+        parts.append(crlf + ("--" + boundary).encode() + crlf)
+        parts.append(b'Content-Disposition: form-data; name="nsfw_level"' + crlf + crlf + b"0")
+        parts.append(crlf + ("--" + boundary + "--").encode() + crlf)
+        body = b"".join(parts)
+        url = f"http://127.0.0.1:{_lm_server_port()}/api/lm/loras/replace-preview"
+        req = urllib.request.Request(url, data=body, headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Content-Length": str(len(body)),
+        })
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            ok = resp.status == 200
+        _LM_DB_CACHE["key"] = None
+        _LM_META_CACHE.pop(lm_sidecar.sidecar_path(lora_path), None)
+        return ok
+    except Exception as e:
+        print(f"⚠️ [MagicPowerLora] 登记预览到 Lora-Manager 失败: {e}")
+        return False
+
+
+def _lm_preview_usable(url):
+    """LM 库里的 preview_url 是否指向一个能显示的文件。"""
+    url = str(url or "").strip()
+    if not url:
+        return False
+    if url.lower().startswith(("http://", "https://")):
+        return True
+    return os.path.isfile(url.replace("/", os.sep))
+
+
+def _lm_ensure_preview(lora_path):
+    """LM 库里没有可用预览但本地同目录有图时，把图登记给 LM，让它正常显示。"""
+    row = _lm_db_row(lora_path)
+    if not row or _lm_preview_usable(row.get("preview_url")):
+        return False
+    preview = lm_sidecar.preview_path(lora_path, _lm_meta(lora_path))
+    if not preview:
+        stem = os.path.splitext(lora_path)[0]
+        for ext in _LORA_PREVIEW_SUFFIXES:
+            if os.path.isfile(stem + ext):
+                preview = stem + ext
+                break
+    if not preview:
+        return False
+    return _lm_push_preview(lora_path, preview)
+
+
+def _lm_manager_file_path(lora_path):
+    """LM 缓存里的 file_path 用正斜杠；反斜杠会被判定为「不在缓存中」。"""
+    return os.path.abspath(lora_path).replace("\\", "/")
+
+
+_LM_FETCH_ROUTE = {"checked": False, "available": False}
+
+
+def _lm_fetch_metadata_via_manager(lora_path):
+    """交给 Lora-Manager 自己的下载链处理，让它的 sidecar / 预览 / 数据库 / 缓存一起更新。"""
+    if _LM_FETCH_ROUTE["available"] is False and _LM_FETCH_ROUTE["checked"]:
+        return False, "Lora-Manager 下载接口不可用"
+    body = json.dumps({"file_path": _lm_manager_file_path(lora_path)}).encode("utf-8")
+    url = f"http://127.0.0.1:{_lm_server_port()}/api/lm/loras/fetch-civitai"
+    req = urllib.request.Request(url, data=body, headers={
+        "Content-Type": "application/json",
+        "Content-Length": str(len(body)),
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            if resp.status != 200:
+                return False, f"Lora-Manager 返回 HTTP {resp.status}"
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8")[:200]
+        except Exception:
+            pass
+        if e.code == 404 and "not found in cache" not in detail.lower():
+            _LM_FETCH_ROUTE.update(checked=True, available=False)
+        return False, f"Lora-Manager 下载接口不可用（HTTP {e.code}）{detail}"
+    except Exception as e:
+        _LM_FETCH_ROUTE.update(checked=True, available=False)
+        return False, f"调用 Lora-Manager 下载接口失败: {e}"
+    _LM_FETCH_ROUTE.update(checked=True, available=True)
+    if not isinstance(payload, dict):
+        return False, "Lora-Manager 返回格式异常"
+    _LM_DB_CACHE["key"] = None
+    _LM_META_CACHE.pop(lm_sidecar.sidecar_path(lora_path), None)
+    if payload.get("success"):
+        return True, ""
+    return False, str(payload.get("error") or "Lora-Manager 未找到来源信息")
+
+
+def _lm_is_complete(lora_path, meta=None):
+    """Lora-Manager 是否会正常显示：数据库里有可用的预览图。"""
+    row = _lm_db_row(lora_path)
+    if row:
+        return _lm_preview_usable(row.get("preview_url"))
+    meta = _lm_meta(lora_path) if meta is None else meta
+    if not isinstance(meta, dict):
+        return False
+    cv = meta.get("civitai") if isinstance(meta.get("civitai"), dict) else {}
+    if not (cv.get("id") and str(meta.get("model_name") or "").strip()):
+        return False
+    try:
+        return bool(lm_sidecar.preview_path(lora_path, meta))
+    except Exception:
+        return False
+
+
+def _lm_provided_kinds(lora_path):
+    """检查 LM sidecar 是否已提供触发词与预览图。"""
+    if not lora_path:
+        return {"txt": False, "image": False}
+    meta = _lm_meta(lora_path)
+    if not isinstance(meta, dict):
+        return {"txt": False, "image": False}
+    has_txt = bool(lm_sidecar.trigger_words(meta))
+    has_img = bool(_lm_is_complete(lora_path, meta) or lm_sidecar.preview_path(lora_path, meta))
+    return {"txt": has_txt, "image": has_img}
+
+
+def _cached_sha256(lora_path):
+    """复用 Lora-Manager sidecar / <名>.sha256 里的完整哈希，避免重复读取整个模型文件。"""
+    try:
+        meta = _lm_meta(lora_path)
+        value = str((meta or {}).get("sha256") or "").strip().lower()
+        if re.fullmatch(r"[0-9a-f]{64}", value):
+            return value
+    except Exception:
+        pass
+    try:
+        sidecar = os.path.splitext(lora_path)[0] + ".sha256"
+        if os.path.isfile(sidecar):
+            with open(sidecar, "r", encoding="utf-8", errors="ignore") as f:
+                value = (f.read().strip().split() or [""])[0].lower()
+            if re.fullmatch(r"[0-9a-f]{64}", value):
+                return value
+    except Exception:
+        pass
+    return None
+
+
+def _lora_preview_relative(preview_path, lora_filename):
+    """把绝对预览路径转成相对 lora 根目录的路径，兼容子文件夹预览。"""
+    real = os.path.realpath(preview_path)
+    try:
+        roots = folder_paths.get_folder_paths("loras")
+    except Exception:
+        roots = []
+    for root in roots:
+        r = os.path.realpath(root)
+        try:
+            if os.path.commonpath((real, r)) == r:
+                return os.path.relpath(real, r).replace("\\", "/")
+        except ValueError:
+            continue
+    return os.path.join(os.path.dirname(lora_filename), os.path.basename(preview_path)).replace("\\", "/")
+
 # Anima 2.9B（40 层）LoRA 内存层转换：仅在「加载」时把旧 28 层 Anima LoRA 的键名重映射，
 # 不写盘、不改动原文件与缓存（详见 nodes/anima_lora_remap.py）。
 # 模块缺失时整体降级为「不转换」，保证节点仍可正常工作。
@@ -66,26 +373,14 @@ try:
     )
     ANIMA_REMAP_AVAILABLE = True
 except Exception:
-    try:
-        from anima_lora_remap import (
-            remap_lora_state_dict_safe,
-            is_anima_40_model,
-            is_anima_model,
-            STATUS_CONVERTED,
-            STATUS_ALREADY_40,
-            STATUS_NOT_ANIMA,
-            STATUS_ERROR,
-        )
-        ANIMA_REMAP_AVAILABLE = True
-    except Exception:
-        ANIMA_REMAP_AVAILABLE = False
-        remap_lora_state_dict_safe = None
-        is_anima_40_model = lambda model: False  # noqa: E731
-        is_anima_model = lambda model: False  # noqa: E731
-        STATUS_CONVERTED = "converted"
-        STATUS_ALREADY_40 = "already_40"
-        STATUS_NOT_ANIMA = "not_anima"
-        STATUS_ERROR = "error"
+    ANIMA_REMAP_AVAILABLE = False
+    remap_lora_state_dict_safe = None
+    is_anima_40_model = lambda model: False  # noqa: E731
+    is_anima_model = lambda model: False  # noqa: E731
+    STATUS_CONVERTED = "converted"
+    STATUS_ALREADY_40 = "already_40"
+    STATUS_NOT_ANIMA = "not_anima"
+    STATUS_ERROR = "error"
 
 
 # --- LoRA 串（lora_chain）格式：仅本加载器识别，用于节点间传递 LoRA 列表 ---
@@ -122,6 +417,66 @@ def _serialize_lora_chain(items):
     return {MAGIC_LORA_CHAIN_KEY: True, "loras": items}
 
 
+def _lora_enabled(item):
+    """后端唯一的「是否加载」判定，与前端 mplLoraEnabled 保持一致：缺省视为启用。"""
+    if not isinstance(item, dict):
+        return False
+    value = item.get("enabled", True)
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "0", "no", "off", "")
+    return bool(value)
+
+
+def _trigger_enabled(item):
+    """触发词独立开关（triggerEnabled），缺省视为开启，兼容旧工作流。"""
+    value = item.get("triggerEnabled", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "0", "no", "off")
+    return value is not False
+
+
+CHAIN_LOADER_TYPES = ("MagicPowerLoraLoader", "MAPowerLoraLoader")
+
+
+def _chain_continues_to_loader(prompt, node_id):
+    """从完整 prompt 判断本节点的 lora串输出 是否交给了一个「会加载」的下游。
+
+    只有真正接手加载的节点才算链继续：下游要么也接了本节点的 model 输出（说明在链上），
+    要么本身就是 LoRA 加载器。PreviewAny 之类的调试节点也会吃 lora串输出，但不会加载，
+    把它们算成下游会让本节点静默跳过加载。
+    返回 None 表示无法判断（缺 prompt / node_id），调用方回退到前端注入值。
+    """
+    if not isinstance(prompt, dict) or node_id in (None, ""):
+        return None
+    own = str(node_id)
+    own_node = prompt.get(own) or {}
+    chain_out_idx = 2 if own_node.get("class_type") == "MAPowerLoraLoader" else 4
+    chain_consumers, model_consumers = [], set()
+    for other_id, node in prompt.items():
+        inputs = (node or {}).get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        for value in inputs.values():
+            if not isinstance(value, list) or len(value) < 2 or str(value[0]) != own:
+                continue
+            if value[1] == chain_out_idx:
+                chain_consumers.append(str(other_id))
+            elif value[1] == 0:
+                model_consumers.add(str(other_id))
+    for consumer_id in chain_consumers:
+        if consumer_id in model_consumers:
+            return True
+        if ((prompt.get(consumer_id) or {}).get("class_type")) in CHAIN_LOADER_TYPES:
+            return True
+    return False
+
+
 class MagicPowerLoraLoader:
     @classmethod
     def VALIDATE_INPUTS(cls, lora_stack):
@@ -140,7 +495,7 @@ class MagicPowerLoraLoader:
         if isinstance(stack_data, dict):
             items = []
             for folder in stack_data.get("folders", []):
-                if isinstance(folder, dict):
+                if isinstance(folder, dict) and not folder.get("ignored"):
                     items.extend(folder.get("loras") or [])
             items.extend(stack_data.get("loras") or [])
         elif isinstance(stack_data, list):
@@ -150,7 +505,7 @@ class MagicPowerLoraLoader:
 
         missing = []
         for item in items:
-            if not isinstance(item, dict) or not item.get("enabled", True):
+            if not isinstance(item, dict) or not _lora_enabled(item):
                 continue
             name = str(item.get("name") or "").strip()
             if not name:
@@ -186,6 +541,8 @@ class MagicPowerLoraLoader:
                 "adaptive_mode": ("BOOLEAN", {"default": False}),  # 自适应模式：自动检测模型类型选择合适模式
                 "anima_mode": ("STRING", {"default": "none"}),  # Anima 2.9B 模式：none 关闭 / anima 启用（与 Klein/SDNQ 一致，单值开关；仅标准加载路径生效，内存暂存不写盘）
                 "lora串输出已连接": ("BOOLEAN", {"default": True}),  # 由前端根据图连接注入：未连接=链末端
+                "unique_id": "UNIQUE_ID",  # 仅用于日志/链末端自检：同图有多个加载器时可分辨是谁
+                "prompt": "PROMPT",  # 用于后端自检链末端，不依赖前端注入
             }
         }
 
@@ -199,6 +556,10 @@ class MagicPowerLoraLoader:
     # 键: (lora_path, weight) 元组
     # 值: 加载的 lora dict
     _loaded_loras = {}
+
+    # 类级别缓存：LoRA 元数据（与官方 load_torch_file(return_metadata=True) 一致）
+    # 键: (lora_path, weight) 元组，值: lora_metadata（dict 或 None）
+    _lora_metadata_cache = {}
 
     # 类级别：本次执行使用的 LoRA 缓存键集合（用于执行后清理未使用的缓存）
     # 使用类属性确保在多次运行间正确追踪
@@ -221,11 +582,18 @@ class MagicPowerLoraLoader:
         cls._mark_lora_used(cache_key)  # 记录本次使用了该 LoRA
         if cache_key in cls._loaded_loras:
             print(f"   💾 [Cache Hit] {os.path.basename(lora_path)} (weight={weight})")
-            return cls._loaded_loras[cache_key]
+            return cls._loaded_loras[cache_key], cls._lora_metadata_cache.get(cache_key)
         
-        lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+        try:
+            lora, lora_metadata = comfy.utils.load_torch_file(
+                lora_path, safe_load=True, return_metadata=True
+            )
+        except TypeError:
+            lora = comfy.utils.load_torch_file(lora_path, safe_load=True)
+            lora_metadata = None
         cls._loaded_loras[cache_key] = lora
-        return lora
+        cls._lora_metadata_cache[cache_key] = lora_metadata
+        return lora, lora_metadata
 
     @classmethod
     def _cleanup_unused_lora_cache(cls):
@@ -256,6 +624,7 @@ class MagicPowerLoraLoader:
                 # 清除字典中的引用
                 lora_data.clear()
             del cls._loaded_loras[cache_key]
+            cls._lora_metadata_cache.pop(cache_key, None)
         
         print(f"   🧹 [Cache Cleanup] 已释放 {cleared_count} 个未使用 LoRA 的缓存")
         cls._current_run_used_keys = set()  # 重置追踪状态
@@ -265,11 +634,13 @@ class MagicPowerLoraLoader:
         """清除缓存，可指定清除特定路径或全部"""
         if lora_path is None:
             cls._loaded_loras.clear()
+            cls._lora_metadata_cache.clear()
         else:
             # 清除与该路径相关的所有缓存项
             keys_to_remove = [k for k in cls._loaded_loras if k[0] == lora_path]
             for k in keys_to_remove:
                 del cls._loaded_loras[k]
+                cls._lora_metadata_cache.pop(k, None)
 
     # 检测模型是否为 SDNQ 模型（DiffusionPipeline 或 Magic SDNQ Loader 的 wrapper）
     @staticmethod
@@ -315,28 +686,7 @@ class MagicPowerLoraLoader:
         try:
             lora_path = folder_paths.get_full_path("loras", lora_name)
             if lora_path is None: return None
-            
-            dirname = os.path.dirname(lora_path)
-            filename_no_ext = os.path.splitext(os.path.basename(lora_path))[0]
-            base_name = os.path.splitext(lora_path)[0]
-            
-            # 图片扩展名候选列表
-            candidates = _LORA_PREVIEW_SUFFIXES
-            
-            # 1. 优先检查 magicloradate 子目录（参考zml代码的zml子目录优先逻辑）
-            magicloradate_dir = os.path.join(dirname, "magicloradate")
-            if os.path.isdir(magicloradate_dir):
-                for ext in candidates:
-                    sub_path = os.path.join(magicloradate_dir, filename_no_ext + ext)
-                    if os.path.exists(sub_path):
-                        return sub_path
-            
-            # 2. 如果magicloradate子目录没有，检查同层级
-            for ext in candidates:
-                if os.path.exists(base_name + ext):
-                    return base_name + ext
-                
-            return None
+            return _resolve_lora_preview(lora_path)
         except Exception:
             return None
 
@@ -370,6 +720,8 @@ class MagicPowerLoraLoader:
         #
         # 注意：开启后会打印较多日志，建议仅在排障期间开启。
         debug_enabled = os.getenv("MAGIC_ASSISTANT_DEBUG", "").strip().lower() in {"1", "true", "yes", "y", "on"}
+        node_id = kwargs.get("unique_id")
+        node_tag = f"节点#{node_id} " if node_id not in (None, "") else ""
 
         if debug_enabled:
             # [DEBUG] 打印 adaptive_mode 的原始输入值，用于排查模式判断错误
@@ -394,9 +746,17 @@ class MagicPowerLoraLoader:
         if debug_enabled:
             print(f"[DEBUG] adaptive_mode 转换后: {adaptive_mode}", flush=True)
 
-        # 前端根据图连接注入 lora串输出已连接；未注入时默认 True（视为非末端，不加载，避免误加载）
-        lora_output_connected = kwargs.get("lora串输出已连接", True)
-        chain_end = not lora_output_connected
+        # 链末端判定：优先用后端从 prompt 自检（不依赖前端脚本是否加载/是否被缓存旧版），
+        # 自检不可用时才回退到前端注入的字段（未注入时默认 True＝非末端，避免误加载）。
+        derived_chain_end = _chain_continues_to_loader(kwargs.get("prompt"), node_id)
+        if derived_chain_end is None:
+            lora_output_connected = kwargs.get("lora串输出已连接", True)
+            chain_end = not lora_output_connected
+        else:
+            chain_end = not derived_chain_end
+            frontend_flag = kwargs.get("lora串输出已连接", None)
+            if frontend_flag is not None and bool(frontend_flag) == bool(chain_end):
+                print(f"⚠️ [MagicPowerLora] {node_tag}链末端判定与前端注入不一致（后端按图判定 chain_end={chain_end}），已采用后端结果")
 
         # ---------- 解析 lora串接受（MAGIC_LORA_CHAIN 类型，由 ComfyUI 自动传递）----------
         lora_chain_in = kwargs.get("lora串接受", None)
@@ -418,12 +778,12 @@ class MagicPowerLoraLoader:
         if isinstance(stack_data, dict):
             if "folders" in stack_data:
                 for f in stack_data["folders"]:
-                    if f.get("loras"):
-                        own_items.extend([l for l in f["loras"] if l.get("enabled", True)])
+                    if isinstance(f, dict) and not f.get("ignored") and f.get("loras"):
+                        own_items.extend([l for l in f["loras"] if _lora_enabled(l)])
             if "loras" in stack_data:
-                own_items.extend([l for l in stack_data["loras"] if l.get("enabled", True)])
+                own_items.extend([l for l in stack_data["loras"] if _lora_enabled(l)])
         elif isinstance(stack_data, list):
-            own_items = [l for l in stack_data if l.get("enabled", True)]
+            own_items = [l for l in stack_data if _lora_enabled(l)]
 
         # 合并顺序：本节点 + 接收到的（本节点在上，接收到的在下）
         merged = own_items + received_list
@@ -435,12 +795,13 @@ class MagicPowerLoraLoader:
 
         # ---------- 非链末端：只传出 lora 串，不加载；不要求 model/clip ----------
         if not chain_end:
+            print(f"⏭️ [MagicPowerLora] {node_tag}非链末端：本节点 {len(own_items)} 个 LoRA 不在此节点加载，交由下游加载器处理（共 {len(merged)} 个）")
             placeholder_preview = [torch.zeros((1, 64, 64, 3), dtype=torch.float32, device="cpu")]
             return (model, clip, placeholder_preview, "", lora_chain_out)
 
-        # ---------- 链末端：必须连接 model 和 clip ----------
-        if model is None or clip is None:
-            raise RuntimeError("链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model 和 clip。")
+        # ---------- 链末端：必须连接 model（clip 可选，未连 clip 时仅应用到 model） ----------
+        if model is None:
+            raise RuntimeError("链末端节点（未将 lora串输出 接到其他加载器的节点）必须连接 model。")
         out_model = model
         out_clip = clip
         active_tags = []
@@ -550,9 +911,6 @@ class MagicPowerLoraLoader:
                 klein_loras.append((lora_path, weight, lora_name, item))
                 print(f"   [Klein] Queued: {lora_name} (strength={weight})")
 
-                if "tags" in item and item.get("tags"):
-                    active_tags.append(str(item["tags"]))
-
                 img_path = self.get_preview_path(lora_name)
                 if img_path:
                     try:
@@ -564,6 +922,7 @@ class MagicPowerLoraLoader:
                         pass
 
             if wrapper is not None and klein_loras:
+                klein_applied = False
                 try:
                     if len(klein_loras) == 1:
                         lora_path, weight, lora_name, _item = klein_loras[0]
@@ -580,8 +939,13 @@ class MagicPowerLoraLoader:
                         wrapper.update_lora_params(composed_lora, strength=1.0)
                         names = ", ".join(name for _path, _weight, name, _item in klein_loras)
                         print(f"   ✅ Applied (Klein Compose): {len(klein_loras)} LoRA(s) mixed -> {names}")
+                    klein_applied = True
                 except Exception as e:
                     print(f"   ❌ Failed (Klein Compose): {e}")
+                if klein_applied:
+                    for _path, _weight, _name, _item in klein_loras:
+                        if _trigger_enabled(_item) and _item.get("tags"):
+                            active_tags.append(str(_item["tags"]))
             elif wrapper is not None:
                 print(f"   ℹ️ [Klein] No valid LoRA to apply")
 
@@ -658,7 +1022,7 @@ class MagicPowerLoraLoader:
                             print(f"   ❌ Failed (SDNQ): {lora_name}")
                             traceback.print_exc()
                             continue
-                        if "tags" in item and item.get("tags"):
+                        if _trigger_enabled(item) and "tags" in item and item.get("tags"):
                             active_tags.append(str(item["tags"]))
                         img_path = self.get_preview_path(lora_name)
                         if img_path:
@@ -706,8 +1070,8 @@ class MagicPowerLoraLoader:
                     continue
 
                 try:
-                    # 使用缓存加载 LoRA
-                    lora = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
+                    # 使用缓存加载 LoRA（与官方 LoraLoader 同步：带回 lora_metadata）
+                    lora, lora_metadata = MagicPowerLoraLoader._get_cached_lora(lora_path, weight)
                     # Anima 2.9B：标准加载路径下，对 28 层 Anima LoRA 做内存暂存层转换。
                     # remap 返回的是新 dict（张量仅引用不 clone），原缓存与磁盘文件均不改动。
                     if anima_active and remap_lora_state_dict_safe is not None:
@@ -716,13 +1080,19 @@ class MagicPowerLoraLoader:
                             print(f"   🔄 [Anima 2.9B] {anima_msg}")
                         elif debug_enabled or anima_status == STATUS_ERROR:
                             print(f"   ℹ️ [Anima 2.9B] {anima_msg}")
-                    out_model, out_clip = comfy.sd.load_lora_for_models(out_model, out_clip, lora, weight, weight)
-                    print(f"   ✅ Applied: {lora_name}")
+                    try:
+                        out_model, out_clip = comfy.sd.load_lora_for_models(
+                            out_model, out_clip, lora, weight, weight, lora_metadata=lora_metadata
+                        )
+                    except TypeError:
+                        out_model, out_clip = comfy.sd.load_lora_for_models(
+                            out_model, out_clip, lora, weight, weight
+                        )
+                    print(f"   ✅ Applied: {lora_name} (weight={weight})")
+                    if _trigger_enabled(item) and item.get("tags"):
+                        active_tags.append(str(item["tags"]))
                 except Exception as e:
                     print(f"   ❌ Failed: {lora_name} -> {e}")
-
-                if "tags" in item and item["tags"]:
-                    active_tags.append(str(item["tags"]))
 
                 # 为每个lora尝试加载预览图
                 img_path = self.get_preview_path(lora_name)
@@ -1019,6 +1389,29 @@ def _metadata_field_states(paths, facts=None, local_reviews=None):
     return states
 
 
+_META_INVENTORY_CACHE = {}
+_META_INVENTORY_TTL = 120.0
+
+
+def _apply_lm_field_states(lora_path, states):
+    """把 Lora-Manager 已提供的信息标成 present，避免列表里重复报缺项。"""
+    try:
+        lm_kinds = _lm_provided_kinds(lora_path)
+    except Exception:
+        return states
+    for kind, provided in lm_kinds.items():
+        state = states.get(kind)
+        if not provided or not state or state.get("state") == "present":
+            continue
+        prev = dict(state)
+        states[kind] = field_state("present", reason="Lora Manager 已有信息", provenance="lora_manager")
+        states[kind].update(local_reviewed=False, local_reviewed_at=None,
+                            source_state=prev.get("source_state", "missing"),
+                            source_checked_at=prev.get("source_checked_at"),
+                            source_reason=prev.get("source_reason", ""))
+    return states
+
+
 def _get_lora_metadata_inventory():
     """本地信息清单：不读取模型内容、不计算哈希、不访问网络。"""
     names = folder_paths.get_filename_list("loras")
@@ -1038,12 +1431,14 @@ def _get_lora_metadata_inventory():
                 by_info_basename.setdefault(key, []).append(name)
             paths = _get_lora_metadata_paths(lora_path)
             paths_by_name[name] = paths
-            metadata[name] = {kind: bool(path) for kind, path in paths.items()}
+            lm_kinds = _lm_provided_kinds(lora_path) if lora_path else {}
+            metadata[name] = {kind: bool(path) or bool(lm_kinds.get(kind)) for kind, path in paths.items()}
+            metadata[name]["lm"] = bool(lora_path and _lm_is_complete(lora_path))
             if not lora_path:
                 errors.append({"path": name, "error": "LoRA文件未找到"})
                 field_states[name] = {kind: field_state("local_error", reason="LoRA 文件未找到或目录不可访问") for kind in _METADATA_KINDS}
         except Exception as e:
-            metadata[name] = {"txt": False, "json": False, "image": False, "log": False}
+            metadata[name] = {"txt": False, "json": False, "image": False, "log": False, "lm": False}
             field_states[name] = {kind: field_state("local_error", reason=f"本地文件读取失败: {e}") for kind in _METADATA_KINDS}
             errors.append({"path": name, "error": str(e)})
     record_warning = None
@@ -1056,7 +1451,9 @@ def _get_lora_metadata_inventory():
         if name not in field_states:
             identity = identities.get(name, {})
             record = records.get(identity.get("path"), {})
-            field_states[name] = _metadata_field_states(paths, record.get("fields", {}), record.get("local_reviews", {}))
+            states = _metadata_field_states(paths, record.get("fields", {}), record.get("local_reviews", {}))
+            lora_path = folder_paths.get_full_path("loras", name)
+            field_states[name] = _apply_lm_field_states(lora_path, states) if lora_path else states
     shared_info = {name: group for group in by_info_basename.values() if len(group) > 1 for name in group}
     result = {"files": names, "metadata": metadata, "field_states": field_states, "errors": errors, "shared_info": shared_info}
     if record_warning:
@@ -1068,11 +1465,85 @@ def _get_lora_metadata_inventory():
 async def get_lora_list(request):
     try:
         if request.query.get("include_metadata", "").lower() == "true":
-            return web.json_response(await _run_blocking(_get_lora_metadata_inventory))
+            force = request.query.get("force", "").lower() in ("1", "true", "yes")
+            now = time.time()
+            cached = _META_INVENTORY_CACHE.get("data")
+            if not force and cached is not None and (now - _META_INVENTORY_CACHE.get("t", 0)) < _META_INVENTORY_TTL:
+                return web.json_response(cached)
+            inv = await _run_blocking(_get_lora_metadata_inventory)
+            _META_INVENTORY_CACHE["data"] = inv
+            _META_INVENTORY_CACHE["t"] = time.time()
+            return web.json_response(inv)
         lora_names = folder_paths.get_filename_list("loras")
-        return web.json_response({"files": lora_names})
+        file_mtimes = {}
+        for name in lora_names:
+            try:
+                full = folder_paths.get_full_path("loras", name)
+                if full and os.path.isfile(full):
+                    file_mtimes[name] = int(os.path.getmtime(full))
+            except Exception:
+                pass
+        return web.json_response({"files": lora_names, "mtimes": file_mtimes})
     except Exception as e:
-        return web.json_response({"files": [], "error": str(e)})
+        return web.json_response({"files": [], "mtimes": {}, "error": str(e)})
+
+
+@PromptServer.instance.routes.post("/ma/lora/civitai_url")
+async def lora_civitai_url(request):
+    """返回指定 LoRA 在 Civitai 的模型页地址（按文件 SHA256 反查模型版本）。"""
+    try:
+        data = await request.json()
+        lora_name = (data or {}).get("lora_name")
+        if not isinstance(lora_name, str) or not lora_name.strip():
+            return web.json_response({"ok": False, "error": "缺少 lora_name 参数"}, status=400)
+
+        def _resolve():
+            full = folder_paths.get_full_path("loras", lora_name)
+            if not full or not os.path.isfile(full):
+                return {"ok": False, "error": "找不到该 LoRA 文件"}
+            # 先看 LM sidecar / 数据库是否已有 modelId
+            meta = _lm_meta(full)
+            cv_side = (meta or {}).get("civitai") if isinstance(meta, dict) else None
+            if isinstance(cv_side, dict):
+                mid = _normalize_civitai_version_id(cv_side.get("modelId"))
+                vid = _normalize_civitai_version_id(cv_side.get("id"))
+                if (mid or 0) > 0:
+                    url = f"https://{_civitai_host()}/models/{mid}"
+                    if vid and vid > 0:
+                        url += f"?modelVersionId={vid}"
+                    return {"ok": True, "url": url, "model_id": mid, "version_id": vid, "name": lm_sidecar.title(meta)}
+            row = _lm_db_row(full) or {}
+            if row.get("civitai_model_id"):
+                mid = _normalize_civitai_version_id(row.get("civitai_model_id"))
+                vid = _normalize_civitai_version_id(row.get("civitai_id"))
+                if (mid or 0) > 0:
+                    url = f"https://{_civitai_host()}/models/{mid}"
+                    if vid and vid > 0:
+                        url += f"?modelVersionId={vid}"
+                    return {"ok": True, "url": url, "model_id": mid, "version_id": vid, "name": row.get("civitai_name") or ""}
+            sha256 = _cached_sha256(full) or calculate_sha256(full)
+            cv = fetch_civitai_data_by_hash(sha256, strict=True, include_model=False)
+            if not isinstance(cv, dict):
+                return {"ok": False, "error": "Civitai 未找到匹配的模型（可能非公开或哈希未收录）"}
+            model_id = _normalize_civitai_version_id(cv.get("modelId"))
+            version_id = _normalize_civitai_version_id(cv.get("id"))
+            if (model_id or 0) <= 0:
+                return {"ok": False, "error": "Civitai 未返回有效的模型 ID"}
+            model_url = f"https://{_civitai_host()}/models/{model_id}"
+            if version_id and version_id > 0:
+                model_url += f"?modelVersionId={version_id}"
+            return {
+                "ok": True,
+                "url": model_url,
+                "model_id": model_id,
+                "version_id": version_id,
+                "name": cv.get("name") or "",
+            }
+
+        result = await _run_blocking(_resolve)
+        return web.json_response(result, status=(200 if result.get("ok") else 404))
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 @PromptServer.instance.routes.post("/ma/lora/detect_scan")
 async def lora_detect_scan(request):
@@ -1100,61 +1571,100 @@ async def lora_update_check(request):
 
 @PromptServer.instance.routes.get("/ma/lora/images")
 async def get_lora_images(request):
-    """获取所有LoRA文件及其对应的预览图的映射（优先查找magicloradate子目录）"""
+    """获取所有LoRA文件及其对应的预览图的映射（magicloradate > LM > 同目录）。"""
     try:
         lora_files = folder_paths.get_filename_list("loras")
         images = {}
-        
-        for lora_filename in lora_files:  # lora_filename is like "subdir/mylora.safetensors"
+        for lora_filename in lora_files:
             lora_full_path = folder_paths.get_full_path("loras", lora_filename)
             if not lora_full_path:
                 continue
-
-            lora_dir = os.path.dirname(lora_full_path)
-            lora_basename_no_ext = os.path.splitext(os.path.basename(lora_filename))[0]
-            
-            # 优先在 magicloradate 子目录查找预览图，若无则查找同层级（magicloradate > 同层级）
-            magicloradate_dir = os.path.join(lora_dir, "magicloradate")
-            found = False
-            
-            # 先检查magicloradate子目录
-            for ext in _LORA_PREVIEW_SUFFIXES:
-                preview_path_magic = os.path.join(magicloradate_dir, f"{lora_basename_no_ext}{ext}")
-                if os.path.isfile(preview_path_magic):
-                    lora_dir_relative = os.path.dirname(lora_filename)  # e.g. "subdir"
-                    preview_basename = os.path.basename(preview_path_magic)  # e.g. "mylora.png"
-                    relative_path_for_frontend = os.path.join(lora_dir_relative, preview_basename).replace("\\", "/")
-                    images[lora_filename] = relative_path_for_frontend
-                    found = True
-                    break
-            
-            # 如果magicloradate子目录没有找到，检查同层级
-            if not found:
-                for ext in _LORA_PREVIEW_SUFFIXES:
-                    preview_path_same = os.path.join(lora_dir, f"{lora_basename_no_ext}{ext}")
-                    if os.path.isfile(preview_path_same):
-                        lora_dir_relative = os.path.dirname(lora_filename)  # e.g. "subdir"
-                        preview_basename = os.path.basename(preview_path_same)  # e.g. "mylora.png"
-                        relative_path_for_frontend = os.path.join(lora_dir_relative, preview_basename).replace("\\", "/")
-                        images[lora_filename] = relative_path_for_frontend
-                        break
-            
+            preview = _resolve_lora_preview(lora_full_path)
+            if preview:
+                images[lora_filename] = _lora_preview_relative(preview, lora_filename)
         return web.json_response(images)
     except Exception as e:
         print(f"获取LoRA图片列表时出错: {e}")
         return web.json_response({})
 
+def _thumb_cache_dir():
+    d = os.path.join(MagicUtils.USER_DIR, "thumb_cache")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _build_thumbnail(img_path, width):
+    """Generate (or reuse) a cached WebP thumbnail for img_path. Returns (bytes, etag)."""
+    try:
+        st = os.stat(img_path)
+    except OSError:
+        return None, None
+    mtime = int(st.st_mtime)
+    key = hashlib.md5(f"{img_path}|{mtime}|{width}|v2".encode("utf-8")).hexdigest()
+    cache_dir = _thumb_cache_dir()
+    cache_file = os.path.join(cache_dir, key + ".webp")
+    etag = '"' + key + '"'
+    if os.path.isfile(cache_file):
+        try:
+            with open(cache_file, "rb") as f:
+                return f.read(), etag
+        except OSError:
+            pass
+    try:
+        with Image.open(img_path) as im:
+            im = im.convert("RGB")
+            if width and im.width > width:
+                ratio = width / float(im.width)
+                im = im.resize((width, max(1, int(im.height * ratio))), Image.LANCZOS)
+            import io as _io
+            buf = _io.BytesIO()
+            im.save(buf, format="WEBP", quality=82, method=4)
+            data = buf.getvalue()
+        tmp = cache_file + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, cache_file)
+        return data, etag
+    except Exception as e:
+        print(f"❌ 生成缩略图失败 {img_path}: {e}")
+        return None, None
+
+
 @PromptServer.instance.routes.get("/ma/lora/image")
 async def get_lora_image(request):
     try:
         name = request.query.get("name")
-        if not name: return web.Response(status=404)
-        
-        img_path = MagicPowerLoraLoader.get_preview_path(name)
-        if img_path and os.path.exists(img_path):
-            return web.FileResponse(img_path)
-        
-        return web.Response(status=404)
+        if not name:
+            return web.Response(status=404)
+        img_path = await _run_blocking(MagicPowerLoraLoader.get_preview_path, name)
+        if not img_path or not os.path.exists(img_path):
+            return web.Response(status=404)
+
+        width = 0
+        w_raw = request.query.get("w")
+        if w_raw:
+            try:
+                width = max(16, min(2048, int(w_raw)))
+            except (ValueError, TypeError):
+                width = 0
+
+        if width:
+            data, etag = await _run_blocking(_build_thumbnail, img_path, width)
+            if data is not None:
+                return web.Response(
+                    body=data,
+                    content_type="image/webp",
+                    headers={"Cache-Control": "public, max-age=31536000, immutable", "ETag": etag},
+                )
+        try:
+            st = os.stat(img_path)
+            etag = '"%d-%d"' % (int(st.st_mtime), st.st_size)
+        except OSError:
+            etag = None
+        headers = {"Cache-Control": "public, max-age=86400"}
+        if etag:
+            headers["ETag"] = etag
+        return web.FileResponse(img_path, headers=headers)
     except Exception as e:
         print(f"❌ Image API Error: {e}")
         return web.Response(status=500)
@@ -1163,6 +1673,237 @@ def get_preset_dir():
     target_dir = os.path.join(MagicUtils.USER_DIR, "lora_presets")
     if not os.path.exists(target_dir): os.makedirs(target_dir, exist_ok=True)
     return target_dir
+
+def _preset_meta_path():
+    return os.path.join(get_preset_dir(), "_meta.json")
+
+def _load_preset_meta():
+    meta = {"categories": [], "assignments": {}, "preset_order": []}
+    try:
+        path = _preset_meta_path()
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                cats = data.get("categories")
+                asg = data.get("assignments")
+                if isinstance(cats, list):
+                    meta["categories"] = [str(c).strip() for c in cats if str(c).strip()]
+                if isinstance(asg, dict):
+                    meta["assignments"] = {str(k): str(v).strip() for k, v in asg.items() if str(v).strip()}
+                order = data.get("preset_order")
+                if isinstance(order, list):
+                    seen_order = set()
+                    for key in order:
+                        key = str(key).strip()
+                        if key and key not in seen_order:
+                            seen_order.add(key)
+                            meta["preset_order"].append(key)
+    except Exception as e:
+        print(f"⚠️ [MagicPowerLora] 读取预设分类失败: {e}")
+    return meta
+
+def _save_preset_meta(meta):
+    with open(_preset_meta_path(), "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2, ensure_ascii=False)
+
+@PromptServer.instance.routes.get("/ma/lora/preset_meta")
+async def get_preset_meta(request):
+    return web.json_response(_load_preset_meta())
+
+@PromptServer.instance.routes.post("/ma/lora/preset_meta")
+async def save_preset_meta(request):
+    try:
+        data = await request.json()
+        cats = []
+        seen = set()
+        for c in (data.get("categories") or []):
+            s = str(c).strip()
+            if s and s not in seen:
+                seen.add(s)
+                cats.append(s)
+        asg = {}
+        for k, v in (data.get("assignments") or {}).items():
+            k = str(k).strip()
+            v = str(v).strip()
+            if k and v:
+                asg[k] = v
+        order = []
+        seen_order = set()
+        for key in (data.get("preset_order") or []):
+            key = str(key).strip()
+            if key and key not in seen_order:
+                seen_order.add(key)
+                order.append(key)
+        _save_preset_meta({"categories": cats, "assignments": asg, "preset_order": order})
+        return web.json_response({"status": "success"})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
+
+def _favorites_path():
+    os.makedirs(MagicUtils.USER_DIR, exist_ok=True)
+    return os.path.join(MagicUtils.USER_DIR, "lora_favorites.json")
+
+def _load_favorites():
+    collections = []
+    try:
+        path = _favorites_path()
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            raw = data.get("collections") if isinstance(data, dict) else data
+            if isinstance(raw, list):
+                for c in raw:
+                    if not isinstance(c, dict):
+                        continue
+                    name = str(c.get("name") or "").strip()
+                    if not name:
+                        continue
+                    items, seen = [], set()
+                    for x in (c.get("items") or []):
+                        s = str(x).strip()
+                        if s and s not in seen:
+                            seen.add(s)
+                            items.append(s)
+                    collections.append({"name": name, "items": items})
+    except Exception as e:
+        print(f"⚠️ [MagicPowerLora] 读取收藏夹失败: {e}")
+    return collections
+
+@PromptServer.instance.routes.get("/ma/lora/favorites")
+async def get_favorites(request):
+    return web.json_response({"collections": _load_favorites()})
+
+@PromptServer.instance.routes.post("/ma/lora/favorites")
+async def save_favorites(request):
+    try:
+        data = await request.json()
+        raw = data.get("collections") or []
+        collections = []
+        for c in raw:
+            if not isinstance(c, dict):
+                continue
+            name = str(c.get("name") or "").strip()
+            if not name:
+                continue
+            items, seen = [], set()
+            for x in (c.get("items") or []):
+                s = str(x).strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    items.append(s)
+            collections.append({"name": name, "items": items})
+        with open(_favorites_path(), "w", encoding="utf-8") as f:
+            json.dump({"collections": collections}, f, indent=2, ensure_ascii=False)
+        return web.json_response({"status": "success", "collections": collections})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
+
+
+def _notes_path():
+    os.makedirs(MagicUtils.USER_DIR, exist_ok=True)
+    return os.path.join(MagicUtils.USER_DIR, "lora_notes.json")
+
+
+def _load_notes():
+    try:
+        with open(_notes_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return {str(k): str(v) for k, v in data.items() if str(k).strip()}
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def _save_notes(notes):
+    path = _notes_path()
+    fd, temp_path = tempfile.mkstemp(prefix=".lora-notes-", suffix=".tmp", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(notes, f, indent=2, ensure_ascii=False)
+        os.replace(temp_path, path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@PromptServer.instance.routes.get("/ma/lora/notes")
+async def get_lora_notes(request):
+    return web.json_response({"notes": _load_notes()})
+
+
+@PromptServer.instance.routes.post("/ma/lora/notes")
+async def save_lora_notes(request):
+    try:
+        data = await request.json()
+        name = str(data.get("name") or "").strip()[:512]
+        note = str(data.get("note") or "")[:2000]
+        if not name:
+            return web.json_response({"status": "error", "message": "缺少 LoRA 名称"}, status=400)
+        notes = _load_notes()
+        if note.strip():
+            notes[name] = note
+        else:
+            notes.pop(name, None)
+        _save_notes(notes)
+        return web.json_response({"status": "success", "notes": notes})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
+
+
+@PromptServer.instance.routes.get("/ma/lora/lm_info")
+async def get_lm_info(request):
+    """Lora-Manager sidecar 里的标题/备注/触发词/基础模型。"""
+    try:
+        names = folder_paths.get_filename_list("loras")
+        result = {}
+        for name in names:
+            lora_path = folder_paths.get_full_path("loras", name)
+            if not lora_path:
+                continue
+            info = _lm_info(lora_path)
+            if info:
+                result[name] = info
+        return web.json_response({"info": result})
+    except Exception as e:
+        return web.json_response({"info": {}, "error": str(e)})
+
+
+@PromptServer.instance.routes.get("/ma/lora/paths")
+async def get_lora_paths(request):
+    """LoRA 绝对路径映射，供编辑窗口显示位置。"""
+    try:
+        result = {}
+        for name in folder_paths.get_filename_list("loras"):
+            path = folder_paths.get_full_path("loras", name)
+            if path:
+                result[name] = path.replace("\\", "/")
+        return web.json_response({"paths": result})
+    except Exception as e:
+        return web.json_response({"paths": {}, "error": str(e)})
+
+
+@PromptServer.instance.routes.post("/ma/lora/open_folder")
+async def open_lora_folder(request):
+    """在系统文件管理器中打开该 LoRA 所在目录。"""
+    try:
+        data = await request.json()
+        name = str(data.get("lora_name") or "").strip()
+        path = folder_paths.get_full_path("loras", name) if name else None
+        if not path or not os.path.isfile(path):
+            return web.json_response({"status": "error", "message": "LoRA 文件未找到"}, status=404)
+        folder = os.path.dirname(path)
+        if os.name == "nt":
+            import subprocess
+            subprocess.Popen(["explorer", f"/select,{os.path.normpath(path)}"])
+        else:
+            import subprocess
+            subprocess.Popen(["xdg-open", folder])
+        return web.json_response({"status": "success", "folder": folder})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
+
 
 @PromptServer.instance.routes.post("/ma/lora/save_preset")
 async def save_preset(request):
@@ -1175,6 +1916,16 @@ async def save_preset(request):
         file_path = os.path.join(get_preset_dir(), f"{preset_name}.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(content, f, indent=4, ensure_ascii=False)
+        if "category" in data:
+            meta = _load_preset_meta()
+            category = str(data.get("category") or "").strip()
+            if category:
+                if category not in meta["categories"]:
+                    meta["categories"].append(category)
+                meta["assignments"][str(preset_name)] = category
+            else:
+                meta["assignments"].pop(str(preset_name), None)
+            _save_preset_meta(meta)
         return web.json_response({"status": "success"})
     except Exception as e: return web.json_response({"status": "error", "message": str(e)})
 
@@ -1182,7 +1933,7 @@ async def save_preset(request):
 async def get_presets(request):
     try:
         preset_dir = get_preset_dir()
-        files = [f for f in os.listdir(preset_dir) if f.endswith(".json")]
+        files = [f for f in os.listdir(preset_dir) if f.endswith(".json") and not f.startswith("_")]
         presets = {}
         for f in files:
             try:
@@ -1204,10 +1955,44 @@ async def delete_preset(request):
         
         if os.path.exists(file_path):
             os.remove(file_path)
+            meta = _load_preset_meta()
+            meta["assignments"].pop(str(preset_name), None)
+            _save_preset_meta(meta)
             return web.json_response({"status": "success", "message": f"预设 '{preset_name}' 已删除"})
         else:
             return web.json_response({"status": "error", "message": "预设文件不存在"})
     except Exception as e: return web.json_response({"status": "error", "message": str(e)})
+
+@PromptServer.instance.routes.post("/ma/lora/rename_preset")
+async def rename_preset(request):
+    try:
+        data = await request.json()
+        old = str(data.get("old") or "").strip()
+        new = str(data.get("new") or "").strip()
+        if not old or not new:
+            return web.json_response({"status": "error", "message": "缺少旧名称或新名称"})
+        if old == new:
+            return web.json_response({"status": "success"})
+        invalid = ("/", "\\", "..")
+        if any(c in old for c in invalid) or any(c in new for c in invalid) or new.startswith("_") or old.startswith("_"):
+            return web.json_response({"status": "error", "message": "预设名称不能包含路径符号或以下划线开头"})
+
+        preset_dir = get_preset_dir()
+        src = os.path.join(preset_dir, f"{old}.json")
+        dst = os.path.join(preset_dir, f"{new}.json")
+        if not os.path.isfile(src):
+            return web.json_response({"status": "error", "message": "原预设不存在"})
+        if os.path.exists(dst):
+            return web.json_response({"status": "error", "message": "已存在同名预设"})
+
+        os.replace(src, dst)
+        meta = _load_preset_meta()
+        if old in meta["assignments"]:
+            meta["assignments"][new] = meta["assignments"].pop(old)
+        _save_preset_meta(meta)
+        return web.json_response({"status": "success"})
+    except Exception as e:
+        return web.json_response({"status": "error", "message": str(e)})
 
 # --- 爬取功能辅助函数 ---
 
@@ -1628,13 +2413,52 @@ class _LocalChangedError(RuntimeError):
     pass
 
 
+_LM_SETTINGS_PATH = os.path.join(os.environ.get("LOCALAPPDATA", ""), "ComfyUI-LoRA-Manager", "settings.json")
+_CIVITAI_HOST_CACHE = None
+
+
+def _lm_settings():
+    try:
+        with open(_LM_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _civitai_api_key():
+    value = str(_lm_settings().get("civitai_api_key") or "").strip()
+    return value
+
+
+def _civitai_host():
+    """跟随 Lora-Manager 的 civitai_host 设置，默认 civitai.com。"""
+    global _CIVITAI_HOST_CACHE
+    if _CIVITAI_HOST_CACHE is not None:
+        return _CIVITAI_HOST_CACHE
+    host = "civitai.com"
+    try:
+        with open(_LM_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            value = json.load(f).get("civitai_host")
+        candidate = str(value or "").strip().split("://")[-1].strip("/")
+        if re.fullmatch(r"[A-Za-z0-9.\-]+(:\d+)?", candidate):
+            host = candidate
+    except (OSError, ValueError):
+        pass
+    _CIVITAI_HOST_CACHE = host
+    return host
+
+
 def _civitai_json_request(url, phase, max_retries, api_delay):
     headers = {'User-Agent': 'Mozilla/5.0 Magic-Assistant/LoRA-Metadata'}
+    api_key = _civitai_api_key()
+    if api_key:
+        headers['Authorization'] = f'Bearer {api_key}'
     last_error = None
     for attempt in range(max(1, max_retries)):
         try:
-            if api_delay:
-                time.sleep(api_delay * (2 ** attempt))
+            if api_delay and attempt:
+                time.sleep(api_delay * (2 ** (attempt - 1)))
             with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
                 if response.status != 200:
                     raise _CivitaiRequestError(f"获取 Civitai {phase}失败（HTTP {response.status}）", response.status,
@@ -1657,13 +2481,13 @@ def _civitai_json_request(url, phase, max_retries, api_delay):
     raise last_error
 
 
-def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5, strict=False, include_model=True):
+def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.2, strict=False, include_model=True):
     """Model-description failures preserve the valid version response and its fields."""
     hnorm = (hash_string or "").strip()
     if not hnorm:
         return None
     try:
-        data = _civitai_json_request(f"https://civitai.com/api/v1/model-versions/by-hash/{hnorm.upper()}",
+        data = _civitai_json_request(f"https://{_civitai_host()}/api/v1/model-versions/by-hash/{hnorm.upper()}",
                                      "模型版本", max_retries, api_delay)
         if (_normalize_civitai_version_id(data.get("id")) or 0) <= 0 or (_normalize_civitai_version_id(data.get("modelId")) or 0) <= 0:
             raise _CivitaiRequestError("Civitai 返回了无效的模型版本信息")
@@ -1676,7 +2500,7 @@ def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5, strict
     if not include_model:
         return data
     try:
-        model = _civitai_json_request(f"https://civitai.com/api/v1/models/{data['modelId']}",
+        model = _civitai_json_request(f"https://{_civitai_host()}/api/v1/models/{data['modelId']}",
                                       "模型介绍", max_retries, api_delay)
         if _normalize_civitai_version_id(model.get("id")) != _normalize_civitai_version_id(data["modelId"]):
             raise _CivitaiRequestError("Civitai 返回了不匹配的模型介绍")
@@ -1687,6 +2511,30 @@ def fetch_civitai_data_by_hash(hash_string, max_retries=3, api_delay=0.5, strict
         if e.stop_queue:
             data["_stop_queue"] = True
             data["_retry_after"] = e.retry_after
+    return data
+
+
+def _fetch_civitai_by_version(version_id, include_model=True):
+    """用 Lora-Manager 数据库里的版本 ID 直接取来源信息。"""
+    try:
+        vid = int(version_id)
+    except (TypeError, ValueError):
+        return None
+    try:
+        data = _civitai_json_request(f"https://{_civitai_host()}/api/v1/model-versions/{vid}",
+                                     "模型版本", 2, 0.2)
+    except Exception as e:
+        print(f"⚠️ [MagicPowerLora] 按版本 ID 获取失败: {e}")
+        return None
+    if not isinstance(data, dict):
+        return None
+    if include_model and data.get("modelId"):
+        try:
+            model = _civitai_json_request(f"https://{_civitai_host()}/api/v1/models/{data['modelId']}",
+                                          "模型介绍", 2, 0.2)
+            data["model"] = model if isinstance(model, dict) else {}
+        except Exception:
+            data["model"] = {}
     return data
 
 
@@ -1924,6 +2772,26 @@ def _merge_metadata_facts(facts, outcomes):
             merged[kind] = {**outcome, "checked_at": now if outcome["state"] != "error" else None}
     return merged
 
+def _civitai_title(data):
+    model = data.get("model") if isinstance(data, dict) and isinstance(data.get("model"), dict) else {}
+    return str(model.get("name") or "").strip()
+
+
+def _sync_lm_sidecar(lora_path, *, civitai=None, sha256=None,
+                     trigger_words=None, preview=None, title=None):
+    """把爬取/本地信息同步成 Lora-Manager 可读的 sidecar + 同目录预览图。"""
+    try:
+        path = lm_sidecar.write(
+            lora_path, title=title, trigger_words=trigger_words,
+            preview=preview, civitai=civitai, sha256=sha256,
+        )
+        _LM_META_CACHE.pop(path, None)
+        return True
+    except Exception as e:
+        print(f"⚠️ [MagicPowerLora] 同步 Lora-Manager 信息失败: {e}")
+        return False
+
+
 def _fetch_lora_metadata(lora_name, options, save_path_mode, overwrite=True, update_existing=False, force_refresh=False):
     """Per-model serialization; database transactions never enclose network requests."""
     lora_path = folder_paths.get_full_path("loras", lora_name)
@@ -1975,9 +2843,10 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
     except Exception as e:
         warn_record(e)
     states = _metadata_field_states(initial_paths, facts, local_reviews)
+    lm_kinds = _lm_provided_kinds(lora_path)
     pending = []
     for kind in selected:
-        if not overwrite and (initial_paths[kind] or states[kind]["state"] in ("invalid", "local_error")):
+        if not overwrite and (initial_paths[kind] or lm_kinds.get(kind) or states[kind]["state"] in ("invalid", "local_error")):
             result["unchanged"].append(kind)
         elif not force_refresh and states[kind]["state"] == "user_skipped":
             result["unchanged"].append(kind)
@@ -1989,7 +2858,12 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
         message = "所选信息已保留或已有来源检查结果，无需重复处理" if selected else "未选择需要检查的信息"
         if selected and all(states[kind]["state"] == "user_skipped" for kind in selected):
             message = "已按人工整理标记跳过所选字段"
-        result.update(status="skipped", message=message, field_states=states)
+        if lm_kinds.get("txt"):
+            words = lm_sidecar.trigger_words(_lm_meta(lora_path))
+            if words:
+                result["data"]["triggerWords"] = words
+        _META_INVENTORY_CACHE.clear()
+        result.update(status="skipped", message=message, field_states=_apply_lm_field_states(lora_path, states))
         return result
 
     def finish():
@@ -2008,14 +2882,21 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
                 except Exception as e:
                     warn_record(e)
             facts = _merge_metadata_facts(facts, outcomes)
-            result["field_states"] = _metadata_field_states(_get_lora_metadata_paths(lora_path), facts, local_reviews)
+            result["field_states"] = _apply_lm_field_states(
+                lora_path, _metadata_field_states(_get_lora_metadata_paths(lora_path), facts, local_reviews))
         except (OSError, _LocalChangedError) as e:
             result["field_states"] = {kind: field_state("local_error", reason=str(e)) for kind in labels}
             result["record_warning"] = str(e)
+        lm_words = lm_sidecar.trigger_words(_lm_meta(lora_path))
+        if lm_words and "triggerWords" not in result.get("data", {}):
+            result.setdefault("data", {})["triggerWords"] = lm_words
+        _META_INVENTORY_CACHE.clear()
         return result
 
     civitai_data = None
     try:
+        if not sha256:
+            sha256 = _cached_sha256(lora_path)
         if not sha256:
             sha256 = calculate_sha256(lora_path)
             if not identity_matches(identity, file_identity(lora_path)):
@@ -2024,7 +2905,6 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
                 facts = store.read_hash(sha256)
             except Exception as e:
                 warn_record(e)
-            # A renamed/copied identical file can reuse confirmed source facts after its first hash.
             if not force_refresh:
                 remaining = []
                 for kind in pending:
@@ -2036,7 +2916,10 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
                 if not pending:
                     result.update(status="skipped", message="已复用相同模型的来源检查记录，无需重复获取")
                     return finish()
-        civitai_data = fetch_civitai_data_by_hash(sha256, strict=True, include_model=("json" in pending))
+        civitai_data = fetch_civitai_data_by_hash(sha256, strict=True, include_model=True)
+        if civitai_data is None:
+            row = _lm_db_row(lora_path) or {}
+            civitai_data = _fetch_civitai_by_version(row.get("civitai_id"), include_model=True)
         if civitai_data is not None and not isinstance(civitai_data, dict):
             raise _MetadataSourceError("来源模型版本响应格式异常")
         if civitai_data is not None and (((_normalize_civitai_version_id(civitai_data.get("id")) or 0) <= 0)
@@ -2075,6 +2958,8 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
         if _metadata_path_signature(destination) != expected:
             raise _LocalChangedError(f"检查期间{labels[kind]}目标文件被修改，已保留本地内容")
 
+    saved_txt = None
+    saved_image = None
     for kind in pending:
         try:
             content, data_key, source_state, reason = _metadata_source_content(civitai_data, kind, os.path.basename(lora_path))
@@ -2097,11 +2982,14 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
                 guard_destination(kind, destination)
                 if not download_file(content, destination, before_replace=lambda: guard_destination(kind, destination), strict=True):
                     raise _MetadataSourceError("预览下载失败或图像不可用")
+                saved_image = destination
             else:
                 destination = initial_paths[kind] if update_existing and initial_paths[kind] else os.path.join(save_dir, f"{lora_basename}.{kind}")
                 guard_destination(kind, destination)
                 _atomic_write_lora_text(destination, content, before_replace=lambda: guard_destination(kind, destination))
                 result["data"][data_key] = content
+                if kind == "txt":
+                    saved_txt = content
             outcomes[kind] = {"state": "present", "reason": "来源信息已成功保存"}
             result["saved"].append(kind)
             messages.append(f"{labels[kind]}已保存")
@@ -2118,6 +3006,12 @@ def _fetch_lora_metadata_locked(lora_path, options, save_path_mode, overwrite, u
             messages.append(f"{labels[kind]}处理失败: {e}")
             if getattr(e, "stop_queue", False):
                 result.update(stop_queue=True, retry_after=getattr(e, "retry_after", None))
+    _sync_lm_sidecar(
+        lora_path, civitai=civitai_data, sha256=sha256,
+        title=_civitai_title(civitai_data) or lm_sidecar.title(_lm_meta(lora_path)) or None,
+        trigger_words=civitai_data.get("trainedWords") if isinstance(civitai_data.get("trainedWords"), list) else saved_txt,
+        preview=saved_image or initial_paths.get("image"),
+    )
     if result["failed"]:
         result["status"] = "partial" if result["saved"] else "error"
     elif not result["saved"]:
@@ -2300,7 +3194,17 @@ async def save_lora_file(request):
         
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        
+
+        # 同步到 Lora-Manager sidecar，让那边也能读到手动编辑的触发词
+        if file_type == "txt":
+            try:
+                lm_sidecar.write(lora_path, trigger_words=content,
+                                 title=lm_sidecar.title(_lm_meta(lora_path)) or None)
+                _LM_META_CACHE.pop(lm_sidecar.sidecar_path(lora_path), None)
+            except Exception as e:
+                print(f"⚠️ [MagicPowerLora] 同步 Lora-Manager 触发词失败: {e}")
+        _META_INVENTORY_CACHE.clear()
+
         return web.json_response({"status": "success", "message": f"{file_type}文件保存成功"})
         
     except Exception as e:
@@ -2343,6 +3247,11 @@ async def get_lora_file(request):
         elif os.path.exists(file_path_same):
             target_file = file_path_same
         else:
+            # 额外来源：若本地 .txt 不存在，优先读取 Lora-Manager 的 sidecar（civitai.trainedWords）
+            if file_type == "txt":
+                lm_words = lm_sidecar.trigger_words(_lm_meta(lora_path))
+                if lm_words:
+                    return web.json_response({"status": "success", "content": lm_words, "source": "lora_manager"})
             # 如果文件不存在，返回空内容
             return web.json_response({"status": "success", "content": ""})
         

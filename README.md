@@ -1,6 +1,6 @@
 <img width="2" height="1" alt="image" src="https://github.com/user-attachments/assets/044e31f8-3bd9-4ecc-9d93-668d8d0ce35b" /># ✨ Magic Assistant for ComfyUI
 
-**A powerful 12-in-1 suite designed to simplify your workflow.**
+**A powerful 13-in-1 suite designed to simplify your workflow.**
 **一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
 
 > 💬 **Join our Discord community for support, feature requests, and latest updates!**
@@ -16,7 +16,39 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-11-08**
+> Latest Update / 最新更新：**2026-11-17**
+>
+> **V1.4.8 版本介绍 / Version Introduction** 2026-11-17
+>
+> 🙏 **特别鸣谢 / Special Thanks**: 本版本整合了来自 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) 的多项强力 LoRA 管理增强与新节点功能，并结合本项目 UI 风格进行了深度优化与重构。
+> 🙏 **Special Thanks**: This release integrates enhanced LoRA management features and the style-filter node from [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader), refined to fit Magic Assistant's dark UI system.
+>
+> 1. **🚀 重磅升级**: Magic Power LoRA Loader - 整合 `ComfyUI-lyw-MA-Loader` 全新特性与 UI 精简重构
+>    * **LoRA-Manager 互通与缓存加速**: 兼容读写 `ComfyUI-LoRA-Manager` 的 `<模型名>.metadata.json` sidecar 与 SQLite 缓存，互通模型标题（支持文件名旁展示与双关键词搜索）、本地备注持久化、触发词与预览图，并支持 WebP 磁盘缩略图缓存
+>    * **独立触发词开关**: 新增顶部「触发词」总开关与单条 LoRA 独立触发词开关（`🏷️` 左键编辑、右键一键启用/屏蔽），无需清空文本即可快速控制触发词输出
+>    * **预设与收藏中心**: 将「预设分类」与「LoRA 收藏夹」整合进底部「📂预设」双标签弹窗，支持分类创建/重命名/归属调整、预设重命名、右键「加入收藏夹 ⭐」及一键添加到节点
+>    * **文件夹与加载增强**: 支持单击文件夹标题快速「忽略/恢复」整组 LoRA、根列表与文件夹自由混排、在 Civitai 打开/打开所在文件夹、同步官方 `lora_metadata` 缓存及链末端可选 `clip`
+>    * **界面与排版优化**: 修复工作流恢复或缩放节点时嵌入 UI 宽度异常锁死的 Bug；恢复清晰的 LoRA 行布局（缩略图 · 拖拽手柄 · 勾选 · 名称 · 备注 · 权重 · 标签/编辑/删除），简化「添加 Lora」弹窗排序为单一下拉框，并在「⚙️设置 → 布局样式」中整合「主题配色与预设」（内置 10 套配色 + 自定义方案）
+>    * **Major Upgrade**: Integrated capabilities from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) into Magic Power LoRA Loader with a cleaner layout
+>    * **LoRA-Manager Interop & Thumbnails**: Reads/writes `<stem>.metadata.json` sidecars and LM cache to share titles (displayed & searchable), persistent notes, trigger words, and WebP-cached thumbnails
+>    * **Per-LoRA & Master Trigger Toggles**: Added a master Triggers toggle and per-row trigger switch (left-click `🏷️` to edit, right-click to mute/unmute without losing tags)
+>    * **Presets & Favorites Modal**: Unified Preset Categories and LoRA Favorites into the two-tab `📂Preset` dialog, with category management, preset renaming, right-click "Add to Favorites ⭐", and one-click loading
+>    * **Folder & Loader Enhancements**: Click folder title to ignore/restore, free root/folder interleaving, Open in Civitai / Open Containing Folder, official `lora_metadata` caching, and optional `clip` on chain end
+>    * **UI & Layout Fixes**: Fixed the DOM widget width lock bug on resize/reload; restored clean row layout, streamlined the Add LoRA toolbar sort dropdown, and integrated 10+ theme color presets into Settings → Layout Style
+><img width="845" height="405" alt="image" src="https://github.com/user-attachments/assets/0d091cdb-a3da-4cf0-8d57-599749ee5f15" /><img width="663" height="400" alt="image" src="https://github.com/user-attachments/assets/4f71b8b5-01f5-4024-bc58-91da3189a24a" /><img width="613" height="533" alt="image" src="https://github.com/user-attachments/assets/890d296c-09d9-4021-b356-3898cc42eafc" /><img width="629" height="443" alt="image" src="https://github.com/user-attachments/assets/088a08ad-d8c2-49fe-82a5-721e46da657b" /><img width="418" height="488" alt="image" src="https://github.com/user-attachments/assets/23980a88-475f-4478-89aa-21b57ddea988" /><img width="686" height="408" alt="image" src="https://github.com/user-attachments/assets/3ee4e3aa-2b65-4ebd-a27a-a03acf470c6f" />
+>
+> 2. **✨ 新增节点**: Magic Style Prompt Filter (`🧹 风格词过滤`)
+>    * 来自 `ComfyUI-lyw-MA-Loader` 整合的实用伴随节点，专为配合强力 LoRA 加载器使用
+>    * 采用「规则秒判 + 可选本地 `llama_cpp` LLM 仅裁决模糊片段」混合策略，智能剥离画风、光影、质感等风格词，保留画面主体、动作与场景描述
+>    * 可直接接入强力 LoRA 加载器的 `tags_output` 触发词，原样保留触发词并输出过滤后的 `内容提示词` 与 `positive`（CONDITIONING），让 LoRA 风格自然接管画面
+>    * **New Node**: Added **Magic Style Prompt Filter** (`MALLMStyleFilter`), integrated from `ComfyUI-lyw-MA-Loader`
+>    * Uses a fast rule router + optional local `llama_cpp` LLM for ambiguous segments to strip style/lighting/quality terms while preserving subject, action, and scene content
+>    * Accepts LoRA trigger words (`tags_output`) untouched and outputs both filtered `STRING` and encoded `CONDITIONING` so LoRA styles take over cleanly
+>
+> 3. **🎨 视觉升级**: 全插件统一 Linear / Vercel Modern Dark 暗黑主题与双语完善
+>    * 新增共享样式表 `magic_modal_theme.css` 与主题加载器 `magic_ui_shared.js`，统一升级全插件 12+ 个节点弹窗的深色质感、玻璃遮罩、圆角与交互细节
+>    * 修复语言切换器（`language_switcher.js`）在嵌套弹窗 DOM 挂载时遗漏子元素翻译的问题，并补齐所有新增弹窗与右键菜单的中英文对照
+>    * **UI Unification & i18n**: Unified all plugin modals under a modern dark design system (`magic_modal_theme.css` / `magic_ui_shared.js`), fixed nested modal translation in `language_switcher.js`, and completed bilingual coverage for all new UI elements
 >
 > **V1.4.7 版本介绍 / Version Introduction** 2026-11-08
 >
@@ -66,6 +98,9 @@
 >    * Updates use exact version/hash matching, atomic writes, and file-change guards; edited trigger words, tags, weights, enabled states, and ordering are preserved
 >    * Civitai rate-limit or permission failures pause the remaining queue with retry guidance, and failed fields can be retried independently
 >
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.4.5 版本介绍 / Version Introduction** 2026-10-07
 >
 > 1. **✨ 新增**: Magic Power LoRA Loader - 一键批量补全 LoRA 信息
@@ -90,8 +125,6 @@
 >    * **Bugfix**: Magic Multi-Function Prompt Box now persists the complete Tag model; hidden Tags are removed from the main prompt editor but remain in the chip area, staying out of node text, `final_text`, and conditioning encoding
 >    * Hidden Tags, line breaks, and fully hidden prompts survive closing the editor, saving/loading workflows, and queue serialization without being dropped during text/chip synchronization
 >
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.4.4 版本介绍 / Version Introduction** 2026-09-30
 >
@@ -1035,6 +1068,9 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
 * **自定义权重调节方式（V1.4.0 新增）**: 在“设置 → 界面设置”中，可为每个 LoRA 的权重调节切换原有的紧凑箭头按钮或水平滑条。滑条模式支持自定义步长、最小值、最大值及宽度，可选择显示并直接编辑当前数值，也可开启 ±0.02 范围内自动吸附到 0；节点会自动扩展最小宽度，保证滑条控件完整显示。
 * **Anima 2.9B 模式（V1.4.1 新增）**: 新增 Anima 2.9B（40 层）LoRA 模式。在节点设置中开启后，可在 Anima 2.9B（40 层）模型上加载旧版 28 层 Anima LoRA；重映射在内存中完成（28→40 层），不写盘、不改原文件、不生成副本。仅标准加载路径生效（Klein / SDNQ 模式走专用加载器，不受影响）；非 Anima 或已是 40 层的 LoRA 原样加载。
+* **LoRA-Manager 互通与缓存加速（V1.4.8 新增，整合自 [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)）**: 兼容读写 `ComfyUI-LoRA-Manager` 的 `<模型名>.metadata.json` sidecar 与 SQLite 缓存，互通标题（支持展示与检索）、备注持久化、触发词及预览图，并支持 WebP 磁盘缩略图缓存。
+* **独立触发词与文件夹忽略（V1.4.8 新增）**: 顶部状态条提供全局「触发词」总开关，每条 LoRA 的 `🏷️` 按钮支持左键编辑、右键一键启用/屏蔽触发词；单击文件夹标题可快速「忽略/恢复」整组 LoRA。
+* **预设与收藏中心 & 主题配色（V1.4.8 新增）**: 底部「📂预设」弹窗整合「📁 预设分组」与「⭐ 收藏夹」双标签页，支持分类管理、预设重命名与右键收藏 LoRA；「⚙️设置 → 布局样式」内置 10 套主题配色预设及自定义颜色存取，同时支持单条 LoRA 与文件夹独立配色。
 
 * **Visual Management**: Beautiful gallery interface to browse and manage all your LoRAs. No more scrolling through long dropdown lists!
 * **Folder Organization**: Organize LoRAs into custom folders for better categorization and management.
@@ -1059,6 +1095,9 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
 * **Customizable Weight Controls (New in V1.4.0)**: In Settings → Interface Settings, switch between the original compact arrow buttons and a horizontal slider for adjusting each LoRA's weight. Slider mode supports configurable step size, minimum/maximum values, and width; it can optionally show a directly editable current value and snap to zero within ±0.02. The node automatically expands its minimum width so the slider controls remain fully visible.
 * **Anima 2.9B Mode (New in V1.4.1)**: Added Anima 2.9B (40-layer) LoRA mode. Enable it in node settings to load legacy 28-layer Anima LoRAs on Anima 2.9B (40-layer) models; remapping happens in memory (28→40 layers) without writing to disk or modifying original files. Applies only to the standard loading path (Klein / SDNQ modes use dedicated loaders and are unaffected); non-Anima or already-40-layer LoRAs load unchanged.
+* **LoRA-Manager Interop & WebP Thumbnails (New in V1.4.8, integrated from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader))**: Reads and writes `ComfyUI-LoRA-Manager` `<stem>.metadata.json` sidecars and SQLite cache to sync titles (displayed & searchable), persistent notes, trigger words, and preview images with disk-cached WebP thumbnails.
+* **Trigger Toggles & Folder Ignore (New in V1.4.8)**: Master Triggers toggle on the top bar plus per-row `🏷️` trigger switch (left-click to edit, right-click to mute/unmute); click a folder header title to ignore/restore the entire group without losing selections.
+* **Presets & Favorites Modal & Theme Presets (New in V1.4.8)**: The `📂Preset` dialog unifies Preset Groups and Favorites in two tabs, supporting category management, preset renaming, and right-click favoriting; Settings → Layout Style includes 10 built-in theme color presets plus custom preset saving and per-row/folder color overrides.
 
 </details>
 
@@ -1390,6 +1429,24 @@ You can download the image and import into ComfyUI.
 5. The default blend uses the saved source mask; use Settings & Presets to choose full-crop replacement, an external blend mask, content-only input, or candidate batch ordering
 
 <img width="951" height="413" alt="Image" src="https://github.com/user-attachments/assets/0f620a92-186f-4787-8b86-55550a31d192" />
+
+</details>
+
+### 13. 🧹 Magic Style Prompt Filter (风格词过滤)
+> **Rule + optional tiny local LLM style-word filter for LoRA workflows (Integrated from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)).** / **「规则秒判 + 微型本地 LLM」风格词过滤节点，剥离风格词让 LoRA 风格自然接管画面（整合自 [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)）。**
+
+<details>
+<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
+
+#### 核心特性 / Key Features
+
+* **规则 + LLM 混合裁决**: 先通过规则快速判断明确的画风、光影、画质等风格词与人物/场景/动作等内容词；仅将模糊片段交给可选的本地 `llama_cpp` 微型模型裁决，兼顾速度与准确率（可将 `max_llm_parts` 设为 `0` 纯规则零模型运行）。
+* **触发词无损保留**: 可直接连接强力 LoRA 加载器的 `tags_output` 输出至 `触发词` 输入口；触发词原样保留且不参与过滤，再与过滤后的主体内容拼接并编码输出 `内容提示词`（STRING）与 `positive`（CONDITIONING）。
+* **内容描述防误伤**: 自动识别并保护主语、人物、服饰、姿态、镜头景别与带下划线标签等核心内容，只剥离干扰 LoRA 画风发挥的修饰词；支持缓存命中加速与运行后可选自动释放本地模型（`unload_after`）。
+
+* **Hybrid Rule + Local LLM Routing**: Instantly classifies obvious style/lighting/quality terms and subject/scene content via built-in rules, sending only ambiguous segments to an optional local `llama_cpp` model (set `max_llm_parts` to `0` for rule-only mode).
+* **Lossless Trigger Preservation**: Connect `tags_output` from Magic Power LoRA Loader to the `触发词` input; trigger words bypass filtering untouched and are prepended to the filtered content, outputting both `内容提示词` (STRING) and encoded `positive` (CONDITIONING).
+* **Content-Safe Filtering**: Protects subjects, people, clothing, actions, camera framing, and underscored tags from accidental removal, with result caching and optional `unload_after` VRAM release.
 
 </details>
 

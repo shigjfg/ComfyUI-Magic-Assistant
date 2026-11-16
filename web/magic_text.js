@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { openMagicLlmServiceModal } from "./magic_llm_shared.js";
+import "./magic_ui_shared.js";
 
 // 必须与 __init__.py 和 nodes/magic_text.py 中的类名完全一致
 const NODE_NAME = "MagicPromptBox";
@@ -396,27 +397,27 @@ function closeModal(dialog) {
     }
 }
 
-// 弹窗主题色
+// 弹窗主题色（极简高级暗黑风 Linear / Vercel 风格）
 const THEME = {
-    bg: "#1e1e1e",
-    bg2: "#252526",
-    bg3: "#2d2d2d",
-    border: "#3c3c3c",
-    text: "#cccccc",
-    text2: "#808080",
-    accent: "#9C27B0",   // 紫色主题（与 Magic Assistant 一致）
-    accent2: "#7B1FA2",
-    hover: "#37373d",
-    danger: "#f44336",
-    success: "#4CAF50",
+    bg: "#111114",
+    bg2: "#09090b",
+    bg3: "#18181c",
+    border: "rgba(255, 255, 255, 0.11)",
+    text: "#f4f4f5",
+    text2: "#a1a1aa",
+    accent: "#6366f1",
+    accent2: "#4f46e5",
+    hover: "#222228",
+    danger: "#ef4444",
+    success: "#10b981",
 };
 
 /** Tag 芯片：框选/多选/实时预览共用的高光（须与 refreshChipSelVisual 一致） */
 const MAGIC_CHIP_SELECTED_GLOW =
-    "0 0 0 2px #1890ff, 0 2px 10px rgba(24,144,255,0.35)";
+    "0 0 0 2px #6366f1, 0 4px 14px rgba(99, 102, 241, 0.35)";
 
 /** 单击锁定工具栏时：芯片描边（与框选蓝光区分） */
-const MAGIC_CHIP_TOOLBAR_PIN_OUTLINE = "2px solid rgba(186, 104, 200, 0.92)";
+const MAGIC_CHIP_TOOLBAR_PIN_OUTLINE = "2px solid rgba(129, 140, 248, 0.92)";
 const MAGIC_CHIP_TOOLBAR_PIN_OFFSET = "2px";
 
 /** 收藏列表变更后通知「编辑标签」弹窗刷新（若已打开） */
@@ -583,8 +584,8 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         width: ${modalSize.width}px; height: ${modalSize.height}px;
         max-width: 96vw; max-height: 88vh;
         background: ${THEME.bg}; color: ${THEME.text};
-        border: 1px solid ${THEME.border}; border-radius: 8px;
-        box-shadow: 0 16px 48px rgba(0,0,0,0.72);
+        border: 1px solid ${THEME.border}; border-radius: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.78), 0 0 0 1px rgba(255,255,255,0.05) inset;
         display: flex; flex-direction: column; overflow: hidden;
         min-height: 0;
         box-sizing: border-box;
@@ -604,23 +605,24 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     hdr.style.cssText = `
         display: flex; align-items: center; justify-content: space-between;
         flex-shrink: 0;
-        padding: 12px 16px; background: ${THEME.bg2};
+        padding: 13px 18px; background: #151519;
         border-bottom: 1px solid ${THEME.border};
         cursor: move; user-select: none;
     `;
     const hTitle = document.createElement("span");
     hTitle.textContent = magicT("🏷️ 编辑标签");
-    hTitle.style.cssText = "font-size: 14px; font-weight: 600; color: #ddd;";
+    hTitle.style.cssText = "font-size: 14.5px; font-weight: 650; color: #f4f4f5;";
     const hClose = document.createElement("button");
     hClose.type = "button";
     hClose.textContent = "✕";
     hClose.setAttribute("aria-label", magicT("关闭"));
     hClose.style.cssText = `
         background: none; border: none; color: ${THEME.text2};
-        cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 4px;
+        cursor: pointer; font-size: 15px; padding: 4px 8px; border-radius: 6px;
+        transition: all 0.15s;
     `;
-    hClose.addEventListener("mouseenter", () => { hClose.style.background = THEME.hover; });
-    hClose.addEventListener("mouseleave", () => { hClose.style.background = "none"; });
+    hClose.addEventListener("mouseenter", () => { hClose.style.background = THEME.hover; hClose.style.color = "#f4f4f5"; });
+    hClose.addEventListener("mouseleave", () => { hClose.style.background = "none"; hClose.style.color = THEME.text2; });
     preventConflict(hClose);
     hdr.appendChild(hTitle);
     hdr.appendChild(hClose);
@@ -631,9 +633,9 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     const subTabBar = document.createElement("div");
     subTabBar.style.cssText = "display:flex;align-items:center;flex-shrink:0;padding:0 0 10px;gap:6px;flex-wrap:wrap;";
     const SUB_TABS_ET = [
-        { id: "search", label: magicT("🔍 标签搜索"), accent: "#388E3C" },
-        { id: "preset", label: magicT("📦 预设标签"), accent: "#1976D2" },
-        { id: "custom", label: magicT("🏷️ 自建/收藏"), accent: "#9C27B0" },
+        { id: "search", label: magicT("🔍 标签搜索"), accent: "#10b981" },
+        { id: "preset", label: magicT("📦 预设标签"), accent: "#3b82f6" },
+        { id: "custom", label: magicT("🏷️ 自建/收藏"), accent: "#6366f1" },
     ];
     let activeSubTab = "search";
     SUB_TABS_ET.forEach((t) => {
@@ -642,7 +644,7 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
         btn.textContent = t.label;
         btn.dataset.stId = t.id;
         const isActive = activeSubTab === t.id;
-        btn.style.cssText = "padding:5px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid " + (isActive ? t.accent : "#3c3c3c") + ";background:" + (isActive ? t.accent : "#2d2d2d") + ";color:" + (isActive ? "#fff" : "#cccccc") + ";flex-shrink:0;";
+        btn.style.cssText = "padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid " + (isActive ? t.accent : "rgba(255,255,255,0.1)") + ";background:" + (isActive ? t.accent : "#18181c") + ";color:" + (isActive ? "#fff" : "#a1a1aa") + ";flex-shrink:0;transition:all 0.15s;";
         preventConflict(btn);
         btn.addEventListener("click", () => {
             activeSubTab = t.id;
@@ -652,9 +654,9 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
             subTabBar.querySelectorAll("button").forEach((b) => {
                 const def = SUB_TABS_ET.find((d) => d.id === b.dataset.stId);
                 const ia = b.dataset.stId === activeSubTab;
-                b.style.background = ia ? (def ? def.accent : "#9C27B0") : "#2d2d2d";
-                b.style.color = ia ? "#fff" : "#cccccc";
-                b.style.borderColor = ia ? (def ? def.accent : "#9C27B0") : "#3c3c3c";
+                b.style.background = ia ? (def ? def.accent : "#6366f1") : "#18181c";
+                b.style.color = ia ? "#fff" : "#a1a1aa";
+                b.style.borderColor = ia ? (def ? def.accent : "#6366f1") : "rgba(255,255,255,0.1)";
             });
         });
         subTabBar.appendChild(btn);
@@ -700,9 +702,9 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     newTagToggle.type = "button";
     newTagToggle.textContent = magicT("➕ 新建标签组");
     newTagToggle.style.cssText = `
-        padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer;
-        border: 1px solid ${THEME.accent}; background: rgba(156, 39, 176, 0.15);
-        color: #e1bee7; font-weight: 600; flex-shrink: 0;
+        padding: 6px 12px; font-size: 12px; border-radius: 7px; cursor: pointer;
+        border: 1px solid rgba(99, 102, 241, 0.45); background: rgba(99, 102, 241, 0.14);
+        color: #c7d2fe; font-weight: 600; flex-shrink: 0;
     `;
     preventConflict(newTagToggle);
 
@@ -1159,12 +1161,12 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     const localBtn = document.createElement("button");
     localBtn.type = "button";
     localBtn.textContent = magicT("本地");
-    localBtn.style.cssText = "padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid #3c3c3c;background:#2d2d2d;color:#ccc;";
+    localBtn.style.cssText = "padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid rgba(255,255,255,0.1);background:#18181c;color:#a1a1aa;transition:all 0.15s;";
     preventConflict(localBtn);
     const remoteBtn = document.createElement("button");
     remoteBtn.type = "button";
     remoteBtn.textContent = magicT("远端");
-    remoteBtn.style.cssText = "padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid #3c3c3c;background:#2d2d2d;color:#ccc;";
+    remoteBtn.style.cssText = "padding:6px 12px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid rgba(255,255,255,0.1);background:#18181c;color:#a1a1aa;transition:all 0.15s;";
     preventConflict(remoteBtn);
     searchModeWrap.appendChild(localBtn);
     searchModeWrap.appendChild(remoteBtn);
@@ -1173,9 +1175,9 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
     searchBtn.type = "button";
     searchBtn.textContent = magicT("搜索");
     searchBtn.style.cssText = `
-        padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer;
+        padding: 8px 18px; border: 1px solid rgba(129, 140, 248, 0.4); border-radius: 7px; cursor: pointer;
         font-size: 13px; font-weight: 600; color: #fff;
-        background: #1976d2; flex-shrink: 0;
+        background: linear-gradient(180deg, #6366f1 0%, #4f46e5 100%); flex-shrink: 0;
     `;
     preventConflict(searchBtn);
     searchBtn.addEventListener("mouseenter", () => { searchBtn.style.opacity = "0.92"; });
@@ -1186,19 +1188,19 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
 
     const applySearchModeBtnStyle = () => {
         if (searchDanbooruMode) {
-            remoteBtn.style.background = "#1976d2";
+            remoteBtn.style.background = "#3b82f6";
             remoteBtn.style.color = "#fff";
-            remoteBtn.style.borderColor = "#1976d2";
-            localBtn.style.background = "#2d2d2d";
-            localBtn.style.color = "#ccc";
-            localBtn.style.borderColor = "#3c3c3c";
+            remoteBtn.style.borderColor = "#3b82f6";
+            localBtn.style.background = "#18181c";
+            localBtn.style.color = "#a1a1aa";
+            localBtn.style.borderColor = "rgba(255,255,255,0.1)";
         } else {
-            localBtn.style.background = "#2e7d32";
+            localBtn.style.background = "#10b981";
             localBtn.style.color = "#fff";
-            localBtn.style.borderColor = "#2e7d32";
-            remoteBtn.style.background = "#2d2d2d";
-            remoteBtn.style.color = "#ccc";
-            remoteBtn.style.borderColor = "#3c3c3c";
+            localBtn.style.borderColor = "#10b981";
+            remoteBtn.style.background = "#18181c";
+            remoteBtn.style.color = "#a1a1aa";
+            remoteBtn.style.borderColor = "rgba(255,255,255,0.1)";
         }
     };
     applySearchModeBtnStyle();
@@ -1530,9 +1532,9 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
                 addBtn.type = "button";
                 addBtn.textContent = magicT("添加");
                 addBtn.style.cssText = `
-                    padding: 4px 10px; font-size: 11px; border-radius: 4px; cursor: pointer;
-                    border: 1px solid ${THEME.accent}; background: rgba(156, 39, 176, 0.2);
-                    color: #e1bee7; font-weight: 600;
+                    padding: 4px 10px; font-size: 11px; border-radius: 6px; cursor: pointer;
+                    border: 1px solid rgba(99, 102, 241, 0.45); background: rgba(99, 102, 241, 0.16);
+                    color: #c7d2fe; font-weight: 600;
                 `;
                 preventConflict(addBtn);
                 addBtn.addEventListener("click", (e) => {
@@ -1570,8 +1572,8 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
                             : `来自「${row.setName || "自定义"}」`;
                     badge.style.cssText = `
                         margin-left: 6px; padding: 1px 5px; font-size: 10px;
-                        border-radius: 3px; background: rgba(156, 39, 176, 0.28);
-                        color: #ce93d8; font-weight: 600; flex-shrink: 0;
+                        border-radius: 4px; background: rgba(99, 102, 241, 0.2);
+                        color: #a5b4fc; font-weight: 600; flex-shrink: 0;
                         vertical-align: middle; line-height: 1.4;
                     `;
                     tdEn.appendChild(badge);
@@ -1585,9 +1587,9 @@ async function showMagicEditTagsModal(shell, ctx = {}) {
                 addBtn.type = "button";
                 addBtn.textContent = magicT("添加");
                 addBtn.style.cssText = `
-                    padding: 4px 10px; font-size: 11px; border-radius: 4px; cursor: pointer;
-                    border: 1px solid ${THEME.accent}; background: rgba(156, 39, 176, 0.2);
-                    color: #e1bee7; font-weight: 600;
+                    padding: 4px 10px; font-size: 11px; border-radius: 6px; cursor: pointer;
+                    border: 1px solid rgba(99, 102, 241, 0.45); background: rgba(99, 102, 241, 0.16);
+                    color: #c7d2fe; font-weight: 600;
                 `;
                 preventConflict(addBtn);
                 addBtn.addEventListener("click", (e) => {
@@ -4204,7 +4206,7 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                 if (idx === -1) return text;
                 return (
                     text.slice(0, idx) +
-                    `<b style="color:#9C27B0;font-weight:700;">` + text.slice(idx, idx + qLen) + `</b>` +
+                    `<b style="color:#818cf8;font-weight:700;">` + text.slice(idx, idx + qLen) + `</b>` +
                     text.slice(idx + qLen)
                 );
             };
@@ -4257,7 +4259,7 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                     box-sizing:border-box;
                 `;
                 if (idx === sel) {
-                    row.style.background = "rgba(24, 144, 255, 0.22)";
+                    row.style.background = "rgba(99, 102, 241, 0.18)";
                 }
 
                 if (isDanbooruRow) {
@@ -4266,7 +4268,7 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                     const enFull = it.en || "";
                     enEl.innerHTML = highlightMatch(enFull);
                     enEl.style.cssText =
-                        "min-width:0; color:#e8e8e8; text-align:left; overflow-wrap:anywhere; word-break:break-word; line-height:1.35;";
+                        "min-width:0; color:#f4f4f5; text-align:left; overflow-wrap:anywhere; word-break:break-word; line-height:1.35;";
 
                     const catKey = magicDanbooruCategoryId(it);
                     const catColor = DANBOORU_CATEGORY_COLORS[catKey] || "#888";
@@ -4282,13 +4284,13 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
 
                     const cntEl = document.createElement("span");
                     cntEl.textContent = fmtCount(it.count);
-                    cntEl.style.cssText = "color:#666; font-size:10px; text-align:right; font-variant-numeric:tabular-nums;";
+                    cntEl.style.cssText = "color:#71717a; font-size:10px; text-align:right; font-variant-numeric:tabular-nums;";
 
                     const cnText = it.cn ? highlightMatch(it.cn) : "—";
                     const cnEl = document.createElement("span");
                     cnEl.innerHTML = cnText;
                     cnEl.style.cssText =
-                        "min-width:0; color:#ce93d8; text-align:left; word-break:break-word; line-height:1.35;";
+                        "min-width:0; color:#a5b4fc; text-align:left; word-break:break-word; line-height:1.35;";
 
                     row.appendChild(enEl);
                     row.appendChild(cnEl);
@@ -4305,10 +4307,10 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                         enEl.title = enFull;
                     }
                     enEl.style.cssText =
-                        "min-width:0; color:#e8e8e8; text-align:left; overflow-wrap:anywhere; word-break:break-word; line-height:1.35; display:flex; align-items:center; gap:0;";
+                        "min-width:0; color:#f4f4f5; text-align:left; overflow-wrap:anywhere; word-break:break-word; line-height:1.35; display:flex; align-items:center; gap:0;";
                     const cnEl = document.createElement("span");
                     cnEl.style.cssText =
-                        "min-width:0; color:#ce93d8; text-align:left; word-break:break-word; line-height:1.35; display:flex; align-items:center; justify-content:flex-start; flex-wrap:wrap; gap:4px;";
+                        "min-width:0; color:#a5b4fc; text-align:left; word-break:break-word; line-height:1.35; display:flex; align-items:center; justify-content:flex-start; flex-wrap:wrap; gap:4px;";
                     if (it.source === "custom") {
                         const badge = document.createElement("span");
                         badge.textContent = magicT("用户");
@@ -4318,8 +4320,8 @@ function attachMagicPromptAutocomplete(textarea, { onInput, panelMount, scrollRo
                                 : magicT("来自「") + (it.setName || magicT("自定义")) + magicT("」");
                         badge.style.cssText = `
                             padding: 1px 4px; font-size: 10px;
-                            border-radius: 3px; background: rgba(156, 39, 176, 0.28);
-                            color: #ce93d8; font-weight: 600; flex-shrink: 0;
+                            border-radius: 3px; background: rgba(99, 102, 241, 0.22);
+                            color: #a5b4fc; font-weight: 600; flex-shrink: 0;
                             line-height: 1.4;
                         `;
                         cnEl.appendChild(badge);
@@ -4702,10 +4704,10 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         width: ${dlgCfg.width}px; height: ${dlgCfg.height}px;
         pointer-events: auto;
         background: ${THEME.bg}; color: ${THEME.text};
-        border: 1px solid ${THEME.border}; border-radius: 8px;
-        box-shadow: 0 16px 56px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.06);
+        border: 1px solid ${THEME.border}; border-radius: 14px;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.78), 0 0 0 1px rgba(255,255,255,0.05) inset;
         display: flex; flex-direction: column;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
         overflow: hidden;
         box-sizing: border-box;
     `;
@@ -4723,21 +4725,22 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
     const header = document.createElement("div");
     header.style.cssText = `
         display: flex; align-items: center; justify-content: space-between;
-        padding: 14px 18px; background: ${THEME.bg2};
+        padding: 13px 18px; background: #151519;
         border-bottom: 1px solid ${THEME.border};
         flex-shrink: 0;
     `;
     const title = document.createElement("span");
-    title.style.cssText = "font-size: 15px; font-weight: 600; color: #ddd;";
+    title.style.cssText = "font-size: 15px; font-weight: 650; color: #f4f4f5;";
     title.textContent = magicT("🔮 Magic 提示词编辑器");
     const closeBtn = document.createElement("button");
     closeBtn.textContent = "✕";
     closeBtn.style.cssText = `
         background: none; border: none; color: ${THEME.text2};
-        cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 4px;
+        cursor: pointer; font-size: 15px; padding: 4px 8px; border-radius: 6px;
+        transition: all 0.15s;
     `;
-    closeBtn.addEventListener("mouseenter", () => closeBtn.style.background = THEME.hover);
-    closeBtn.addEventListener("mouseleave", () => closeBtn.style.background = "none");
+    closeBtn.addEventListener("mouseenter", () => { closeBtn.style.background = THEME.hover; closeBtn.style.color = "#f4f4f5"; });
+    closeBtn.addEventListener("mouseleave", () => { closeBtn.style.background = "none"; closeBtn.style.color = THEME.text2; });
     closeBtn.addEventListener("click", () => closeEditorOverlay());
     preventConflict(closeBtn);
     header.appendChild(title);
@@ -4748,8 +4751,9 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
     // ---- Tab Bar ----
     const tabBar = document.createElement("div");
     tabBar.style.cssText = `
-        display: flex; background: ${THEME.bg2};
+        display: flex; background: #111114;
         border-bottom: 1px solid ${THEME.border}; flex-shrink: 0;
+        padding: 0 12px;
     `;
     const tabs = [
         { id: "edit", label: magicT("✒️ 编辑"), icon: "✒️" },
@@ -4763,8 +4767,8 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         btn.dataset.tab = t.id;
         btn.style.cssText = `
             flex: 1; padding: 10px 8px; background: none; border: none;
-            color: ${THEME.text2}; cursor: pointer; font-size: 13px;
-            border-bottom: 2px solid transparent; transition: all 0.2s;
+            color: ${THEME.text2}; cursor: pointer; font-size: 13px; font-weight: 500;
+            border-bottom: 2px solid transparent; transition: all 0.18s;
         `;
         preventConflict(btn);
         btn.addEventListener("click", () => {
@@ -4772,9 +4776,9 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
             renderContent();
             // 更新 tab 高亮
             tabBar.querySelectorAll("button").forEach(b => {
-                b.style.color = b.dataset.tab === activeTab ? "#fff" : THEME.text2;
+                b.style.color = b.dataset.tab === activeTab ? "#f4f4f5" : THEME.text2;
                 b.style.borderBottomColor = b.dataset.tab === activeTab ? THEME.accent : "transparent";
-                b.style.background = b.dataset.tab === activeTab ? THEME.bg3 : "none";
+                b.style.background = b.dataset.tab === activeTab ? "rgba(99, 102, 241, 0.08)" : "none";
             });
         });
         tabBar.appendChild(btn);
@@ -4794,14 +4798,15 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
     const footer = document.createElement("div");
     footer.style.cssText = `
         display: flex; gap: 10px; align-items: center; justify-content: center;
-        padding: 12px 18px; background: ${THEME.bg2};
+        padding: 12px 18px; background: #151519;
         border-top: 1px solid ${THEME.border}; flex-shrink: 0;
     `;
 
     const btnStyle = (color) => `
-        padding: 8px 28px; border: none; border-radius: 6px;
-        cursor: pointer; font-size: 13px; color: #fff;
-        background: ${color}; transition: opacity 0.2s;
+        padding: 8px 28px; border: 1px solid rgba(129, 140, 248, 0.4); border-radius: 8px;
+        cursor: pointer; font-size: 13px; font-weight: 600; color: #fff;
+        background: linear-gradient(180deg, ${color} 0%, ${THEME.accent2} 100%);
+        box-shadow: 0 2px 10px rgba(99, 102, 241, 0.25); transition: opacity 0.2s;
     `;
 
     const footerCloseBtn = document.createElement("button");
@@ -6647,13 +6652,13 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 chip.dataset.magicTagIndex = String(index);
                 chip.style.cssText = `
                     flex: 0 0 auto; max-width: 220px; cursor: grab;
-                    background: ${tagItem.disabled ? THEME.bg3 : "rgba(93,64,55,0.72)"};
-                    border: 1px solid ${THEME.border}; border-radius: 6px;
+                    background: ${tagItem.disabled ? "#141418" : "#181820"};
+                    border: 1px solid ${tagItem.disabled ? THEME.border : "rgba(99, 102, 241, 0.3)"}; border-radius: 8px;
                     overflow: hidden; font-size: 12px; user-select: none;
                     /* Bug fix: z-index 高于 floatBar (100055)，确保浮动条不会遮挡芯片点击区域 */
                     z-index: 100065;
                     transition: box-shadow 0.14s ease, outline 0.14s ease, filter 0.14s ease, z-index 0s;
-                    ${tagItem.disabled ? "opacity:0.58;" : ""}
+                    ${tagItem.disabled ? "opacity:0.55;" : ""}
                     ${
                         shell._magicChipSelSet && shell._magicChipSelSet.has(index)
                             ? `box-shadow:${MAGIC_CHIP_SELECTED_GLOW};`
@@ -6673,11 +6678,11 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 top.setAttribute("data-magic-tag-top", "1");
                 top.title = magicT("锁定后仅在此区域点击进入文字编辑");
                 top.style.cssText =
-                    "display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-bottom:1px solid rgba(0,0,0,0.25);cursor:text;";
+                    `display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;background:${tagItem.disabled ? "transparent" : "rgba(99, 102, 241, 0.13)"};border-bottom:1px solid rgba(255,255,255,0.07);cursor:text;`;
                 const tspan = document.createElement("span");
                 tspan.textContent = tagItem.text || " ";
-                tspan.style.cssText = `flex:1;min-width:0;word-break:break-word;font-size:12px;line-height:1.45;color:#f2f2f2;${
-                    tagItem.disabled ? "text-decoration:line-through;" : ""
+                tspan.style.cssText = `flex:1;min-width:0;word-break:break-word;font-size:12px;line-height:1.45;color:#f4f4f5;font-weight:500;${
+                    tagItem.disabled ? "text-decoration:line-through;color:#71717a;" : ""
                 }`;
                 const del = document.createElement("button");
                 del.type = "button";
@@ -6685,7 +6690,7 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
                 del.textContent = "✕";
                 del.title = magicT("删除");
                 del.style.cssText =
-                    "flex-shrink:0;border:none;background:transparent;color:#c62828;cursor:pointer;font-size:13px;line-height:1;padding:0 2px;";
+                    "flex-shrink:0;border:none;background:transparent;color:#f87171;cursor:pointer;font-size:12px;line-height:1;padding:0 2px;opacity:0.85;";
                 preventConflict(del);
                 del.addEventListener("click", (e) => {
                     e.stopPropagation();
@@ -7538,8 +7543,8 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         function refreshSubTabs() {
             [btnHist, btnFav].forEach((b) => {
                 const on = b.dataset.sub === sub;
-                b.style.background = on ? "rgba(156, 39, 176, 0.22)" : THEME.bg3;
-                b.style.color = on ? "#fff" : THEME.text2;
+                b.style.background = on ? "rgba(99, 102, 241, 0.16)" : THEME.bg3;
+                b.style.color = on ? "#f4f4f5" : THEME.text2;
                 b.style.borderColor = on ? THEME.accent : THEME.border;
             });
         }
@@ -8015,8 +8020,8 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         btnManageLlm.textContent = magicT("⚙️ 管理 LLM 配置…");
         btnManageLlm.title = magicT("打开与「多功能AI提示词替换 → 配置中心 → LLM服务」相同的编辑界面");
         btnManageLlm.style.cssText = `
-            padding: 8px 16px; border-radius: 6px; border: 1px solid ${THEME.accent};
-            background: rgba(156, 39, 176, 0.2); color: #e1bee7; font-size: 12px;
+            padding: 8px 16px; border-radius: 7px; border: 1px solid rgba(99, 102, 241, 0.45);
+            background: rgba(99, 102, 241, 0.14); color: #c7d2fe; font-size: 12px;
             font-weight: 600; cursor: pointer; flex-shrink: 0;
         `;
         preventConflict(btnManageLlm);
@@ -8066,9 +8071,9 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
         /* —— 翻译模式：互斥二选一 —— */
         const p3modeRow = document.createElement("div");
         p3modeRow.style.cssText = `
-            margin-bottom: 16px; padding: 10px 14px;
-            background: rgba(156,39,176,0.08); border-radius: 8px;
-            border: 1px solid rgba(156,39,176,0.25);
+            margin-bottom: 16px; padding: 12px 14px;
+            background: rgba(99, 102, 241, 0.08); border-radius: 8px;
+            border: 1px solid rgba(99, 102, 241, 0.24);
         `;
         const p3modeTitle = document.createElement("div");
         p3modeTitle.style.cssText = `font-size: 12px; color: ${THEME.text2}; margin-bottom: 10px; font-weight: 600;`;
@@ -8229,9 +8234,9 @@ window.showPromptEditorModal = async function(node, nodeSeed) {
 
         const p5modeRow = document.createElement("div");
         p5modeRow.style.cssText = `
-            margin-bottom: 12px; padding: 10px 14px;
-            background: rgba(156,39,176,0.08); border-radius: 8px;
-            border: 1px solid rgba(156,39,176,0.25);
+            margin-bottom: 12px; padding: 12px 14px;
+            background: rgba(99, 102, 241, 0.08); border-radius: 8px;
+            border: 1px solid rgba(99, 102, 241, 0.24);
         `;
         const p5modeTitle = document.createElement("div");
         p5modeTitle.style.cssText = `font-size: 12px; color: ${THEME.text2}; margin-bottom: 10px; font-weight: 600;`;

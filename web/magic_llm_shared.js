@@ -4,6 +4,7 @@
  */
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import "./magic_ui_shared.js";
 
 export const MAGIC_PROMPT_REPLACE_TYPE = "MagicPromptReplace";
 
@@ -93,10 +94,10 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
         content.innerHTML = "";
 
         const selDiv = document.createElement("div");
-        selDiv.innerHTML = `<label style="color:#888;font-size:12px;">选择配置 (Select Profile):</label>`;
+        selDiv.innerHTML = `<label class="ma-section-label">选择配置 (Select Profile):</label>`;
         const select = document.createElement("select");
-        select.style.cssText =
-            "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;margin-bottom:15px;border-radius:4px;";
+        select.className = "ma-select";
+        select.style.marginBottom = "14px";
         preventConflictLlm(select);
 
         const refreshList = () => {
@@ -125,21 +126,20 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
 
         const nameDiv = document.createElement("div");
         nameDiv.style.marginBottom = "10px";
-        nameDiv.innerHTML = `<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">配置名称 (Profile Name):</label>`;
+        nameDiv.innerHTML = `<label class="ma-section-label">配置名称 (Profile Name):</label>`;
         const nameInp = document.createElement("input");
-        nameInp.style.cssText =
-            "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+        nameInp.className = "ma-input";
         preventConflictLlm(nameInp);
         nameDiv.appendChild(nameInp);
         content.appendChild(nameDiv);
 
         const quickDiv = document.createElement("div");
-        quickDiv.style.cssText = "display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap;";
+        quickDiv.style.cssText = "display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;";
         const addQuick = (name, url) => {
             const b = document.createElement("button");
+            b.type = "button";
             b.textContent = name;
-            b.style.cssText =
-                "padding:5px 10px;background:#333;color:#ddd;border:1px solid #555;border-radius:15px;cursor:pointer;font-size:11px;";
+            b.className = "ma-pill";
             preventConflictLlm(b);
             b.onclick = () => {
                 urlInp.value = url;
@@ -155,11 +155,10 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
         const createInp = (lbl, type = "text") => {
             const div = document.createElement("div");
             div.style.marginBottom = "10px";
-            div.innerHTML = `<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">${lbl}</label>`;
+            div.innerHTML = `<label class="ma-section-label">${lbl}</label>`;
             const inp = document.createElement("input");
             inp.type = type;
-            inp.style.cssText =
-                "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+            inp.className = "ma-input";
             preventConflictLlm(inp);
             div.appendChild(inp);
             content.appendChild(div);
@@ -171,13 +170,13 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
         const requestOptionsTitle = document.createElement("div");
         requestOptionsTitle.textContent = "请求容错 / Request Resilience";
         requestOptionsTitle.style.cssText =
-            "margin:14px 0 8px;color:#bbb;font-size:12px;font-weight:bold;border-top:1px solid #444;padding-top:12px;";
+            "margin:14px 0 8px;color:#d4d4d8;font-size:12px;font-weight:600;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;";
         content.appendChild(requestOptionsTitle);
         const timeoutRow = document.createElement("div");
         timeoutRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;";
         const createNumberInp = (label, min, max, fallback, title) => {
             const wrap = document.createElement("label");
-            wrap.style.cssText = "display:flex;flex-direction:column;gap:5px;color:#888;font-size:11px;";
+            wrap.style.cssText = "display:flex;flex-direction:column;gap:5px;color:#a1a1aa;font-size:11.5px;font-weight:500;";
             wrap.textContent = label;
             const inp = document.createElement("input");
             inp.type = "number";
@@ -185,8 +184,7 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
             inp.max = String(max);
             inp.value = String(fallback);
             inp.title = title;
-            inp.style.cssText =
-                "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;box-sizing:border-box;";
+            inp.className = "ma-input";
             preventConflictLlm(inp);
             wrap.appendChild(inp);
             timeoutRow.appendChild(wrap);
@@ -198,26 +196,27 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
         content.appendChild(timeoutRow);
         const requestHint = document.createElement("div");
         requestHint.textContent = "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。";
-        requestHint.style.cssText = "color:#777;font-size:11px;line-height:1.5;margin-top:-4px;margin-bottom:10px;";
+        requestHint.style.cssText = "color:#71717a;font-size:11px;line-height:1.5;margin-top:-2px;margin-bottom:12px;";
         content.appendChild(requestHint);
 
         const modelDiv = document.createElement("div");
         modelDiv.style.marginBottom = "10px";
-        modelDiv.innerHTML = `<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">Model Name</label>`;
+        modelDiv.innerHTML = `<label class="ma-section-label">Model Name</label>`;
         const mRow = document.createElement("div");
-        mRow.style.cssText = "display:flex;gap:5px;";
+        mRow.style.cssText = "display:flex;gap:6px;";
         const modelInp = document.createElement("input");
-        modelInp.style.cssText =
-            "flex:1;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+        modelInp.className = "ma-input";
+        modelInp.style.flex = "1";
         modelInp.setAttribute("list", "ma_llm_models_shared");
         preventConflictLlm(modelInp);
 
         const dl = document.createElement("datalist");
         dl.id = "ma_llm_models_shared";
         const searchBtn = document.createElement("button");
+        searchBtn.type = "button";
         searchBtn.textContent = "🔍";
-        searchBtn.style.cssText =
-            "padding:0 12px;cursor:pointer;background:#333;color:#fff;border:1px solid #555;border-radius:4px;";
+        searchBtn.className = "ma-btn";
+        searchBtn.style.padding = "0 12px";
         preventConflictLlm(searchBtn);
 
         mRow.appendChild(modelInp);
@@ -227,17 +226,19 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
         content.appendChild(modelDiv);
 
         const btnDiv = document.createElement("div");
-        btnDiv.style.cssText = "display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;";
-        const mkBtn = (txt, col, cb) => {
+        btnDiv.style.cssText = "display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;";
+        const mkBtn = (txt, cls, cb) => {
             const b = document.createElement("button");
+            b.type = "button";
             b.textContent = txt;
-            b.style.cssText = `flex:1;min-width:100px;padding:10px;background:${col};color:white;border:none;border-radius:4px;cursor:pointer;`;
+            b.className = "ma-btn " + cls;
+            b.style.cssText = "flex:1;min-width:100px;padding:8px 12px;";
             preventConflictLlm(b);
             b.onclick = cb;
             btnDiv.appendChild(b);
         };
 
-        mkBtn("➕ 新建配置", "#2196F3", () => {
+        mkBtn("➕ 新建配置", "", () => {
             const newName = "New Profile " + (Object.keys(ma_config.llm).length + 1);
             ma_config.llm[newName] = { base_url: "", api_key: "", model: "", connect_timeout: 15, read_timeout: 180, max_retries: 1 };
             curLLMName = newName;
@@ -252,7 +253,7 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
                 }
             })();
         });
-        mkBtn("💾 保存当前", "#4CAF50", () => {
+        mkBtn("💾 保存当前", "ma-btn-primary", () => {
             void (async () => {
                 try {
                     const oldName = curLLMName;
@@ -278,7 +279,7 @@ export function mountMagicLlmEditorTab(content, ma_config, onAfterSave) {
                 }
             })();
         });
-        mkBtn("🗑️ 删除", "#f44336", () => {
+        mkBtn("🗑️ 删除", "ma-btn-danger", () => {
             if (Object.keys(ma_config.llm).length <= 1) return alert("至少保留一个配置！");
             if (!confirm(`删除配置「${curLLMName}」？`)) return;
             void (async () => {
@@ -344,24 +345,21 @@ export async function openMagicLlmServiceModal(opts = {}) {
     const ma_config = { llm: JSON.parse(JSON.stringify(data.llm || {})) };
 
     const dialog = document.createElement("div");
+    dialog.className = "ma-modal";
     dialog.style.cssText = `
         position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        width: min(92vw, 560px); height: min(85vh, 540px);
-        background: #222; color: #ddd; border: 1px solid #444;
-        box-shadow: 0 16px 48px rgba(0,0,0,0.75); z-index: 100090;
-        display: flex; flex-direction: column; font-family: sans-serif;
-        border-radius: 8px; overflow: hidden;
+        width: min(92vw, 560px); height: min(85vh, 560px);
+        z-index: 100090;
     `;
 
     const header = document.createElement("div");
-    header.style.cssText =
-        "padding: 12px 14px; background: #333; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444;";
+    header.className = "ma-modal-header";
     const ht = document.createElement("span");
-    ht.innerHTML = "<b>🤖 LLM 服务</b> <span style='opacity:0.85;font-weight:400;font-size:12px'>（与「多功能AI提示词替换」共用 llm_settings.txt）</span>";
+    ht.className = "ma-modal-title";
+    ht.innerHTML = "<b>🤖 LLM 服务</b> <span style='color:#71717a;font-weight:400;font-size:11.5px'>（与「多功能AI提示词替换」共用 llm_settings.txt）</span>";
     const closeBtn = document.createElement("button");
     closeBtn.textContent = "✕";
-    closeBtn.style.cssText =
-        "background:none;border:none;color:#fff;cursor:pointer;font-size:18px;padding:0 10px;";
+    closeBtn.className = "ma-modal-close";
     preventConflictLlm(closeBtn);
     const close = () => {
         try {
@@ -374,7 +372,8 @@ export async function openMagicLlmServiceModal(opts = {}) {
     dialog.appendChild(header);
 
     const content = document.createElement("div");
-    content.style.cssText = "flex:1;padding:16px;overflow-y:auto;background:#222;min-height:0;";
+    content.className = "ma-modal-body";
+    content.style.padding = "18px";
     preventConflictLlm(content);
     dialog.appendChild(content);
 

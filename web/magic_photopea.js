@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import "./magic_ui_shared.js";
 
 const NODE_NAME = "MagicPhotopeaNode";
 const WIN_ID = "magic-photopea-window";
@@ -83,16 +84,18 @@ function showGalleryModal(node) {
     // --- DOM 结构 ---
     const modal = document.createElement("div");
     modal.id = GALLERY_ID;
-    modal.style.cssText = `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px);`;
+    modal.className = "ma-modal-backdrop";
+    modal.style.zIndex = "9999";
 
     const container = document.createElement("div");
-    container.style.cssText = `width: 90%; height: 90%; background: #1e1e1e; border-radius: 12px; border: 1px solid #444; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.6);`;
+    container.className = "ma-modal ma-modal-static-anim";
+    container.style.cssText = `width: 90%; height: 90%;`;
 
     const header = document.createElement("div");
-    header.style.cssText = "padding: 15px 20px; background: #252525; border-bottom: 1px solid #333; display: flex; gap: 15px; align-items: center; user-select: none; min-height: 60px; flex-wrap: wrap;";
+    header.style.cssText = "padding: 13px 20px; background: #09090b; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; gap: 12px; align-items: center; user-select: none; min-height: 58px; flex-wrap: wrap;";
 
     const grid = document.createElement("div");
-    grid.style.cssText = `flex: 1; overflow-y: auto; padding: 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-size, 140px), 1fr)); gap: 15px; align-content: start;`;
+    grid.style.cssText = `flex: 1; overflow-y: auto; padding: 20px; background: #111114; display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--card-size, 140px), 1fr)); gap: 14px; align-content: start;`;
     grid.style.setProperty('--card-size', currentSettings.size + "px");
 
     // --- API Interactions ---
@@ -170,7 +173,7 @@ function showGalleryModal(node) {
         header.innerHTML = "";
         
         if (isEditMode) {
-            header.style.background = "#3a2e2e"; 
+            header.style.background = "rgba(239, 68, 68, 0.08)"; 
             
             const selectAllBtn = document.createElement("button");
             // 🌟 逻辑调整：全选时只计算“未固定”的文件
@@ -192,8 +195,7 @@ function showGalleryModal(node) {
             };
 
             const title = document.createElement("div");
-            title.innerHTML = `<span style="font-size:14px; margin-left:10px;">待删: <b style="color:#d32f2f">${selectedFiles.size}</b> 张</span>`;
-            title.style.color = "#ccc";
+            title.innerHTML = `<span style="font-size:13px; margin-left:8px; color:#a1a1aa;">待删: <b style="color:#f87171">${selectedFiles.size}</b> 张</span>`;
             
             const delSelBtn = document.createElement("button");
             delSelBtn.innerHTML = `🗑️ 删除选中 (${selectedFiles.size})`;
@@ -222,12 +224,12 @@ function showGalleryModal(node) {
             header.appendChild(delSelBtn);
             header.appendChild(doneBtn);
         } else {
-            header.style.background = "#252525";
+            header.style.background = "#09090b";
 
             const searchInput = document.createElement("input");
             searchInput.type = "text"; searchInput.placeholder = "🔍 搜索...";
             searchInput.className = "mp-input";
-            searchInput.style.maxWidth = "200px";
+            searchInput.style.maxWidth = "220px";
             searchInput.oninput = (e) => renderGrid(e.target.value);
 
             const sortSelect = document.createElement("select");
@@ -239,9 +241,10 @@ function showGalleryModal(node) {
             const sliderContainer = document.createElement("div");
             sliderContainer.style.display = "flex";
             sliderContainer.style.alignItems = "center";
-            sliderContainer.innerHTML = "<span style='font-size:12px;margin-right:5px'>缩放</span>";
+            sliderContainer.innerHTML = "<span style='font-size:12px;margin-right:8px;color:#a1a1aa;'>缩放</span>";
             const sizeSlider = document.createElement("input");
             sizeSlider.type = "range"; sizeSlider.min = "80"; sizeSlider.max = "400"; sizeSlider.step = "10";
+            sizeSlider.style.accentColor = "#6366f1";
             sizeSlider.value = currentSettings.size;
             sizeSlider.oninput = (e) => grid.style.setProperty('--card-size', e.target.value + "px");
             sizeSlider.onchange = (e) => { currentSettings.size = e.target.value; saveSettings(currentSettings); };
@@ -426,44 +429,49 @@ function showGalleryModal(node) {
         const style = document.createElement("style");
         style.id = "mp-styles";
         style.innerHTML = `
-            .mp-card { position: relative; background: #2a2a2a; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: transform 0.1s; }
-            .mp-card:hover { border-color: #666; }
-            .mp-card.selected { border-color: #d32f2f; background: #3e3025; transform: scale(0.98); }
+            .mp-card { position: relative; background: #18181c; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); cursor: pointer; transition: all 0.16s ease; }
+            .mp-card:hover { border-color: rgba(255,255,255,0.22); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.45); }
+            .mp-card.selected { border-color: #ef4444; background: rgba(239, 68, 68, 0.14); transform: scale(0.98); box-shadow: 0 0 0 1px #ef4444; }
             /* 🌟 固定状态样式 */
-            .mp-card.pinned { border-color: #4CAF50; opacity: 1; }
+            .mp-card.pinned { border-color: #10b981; box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35); opacity: 1; }
             
-            .mp-img-box { width: 100%; aspect-ratio: 1/1; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+            .mp-img-box { width: 100%; aspect-ratio: 1/1; background: #09090b; display: flex; align-items: center; justify-content: center; overflow: hidden; }
             .mp-img-box img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.3s; }
-            .mp-label { padding: 8px; font-size: 11px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; background: #252525; height: 30px; line-height: 14px; }
+            .mp-label { padding: 8px 10px; font-size: 11.5px; color: #d4d4d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; background: #141418; border-top: 1px solid rgba(255,255,255,0.06); height: 32px; line-height: 15px; }
             
-            .mp-btn-primary { padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; }
-            .mp-btn-danger { padding: 6px 12px; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; }
-            .mp-btn-success { padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; }
-            .mp-btn-warning { padding: 6px 12px; background: #ff9800; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-            .mp-btn-close { margin-left: auto; width: 32px; height: 32px; background: #444; color: #fff; border: none; border-radius: 50%; cursor: pointer; font-size: 16px; }
-            .mp-btn-close:hover { background: #666; }
-            .mp-input { padding: 8px; background: #111; color: #fff; border: 1px solid #444; border-radius: 4px; outline: none; }
-            .mp-select { padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; outline: none; }
-            .mp-rename-input { width: 100%; background: #000; color: #ff9800; border: 1px solid #ff9800; text-align: center; border-radius: 2px; }
+            .mp-btn-primary { padding: 7px 14px; background: #6366f1; color: white; border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: 600; transition: all 0.14s ease; }
+            .mp-btn-primary:hover { background: #818cf8; }
+            .mp-btn-danger { padding: 7px 14px; background: rgba(239, 68, 68, 0.16); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: 500; transition: all 0.14s ease; }
+            .mp-btn-danger:hover { background: rgba(239, 68, 68, 0.26); border-color: #ef4444; color: #fca5a5; }
+            .mp-btn-success { padding: 7px 14px; background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: 600; transition: all 0.14s ease; }
+            .mp-btn-success:hover { background: rgba(16, 185, 129, 0.26); border-color: #10b981; }
+            .mp-btn-warning { padding: 7px 14px; background: rgba(245, 158, 11, 0.16); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: 600; transition: all 0.14s ease; }
+            .mp-btn-warning:hover { background: rgba(245, 158, 11, 0.26); border-color: #f59e0b; }
+            .mp-btn-close { margin-left: auto; width: 30px; height: 30px; background: transparent; color: #a1a1aa; border: 1px solid transparent; border-radius: 6px; cursor: pointer; font-size: 16px; transition: all 0.14s ease; display: inline-flex; align-items: center; justify-content: center; }
+            .mp-btn-close:hover { background: #222228; border-color: rgba(255,255,255,0.12); color: #f4f4f5; }
+            .mp-input { padding: 7px 11px; background: #141418; color: #f4f4f5; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; outline: none; font-size: 12.5px; transition: border-color 0.14s ease; }
+            .mp-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.22); }
+            .mp-select { padding: 7px 11px; background: #141418; color: #f4f4f5; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; outline: none; font-size: 12.5px; }
+            .mp-rename-input { width: 100%; background: #09090b; color: #fbbf24; border: 1px solid #f59e0b; text-align: center; border-radius: 4px; outline: none; }
             
-            /* 🌟 删除按钮 (移动到左上角) */
+            /* 🌟 删除按钮 (左上角) */
             .mp-card-del { 
-                position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; 
-                background: red; color: white; border: 1px solid white; border-radius: 50%; 
+                position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; 
+                background: rgba(239, 68, 68, 0.9); color: white; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px; 
                 cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; 
-                font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+                font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.5); transition: transform 0.14s;
             }
-            .mp-card-del:hover { transform: scale(1.1); }
+            .mp-card-del:hover { transform: scale(1.08); background: #ef4444; }
 
             /* 🌟 固定按钮 (删除按钮下方) */
             .mp-card-pin {
-                position: absolute; top: 34px; left: 4px; width: 24px; height: 24px;
-                background: rgba(0,0,0,0.6); color: #888; border: 1px solid #666; border-radius: 50%;
+                position: absolute; top: 36px; left: 6px; width: 24px; height: 24px;
+                background: rgba(9, 9, 11, 0.78); color: #a1a1aa; border: 1px solid rgba(255,255,255,0.18); border-radius: 6px;
                 cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center;
-                font-size: 14px; transition: all 0.2s;
+                font-size: 13px; transition: all 0.16s; backdrop-filter: blur(4px);
             }
-            .mp-card-pin:hover { background: #fff; color: #000; }
-            .mp-card-pin.active { background: #4CAF50; color: white; border-color: #fff; box-shadow: 0 0 5px #4CAF50; }
+            .mp-card-pin:hover { background: #27272e; color: #f4f4f5; border-color: rgba(255,255,255,0.3); }
+            .mp-card-pin.active { background: #10b981; color: white; border-color: rgba(255,255,255,0.4); box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
         `;
         document.head.appendChild(style);
     }
@@ -483,18 +491,19 @@ function showPhotopeaModal(node) {
 
     win = document.createElement("div");
     win.id = WIN_ID;
+    win.className = "ma-modal ma-modal-static-anim";
     win.dataset.currentNodeId = node.id;
-    win.style.cssText = `position: fixed; top: 5vh; left: 5vw; width: 90vw; height: 85vh; min-width: min(800px, calc(90vw - 16px)); min-height: min(600px, calc(85vh - 16px)); max-width: calc(100vw - var(--mp-left, 5vw) - 8px); max-height: calc(100vh - var(--mp-top, 5vh) - 8px); box-sizing: border-box; background: #1e1e1e; border: 2px solid #444; box-shadow: 0 0 50px rgba(0,0,0,0.9); z-index: 9000; display: flex; flex-direction: column; border-radius: 8px; resize: both; overflow: hidden;`;
+    win.style.cssText = `position: fixed; top: 5vh; left: 5vw; width: 90vw; height: 85vh; min-width: min(800px, calc(90vw - 16px)); min-height: min(600px, calc(85vh - 16px)); max-width: calc(100vw - var(--mp-left, 5vw) - 8px); max-height: calc(100vh - var(--mp-top, 5vh) - 8px); z-index: 9000; resize: both;`;
 
     // Header
     const header = document.createElement("div");
-    header.style.cssText = "height: 36px; background: #2d2d2d; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid #333; user-select: none; flex-shrink: 0;";
-    header.innerHTML = `<div><b>🎨 Magic Photopea Studio</b> <span style="font-size:11px;color:#888;">(v4.4 PasteClean)</span></div>`;
+    header.className = "ma-modal-header";
+    header.style.padding = "10px 16px";
+    header.innerHTML = `<div class="ma-modal-title"><b>🎨 Magic Photopea Studio</b> <span style="font-size:11px;color:#71717a;font-weight:400;">(v4.4 PasteClean)</span></div>`;
     
-    const btnGroup = document.createElement("div"); btnGroup.style.display = "flex"; btnGroup.style.gap = "8px";
-    const btnStyle = "background:none; border:none; color:#bbb; font-size:14px; cursor:pointer; padding:4px 8px; border-radius:4px;";
+    const btnGroup = document.createElement("div"); btnGroup.style.display = "flex"; btnGroup.style.gap = "6px";
     
-    const maxBtn = document.createElement("button"); maxBtn.textContent = "⬜"; maxBtn.style.cssText = btnStyle;
+    const maxBtn = document.createElement("button"); maxBtn.textContent = "⬜"; maxBtn.className = "ma-modal-close";
     maxBtn.onclick = () => {
         if (win.dataset.isMaximized !== "true") {
             win.dataset.prevStyle = win.style.cssText; win.dataset.isMaximized = "true";
@@ -506,7 +515,7 @@ function showPhotopeaModal(node) {
     };
     btnGroup.appendChild(maxBtn);
 
-    const closeBtn = document.createElement("button"); closeBtn.textContent = "✕"; closeBtn.style.cssText = btnStyle; closeBtn.style.color = "#ff6b6b";
+    const closeBtn = document.createElement("button"); closeBtn.textContent = "✕"; closeBtn.className = "ma-modal-close";
     closeBtn.onclick = () => win.style.display = "none";
     btnGroup.appendChild(closeBtn);
     header.appendChild(btnGroup);
@@ -517,7 +526,7 @@ function showPhotopeaModal(node) {
     const ppConfig = { "files": [], "environment": { "theme": 2, "lang": "zh", "vmode": 0, "intro": false, "menus": [1,1,1,1,1,1,1,1,1] } };
     const hash = encodeURIComponent(JSON.stringify(ppConfig));
     iframe.src = `https://www.photopea.com#${hash}`;
-    iframe.style.cssText = "flex: 1 1 0%; min-width: 0; min-height: 0; border: none; background: #181818; width: 100%; display: block;";
+    iframe.style.cssText = "flex: 1 1 0%; min-width: 0; min-height: 0; border: none; background: #09090b; width: 100%; display: block;";
     
     // Auto-Load
     iframe.onload = async () => {
@@ -549,8 +558,8 @@ function showPhotopeaModal(node) {
 
     // Footer
     const footer = document.createElement("div");
-    footer.style.cssText = "height: 50px; background: #252525; border-top: 1px solid #333; display: flex; align-items: center; justify-content: flex-end; padding: 0 15px; gap: 15px; flex-shrink: 0;";
-    footer.innerHTML = `<button id="mp-save-btn" style="padding:8px 24px;background:linear-gradient(90deg,#4CAF50,#45a049);color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;box-shadow:0 2px 5px rgba(0,0,0,0.3);">💾 保存并发送 (Save)</button>`;
+    footer.className = "ma-modal-footer";
+    footer.innerHTML = `<button id="mp-save-btn" class="ma-btn ma-btn-primary" style="padding:8px 22px;">💾 保存并发送 (Save)</button>`;
     
     win.appendChild(iframe);
     win.appendChild(footer);

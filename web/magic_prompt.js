@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { refreshMagicPromptReplaceNodes, fetchLlmModels } from "./magic_llm_shared.js";
+import "./magic_ui_shared.js";
 
 // 必须与 __init__.py 和 nodes.py 中的类名完全一致
 const NODE_NAME = "MagicPromptReplace";
@@ -204,22 +205,21 @@ function makeDialogDraggable(dialog, titleBar) {
 // 显示设置窗口
 function showSettingsModal(node) {
     const dialog = document.createElement("div");
+    dialog.className = "ma-modal";
     dialog.style.cssText = `
         position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        width: 650px; height: 550px; background: #222; color: #ddd;
-        border: 1px solid #444; box-shadow: 0 0 20px rgba(0,0,0,0.8);
-        z-index: 10000; display: flex; flex-direction: column; font-family: sans-serif;
-        border-radius: 8px; overflow: hidden;
+        width: 680px; max-width: 94vw; height: 580px; max-height: 88vh;
+        z-index: 10000;
     `;
 
     // Header
     const header = document.createElement("div");
-    header.style.cssText = "padding: 12px; background: #333; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; cursor: move; user-select: none;";
-    header.innerHTML = `<b>🔮 Magic Assistant 配置中心</b>`;
+    header.className = "ma-modal-header";
+    header.innerHTML = `<b class="ma-modal-title">🔮 Magic Assistant 配置中心</b>`;
 
     const closeBtn = document.createElement("button"); 
     closeBtn.textContent="✕"; 
-    closeBtn.style.cssText="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;padding:0 10px;";
+    closeBtn.className="ma-modal-close";
     preventConflict(closeBtn); 
     closeBtn.onclick=()=>document.body.removeChild(dialog);
     header.appendChild(closeBtn); 
@@ -228,25 +228,27 @@ function showSettingsModal(node) {
     // 使用正确的拖拽函数
     makeDialogDraggable(dialog, header);
 
-    const body = document.createElement("div"); body.style.cssText="flex:1;display:flex;overflow:hidden;"; dialog.appendChild(body);
+    const body = document.createElement("div"); body.style.cssText="flex:1;display:flex;overflow:hidden;min-height:0;"; dialog.appendChild(body);
 
     // Sidebar
-    const sidebar = document.createElement("div"); sidebar.style.cssText="width:140px;background:#1a1a1a;border-right:1px solid #333;display:flex;flex-direction:column;";
-    const btnStyle = "padding:12px;text-align:left;background:none;border:none;color:#bbb;cursor:pointer;border-bottom:1px solid #333;";
-    const activeStyle = btnStyle + "background:#2a2a2a;color:#fff;font-weight:bold;border-left:3px solid #9C27B0;"; // 紫色主题
+    const sidebar = document.createElement("div");
+    sidebar.className = "ma-sidebar";
+    sidebar.style.width = "155px";
     
-    const tabRule = document.createElement("button"); tabRule.textContent="📋 规则编辑器"; tabRule.style.cssText=activeStyle;
-    const tabLLM = document.createElement("button"); tabLLM.textContent="🤖 LLM服务"; tabLLM.style.cssText=btnStyle;
-    const tabLocal = document.createElement("button"); tabLocal.textContent="🧠 本地模型"; tabLocal.style.cssText=btnStyle;
+    const tabRule = document.createElement("button"); tabRule.textContent="📋 规则编辑器"; tabRule.className="ma-sidebar-item active";
+    const tabLLM = document.createElement("button"); tabLLM.textContent="🤖 LLM服务"; tabLLM.className="ma-sidebar-item";
+    const tabLocal = document.createElement("button"); tabLocal.textContent="🧠 本地模型"; tabLocal.className="ma-sidebar-item";
     preventConflict(tabRule); preventConflict(tabLLM); preventConflict(tabLocal);
     sidebar.appendChild(tabRule); sidebar.appendChild(tabLLM); sidebar.appendChild(tabLocal); body.appendChild(sidebar);
 
     const activateTab = (activeTab) => {
         [tabRule, tabLLM, tabLocal].forEach((tab) => {
-            tab.style.cssText = tab === activeTab ? activeStyle : btnStyle;
+            tab.className = "ma-sidebar-item" + (tab === activeTab ? " active" : "");
         });
     };
-    const content = document.createElement("div"); content.style.cssText="flex:1;padding:20px;overflow-y:auto;background:#222;";
+    const content = document.createElement("div");
+    content.className = "ma-modal-body";
+    content.style.cssText = "flex:1;padding:20px;";
     preventConflict(content); body.appendChild(content);
 
     // --- TAB 1: Rules ---
@@ -254,8 +256,8 @@ function showSettingsModal(node) {
     const renderRuleTab = () => {
         content.innerHTML = "";
         
-        const selDiv = document.createElement("div"); selDiv.innerHTML=`<label style="color:#888;font-size:12px;">编辑规则 (Edit Rule):</label>`;
-        const select = document.createElement("select"); select.style.cssText="width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;margin-bottom:15px;border-radius:4px;";
+        const selDiv = document.createElement("div"); selDiv.innerHTML=`<label class="ma-section-label">编辑规则 (Edit Rule):</label>`;
+        const select = document.createElement("select"); select.className="ma-select"; select.style.marginBottom="14px";
         preventConflict(select);
         const refreshList = () => {
             select.innerHTML = "";
@@ -269,10 +271,10 @@ function showSettingsModal(node) {
         selDiv.appendChild(select); content.appendChild(selDiv);
 
         const createInp = (lbl, isArea) => {
-            const div = document.createElement("div"); div.style.marginBottom="10px";
-            div.innerHTML=`<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">${lbl}</label>`;
+            const div = document.createElement("div"); div.style.marginBottom="12px";
+            div.innerHTML=`<label class="ma-section-label">${lbl}</label>`;
             const inp = isArea?document.createElement("textarea"):document.createElement("input");
-            inp.style.cssText="width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;box-sizing:border-box;";
+            inp.className = isArea ? "ma-textarea" : "ma-input";
             if(isArea) inp.rows=4; preventConflict(inp);
             div.appendChild(inp); content.appendChild(div); return inp;
         };
@@ -280,20 +282,20 @@ function showSettingsModal(node) {
         const sysInp = createInp("System Prompt", true);
         const guideInp = createInp("Guide", true);
 
-        const btnDiv = document.createElement("div"); btnDiv.style.cssText="display:flex;gap:10px;margin-top:20px;";
-        const mkBtn=(txt,col,cb)=>{
-            const b=document.createElement("button"); b.textContent=txt; b.style.cssText=`flex:1;padding:10px;background:${col};color:white;border:none;border-radius:4px;cursor:pointer;`;
+        const btnDiv = document.createElement("div"); btnDiv.style.cssText="display:flex;gap:8px;margin-top:18px;";
+        const mkBtn=(txt,cls,cb)=>{
+            const b=document.createElement("button"); b.type="button"; b.textContent=txt; b.className="ma-btn "+cls; b.style.cssText="flex:1;padding:8px 12px;";
             preventConflict(b); b.onclick=cb; btnDiv.appendChild(b);
         };
-        mkBtn("➕ 新建", "#2196F3", ()=>{
+        mkBtn("➕ 新建", "", ()=>{
             const id="rule_"+Date.now(); node.ma_config.rules[id]={name:"New Rule",system:"",guide:""};
             curRuleId=id; saveConfigToServer(node.ma_config); refreshList(); loadVals();
         });
-        mkBtn("💾 保存", "#4CAF50", ()=>{
+        mkBtn("💾 保存", "ma-btn-primary", ()=>{
             node.ma_config.rules[curRuleId]={name:nameInp.value,system:sysInp.value,guide:guideInp.value};
             saveConfigToServer(node.ma_config); refreshList(); alert("Saved!");
         });
-        mkBtn("🗑️ 删除", "#f44336", ()=>{
+        mkBtn("🗑️ 删除", "ma-btn-danger", ()=>{
             if(Object.keys(node.ma_config.rules).length<=1)return alert("Keep at least one!");
             delete node.ma_config.rules[curRuleId]; curRuleId=Object.keys(node.ma_config.rules)[0];
             saveConfigToServer(node.ma_config); refreshList(); loadVals();
@@ -312,8 +314,8 @@ function showSettingsModal(node) {
     const renderLLMTab = () => {
         content.innerHTML = "";
         
-        const selDiv = document.createElement("div"); selDiv.innerHTML=`<label style="color:#888;font-size:12px;">选择配置 (Select Profile):</label>`;
-        const select = document.createElement("select"); select.style.cssText="width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;margin-bottom:15px;border-radius:4px;";
+        const selDiv = document.createElement("div"); selDiv.innerHTML=`<label class="ma-section-label">选择配置 (Select Profile):</label>`;
+        const select = document.createElement("select"); select.className="ma-select"; select.style.marginBottom="14px";
         preventConflict(select);
         
         const refreshList = () => {
@@ -331,14 +333,14 @@ function showSettingsModal(node) {
         selDiv.appendChild(select); content.appendChild(selDiv);
 
         const nameDiv = document.createElement("div"); nameDiv.style.marginBottom="10px";
-        nameDiv.innerHTML=`<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">配置名称 (Profile Name):</label>`;
-        const nameInp = document.createElement("input"); nameInp.style.cssText="width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+        nameDiv.innerHTML=`<label class="ma-section-label">配置名称 (Profile Name):</label>`;
+        const nameInp = document.createElement("input"); nameInp.className="ma-input";
         preventConflict(nameInp); nameDiv.appendChild(nameInp); content.appendChild(nameDiv);
 
         // Quick URLs
-        const quickDiv = document.createElement("div"); quickDiv.style.cssText="display:flex;gap:5px;margin-bottom:10px;";
+        const quickDiv = document.createElement("div"); quickDiv.style.cssText="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;";
         const addQuick = (name, url) => {
-            const b=document.createElement("button"); b.textContent=name; b.style.cssText="padding:5px 10px;background:#333;color:#ddd;border:1px solid #555;border-radius:15px;cursor:pointer;font-size:11px;";
+            const b=document.createElement("button"); b.type="button"; b.textContent=name; b.className="ma-pill";
             preventConflict(b); b.onclick=()=>{ urlInp.value=url; }; quickDiv.appendChild(b);
         };
         addQuick("OpenAI", "https://api.openai.com/v1");
@@ -349,9 +351,9 @@ function showSettingsModal(node) {
 
         const createInp = (lbl, type="text") => {
             const div = document.createElement("div"); div.style.marginBottom="10px";
-            div.innerHTML=`<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">${lbl}</label>`;
+            div.innerHTML=`<label class="ma-section-label">${lbl}</label>`;
             const inp = document.createElement("input"); inp.type=type;
-            inp.style.cssText="width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+            inp.className="ma-input";
             preventConflict(inp); div.appendChild(inp); content.appendChild(div); return inp;
         };
         const urlInp = createInp("Base URL");
@@ -359,13 +361,13 @@ function showSettingsModal(node) {
 
         const requestOptionsTitle = document.createElement("div");
         requestOptionsTitle.textContent = "请求容错 / Request Resilience";
-        requestOptionsTitle.style.cssText = "margin:14px 0 8px;color:#bbb;font-size:12px;font-weight:bold;border-top:1px solid #444;padding-top:12px;";
+        requestOptionsTitle.style.cssText = "margin:14px 0 8px;color:#d4d4d8;font-size:12px;font-weight:600;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;";
         content.appendChild(requestOptionsTitle);
         const timeoutRow = document.createElement("div");
         timeoutRow.style.cssText = "display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;";
         const createNumberInp = (label, min, max, fallback, title) => {
             const wrap = document.createElement("label");
-            wrap.style.cssText = "display:flex;flex-direction:column;gap:5px;color:#888;font-size:11px;";
+            wrap.style.cssText = "display:flex;flex-direction:column;gap:5px;color:#a1a1aa;font-size:11.5px;font-weight:500;";
             wrap.textContent = label;
             const inp = document.createElement("input");
             inp.type = "number";
@@ -373,7 +375,7 @@ function showSettingsModal(node) {
             inp.max = String(max);
             inp.value = String(fallback);
             inp.title = title;
-            inp.style.cssText = "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;box-sizing:border-box;";
+            inp.className = "ma-input";
             preventConflict(inp);
             wrap.appendChild(inp);
             timeoutRow.appendChild(wrap);
@@ -385,33 +387,33 @@ function showSettingsModal(node) {
         content.appendChild(timeoutRow);
         const requestHint = document.createElement("div");
         requestHint.textContent = "建议：慢速模型读取超时设为 180–300 秒；重试会增加最长等待时间和可能的计费次数。";
-        requestHint.style.cssText = "color:#777;font-size:11px;line-height:1.5;margin-top:-4px;margin-bottom:10px;";
+        requestHint.style.cssText = "color:#71717a;font-size:11px;line-height:1.5;margin-top:-2px;margin-bottom:12px;";
         content.appendChild(requestHint);
         
         const modelDiv = document.createElement("div"); modelDiv.style.marginBottom="10px";
-        modelDiv.innerHTML=`<label style="display:block;color:#888;font-size:12px;margin-bottom:5px;">Model Name</label>`;
-        const mRow = document.createElement("div"); mRow.style.cssText="display:flex;gap:5px;";
-        const modelInp = document.createElement("input"); modelInp.style.cssText="flex:1;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+        modelDiv.innerHTML=`<label class="ma-section-label">Model Name</label>`;
+        const mRow = document.createElement("div"); mRow.style.cssText="display:flex;gap:6px;";
+        const modelInp = document.createElement("input"); modelInp.className="ma-input"; modelInp.style.flex="1";
         modelInp.setAttribute("list", "ma_llm_models"); preventConflict(modelInp);
         
         const dl = document.createElement("datalist"); dl.id="ma_llm_models";
-        const searchBtn = document.createElement("button"); searchBtn.textContent="🔍"; searchBtn.style.cssText="padding:0 12px;cursor:pointer;background:#333;color:#fff;border:1px solid #555;border-radius:4px;";
+        const searchBtn = document.createElement("button"); searchBtn.type="button"; searchBtn.textContent="🔍"; searchBtn.className="ma-btn"; searchBtn.style.padding="0 12px";
         preventConflict(searchBtn);
         
         mRow.appendChild(modelInp); mRow.appendChild(searchBtn); mRow.appendChild(dl); modelDiv.appendChild(mRow); content.appendChild(modelDiv);
 
-        const btnDiv = document.createElement("div"); btnDiv.style.cssText="display:flex;gap:10px;margin-top:20px;";
-        const mkBtn=(txt,col,cb)=>{
-            const b=document.createElement("button"); b.textContent=txt; b.style.cssText=`flex:1;padding:10px;background:${col};color:white;border:none;border-radius:4px;cursor:pointer;`;
+        const btnDiv = document.createElement("div"); btnDiv.style.cssText="display:flex;gap:8px;margin-top:18px;";
+        const mkBtn=(txt,cls,cb)=>{
+            const b=document.createElement("button"); b.type="button"; b.textContent=txt; b.className="ma-btn "+cls; b.style.cssText="flex:1;padding:8px 12px;";
             preventConflict(b); b.onclick=cb; btnDiv.appendChild(b);
         };
         
-        mkBtn("➕ 新建配置", "#2196F3", ()=>{
+        mkBtn("➕ 新建配置", "", ()=>{
             const newName = "New Profile " + (Object.keys(node.ma_config.llm).length+1);
             node.ma_config.llm[newName] = { base_url:"", api_key:"", model:"", connect_timeout:15, read_timeout:180, max_retries:1 };
             curLLMName = newName; saveConfigToServer(node.ma_config); refreshList(); loadVals();
         });
-        mkBtn("💾 保存当前", "#4CAF50", ()=>{
+        mkBtn("💾 保存当前", "ma-btn-primary", ()=>{
             const oldName = curLLMName; const newName = nameInp.value || "Untitled";
             if (oldName !== newName) { delete node.ma_config.llm[oldName]; curLLMName = newName; }
             node.ma_config.llm[newName] = {
@@ -424,7 +426,7 @@ function showSettingsModal(node) {
             };
             saveConfigToServer(node.ma_config); refreshList(); alert("Saved!");
         });
-        mkBtn("🗑️ 删除", "#f44336", ()=>{
+        mkBtn("🗑️ 删除", "ma-btn-danger", ()=>{
             if(Object.keys(node.ma_config.llm).length<=1) return alert("Keep at least one!");
             if(!confirm(`Delete ${curLLMName}?`)) return;
             delete node.ma_config.llm[curLLMName]; curLLMName=Object.keys(node.ma_config.llm)[0];
@@ -481,24 +483,24 @@ function showSettingsModal(node) {
         const label = (text) => {
             const el = document.createElement("label");
             el.textContent = text;
-            el.style.cssText = "display:block;color:#888;font-size:12px;margin-bottom:5px;";
+            el.className = "ma-section-label";
             return el;
         };
         const input = (text, type = "text") => {
-            const wrap = document.createElement("div"); wrap.style.marginBottom = "9px";
+            const wrap = document.createElement("div"); wrap.style.marginBottom = "10px";
             wrap.appendChild(label(text));
             const el = document.createElement("input"); el.type = type;
-            el.style.cssText = "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;box-sizing:border-box;";
+            el.className = "ma-input";
             preventConflict(el); wrap.appendChild(el); content.appendChild(wrap); return el;
         };
         const number = (text, min, max, step = "1") => {
             const el = input(text, "number"); el.min = String(min); el.max = String(max); el.step = step; return el;
         };
         const select = (text, values) => {
-            const wrap = document.createElement("div"); wrap.style.marginBottom = "9px";
+            const wrap = document.createElement("div"); wrap.style.marginBottom = "10px";
             wrap.appendChild(label(text));
             const el = document.createElement("select");
-            el.style.cssText = "width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:4px;";
+            el.className = "ma-select";
             values.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; el.appendChild(o); });
             preventConflict(el); wrap.appendChild(el); content.appendChild(wrap); return el;
         };
@@ -534,16 +536,16 @@ function showSettingsModal(node) {
         const repetitionInp = number("重复惩罚", 0, 5, "0.01");
         const presenceInp = number("Presence penalty", 0, 5, "0.01");
         const seedInp = number("Seed", 0, 0x7fffffff);
-        const thinkingInp = document.createElement("label"); thinkingInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#bbb;font-size:12px;margin:10px 0;";
-        const thinkingCheck = document.createElement("input"); thinkingCheck.type = "checkbox"; thinkingInp.appendChild(thinkingCheck); thinkingInp.append("思考模式 / Thinking"); content.appendChild(thinkingInp);
-        const templateInp = document.createElement("label"); templateInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#bbb;font-size:12px;margin:10px 0;";
-        const templateCheck = document.createElement("input"); templateCheck.type = "checkbox"; templateCheck.checked = true; templateInp.appendChild(templateCheck); templateInp.append("使用模型默认聊天模板 / Model default template"); content.appendChild(templateInp);
+        const thinkingInp = document.createElement("label"); thinkingInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#d4d4d8;font-size:12.5px;margin:10px 0;cursor:pointer;";
+        const thinkingCheck = document.createElement("input"); thinkingCheck.type = "checkbox"; thinkingCheck.style.accentColor = "#6366f1"; thinkingInp.appendChild(thinkingCheck); thinkingInp.append("思考模式 / Thinking"); content.appendChild(thinkingInp);
+        const templateInp = document.createElement("label"); templateInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#d4d4d8;font-size:12.5px;margin:10px 0;cursor:pointer;";
+        const templateCheck = document.createElement("input"); templateCheck.type = "checkbox"; templateCheck.checked = true; templateCheck.style.accentColor = "#6366f1"; templateInp.appendChild(templateCheck); templateInp.append("使用模型默认聊天模板 / Model default template"); content.appendChild(templateInp);
         const mtpInp = select("MTP", ["auto", "off", "2", "3", "4", "5"]);
-        const keepInp = document.createElement("label"); keepInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#bbb;font-size:12px;margin:10px 0;";
-        const keepCheck = document.createElement("input"); keepCheck.type = "checkbox"; keepInp.appendChild(keepCheck); keepInp.append("保持模型常驻显存 / Keep loaded"); content.appendChild(keepInp);
+        const keepInp = document.createElement("label"); keepInp.style.cssText = "display:flex;gap:8px;align-items:center;color:#d4d4d8;font-size:12.5px;margin:10px 0;cursor:pointer;";
+        const keepCheck = document.createElement("input"); keepCheck.type = "checkbox"; keepCheck.style.accentColor = "#6366f1"; keepInp.appendChild(keepCheck); keepInp.append("保持模型常驻显存 / Keep loaded"); content.appendChild(keepInp);
         const hint = document.createElement("div");
         hint.textContent = "fast 关闭思考并限制输出长度，适合提示词改写；balanced/quality 提升生成上限。comfy_clip 复用 ComfyUI TextGenerate 的 CLIP.generate；llama_cpp 复用本地 llama-server。";
-        hint.style.cssText = "color:#777;font-size:11px;line-height:1.5;margin:2px 0 12px;";
+        hint.style.cssText = "color:#71717a;font-size:11px;line-height:1.5;margin:4px 0 12px;";
         content.appendChild(hint);
 
         const toggleBackend = () => {
@@ -583,10 +585,10 @@ function showSettingsModal(node) {
             keepCheck.checked = d.keep_loaded !== false;
             toggleBackend();
         };
-        const btnDiv = document.createElement("div"); btnDiv.style.cssText = "display:flex;gap:10px;margin-top:16px;";
-        const mkBtn = (txt, col, cb) => { const b = document.createElement("button"); b.textContent = txt; b.style.cssText = `flex:1;padding:10px;background:${col};color:white;border:none;border-radius:4px;cursor:pointer;`; preventConflict(b); b.onclick = cb; btnDiv.appendChild(b); };
-        mkBtn("➕ 新建", "#2196F3", () => { const n = `Local Profile ${Object.keys(node.ma_config.local_models).length + 1}`; node.ma_config.local_models[n] = { backend: "comfy_clip", model_name: "", clip_type: "qwen_image", keep_loaded: true }; curLocalName = n; void saveConfigToServer({ local_models: node.ma_config.local_models }); renderLocalTab(); });
-        mkBtn("💾 保存", "#4CAF50", () => {
+        const btnDiv = document.createElement("div"); btnDiv.style.cssText = "display:flex;gap:8px;margin-top:16px;";
+        const mkBtn = (txt, cls, cb) => { const b = document.createElement("button"); b.type = "button"; b.textContent = txt; b.className = "ma-btn " + cls; b.style.cssText = "flex:1;padding:8px 12px;"; preventConflict(b); b.onclick = cb; btnDiv.appendChild(b); };
+        mkBtn("➕ 新建", "", () => { const n = `Local Profile ${Object.keys(node.ma_config.local_models).length + 1}`; node.ma_config.local_models[n] = { backend: "comfy_clip", model_name: "", clip_type: "qwen_image", keep_loaded: true }; curLocalName = n; void saveConfigToServer({ local_models: node.ma_config.local_models }); renderLocalTab(); });
+        mkBtn("💾 保存", "ma-btn-primary", () => {
             const newName = nameInp.value.trim() || "Untitled Local";
             if (newName !== curLocalName) delete node.ma_config.local_models[curLocalName];
             curLocalName = newName;
@@ -608,7 +610,7 @@ function showSettingsModal(node) {
             };
             void saveConfigToServer({ local_models: node.ma_config.local_models }).then(() => { refreshList(); alert("本地模型配置已保存"); });
         });
-        mkBtn("🗑️ 删除", "#f44336", () => {
+        mkBtn("🗑️ 删除", "ma-btn-danger", () => {
             if (Object.keys(node.ma_config.local_models).length <= 1) return alert("至少保留一个本地配置！");
             if (!confirm(`删除本地配置「${curLocalName}」？`)) return;
             delete node.ma_config.local_models[curLocalName]; curLocalName = Object.keys(node.ma_config.local_models)[0];

@@ -412,7 +412,180 @@ const loraLoaderTranslations = {
     "Missing LoRA file(s): ": { zh: "缺少 LoRA 文件：", en: "Missing LoRA file(s): " },
     "缺少 LoRA 文件：": { zh: "缺少 LoRA 文件：", en: "Missing LoRA file(s): " },
     "lora_stack contains invalid LoRA data": { zh: "LoRA 列表数据无效", en: "lora_stack contains invalid LoRA data" },
-    "LoRA 列表数据无效": { zh: "LoRA 列表数据无效", en: "lora_stack contains invalid LoRA data" }
+    "LoRA 列表数据无效": { zh: "LoRA 列表数据无效", en: "lora_stack contains invalid LoRA data" },
+
+    // 新增：侧边栏、右键菜单、颜色预设、排序与替换模式、状态栏
+    "🎨颜色": { zh: "🎨颜色", en: "🎨Color" },
+    "预设分类": { zh: "预设分类", en: "Preset Categories" },
+    "LoRA 收藏夹": { zh: "LoRA 收藏夹", en: "LoRA Favorites" },
+    "新建分类": { zh: "新建分类", en: "New Category" },
+    "新建收藏夹": { zh: "新建收藏夹", en: "New Collection" },
+    "暂无分类（拖拽节点文件夹到此处创建预设）": { zh: "暂无分类（拖拽节点文件夹到此处创建预设）", en: "No categories (drag node folder here to create preset)" },
+    "暂无收藏（拖拽节点 LoRA 到此处收藏）": { zh: "暂无收藏（拖拽节点 LoRA 到此处收藏）", en: "No favorites (drag node LoRA here to favorite)" },
+    "触发词总开关": { zh: "触发词总开关", en: "All Trigger Words" },
+    "已选中": { zh: "已选中", en: "Selected" },
+    "开启选中": { zh: "开启选中", en: "Enable Selected" },
+    "关闭选中": { zh: "关闭选中", en: "Disable Selected" },
+    "合并到文件夹": { zh: "合并到文件夹", en: "Group into Folder" },
+    "复制到新文件夹": { zh: "复制到新文件夹", en: "Copy to New Folder" },
+    "修改颜色": { zh: "修改颜色", en: "Change Color" },
+    "批量编辑": { zh: "批量编辑", en: "Batch Edit" },
+    "删除选中": { zh: "删除选中", en: "Delete Selected" },
+    "重命名": { zh: "重命名", en: "Rename" },
+    "保存为预设": { zh: "保存为预设", en: "Save as Preset" },
+    "展开全部": { zh: "展开全部", en: "Expand All" },
+    "收起全部": { zh: "收起全部", en: "Collapse All" },
+    "全部启用": { zh: "全部启用", en: "Enable All" },
+    "全部禁用": { zh: "全部禁用", en: "Disable All" },
+    "解散文件夹（保留 LoRA）": { zh: "解散文件夹（保留 LoRA）", en: "Ungroup Folder (Keep LoRAs)" },
+    "删除文件夹（含内部 LoRA）": { zh: "删除文件夹（含内部 LoRA）", en: "Delete Folder (Including LoRAs)" },
+    "编辑触发词": { zh: "编辑触发词", en: "Edit Trigger Words" },
+    "编辑内容 / 详情": { zh: "编辑内容 / 详情", en: "Edit Content / Details" },
+    "替换此 LoRA": { zh: "替换此 LoRA", en: "Replace This LoRA" },
+    "复制此 LoRA": { zh: "复制此 LoRA", en: "Duplicate This LoRA" },
+    "加入收藏夹": { zh: "加入收藏夹", en: "Add to Favorites" },
+    "在 CivitAI 查看": { zh: "在 CivitAI 查看", en: "View on CivitAI" },
+    "打开所在文件夹": { zh: "打开所在文件夹", en: "Open Containing Folder" },
+    "➕ 添加到节点": { zh: "➕ 添加到节点", en: "➕ Add to Node" },
+    "🌐 在 CivitAI 查看": { zh: "🌐 在 CivitAI 查看", en: "🌐 View on CivitAI" },
+    "➕ 添加": { zh: "➕ 添加", en: "➕ Add" },
+    "🔁 替换": { zh: "🔁 替换", en: "🔁 Replace" },
+    "🔄 刷新": { zh: "🔄 刷新", en: "🔄 Refresh" },
+    "替换选中 LoRA": { zh: "替换选中 LoRA", en: "Replace Selected LoRA" },
+    "名称 ↑": { zh: "名称 ↑", en: "Name ↑" },
+    "名称 ↓": { zh: "名称 ↓", en: "Name ↓" },
+    "时间 ↓": { zh: "时间 ↓", en: "Date ↓" },
+    "时间 ↑": { zh: "时间 ↑", en: "Date ↑" },
+    // 预设与收藏中心（节点内不再有左侧栏，分类/收藏夹都收进「📂预设」弹窗）
+    "📂 预设与收藏": { zh: "📂 预设与收藏", en: "📂 Presets & Favorites" },
+    "📁 预设分组": { zh: "📁 预设分组", en: "📁 Preset Groups" },
+    "⭐ 收藏夹": { zh: "⭐ 收藏夹", en: "⭐ Favorites" },
+    "收藏夹": { zh: "收藏夹", en: "Favorites" },
+    "全部预设": { zh: "全部预设", en: "All Presets" },
+    "全部收藏": { zh: "全部收藏", en: "All Favorites" },
+    "未分类": { zh: "未分类", en: "Uncategorized" },
+    "+ 分类": { zh: "+ 分类", en: "+ Category" },
+    "+ 收藏夹": { zh: "+ 收藏夹", en: "+ Collection" },
+    "已发送 ✓": { zh: "已发送 ✓", en: "Sent ✓" },
+    "添加到节点": { zh: "添加到节点", en: "Add to Node" },
+    "已添加 ✓": { zh: "已添加 ✓", en: "Added ✓" },
+    "移除": { zh: "移除", en: "Remove" },
+    "加入收藏夹 ⭐": { zh: "加入收藏夹 ⭐", en: "Add to Favorites ⭐" },
+    "＋ 新建收藏夹…": { zh: "＋ 新建收藏夹…", en: "＋ New Collection…" },
+    "收藏到：": { zh: "收藏到：", en: "Add to: " },
+    "触发词": { zh: "触发词", en: "Triggers" },
+    "暂未启用 LoRA": { zh: "暂未启用 LoRA", en: "No LoRA enabled" },
+    "还没有 LoRA": { zh: "还没有 LoRA", en: "No LoRA yet" },
+    "还没有任何预设": { zh: "还没有任何预设", en: "No presets yet" },
+    "这个分类里还没有预设": { zh: "这个分类里还没有预设", en: "No presets in this category" },
+    "还没有收藏的 LoRA": { zh: "还没有收藏的 LoRA", en: "No favorite LoRA yet" },
+    "这个收藏夹还是空的": { zh: "这个收藏夹还是空的", en: "This collection is empty" },
+    "还没有收藏夹，点上方「+ 收藏夹」新建一个。": { zh: "还没有收藏夹，点上方「+ 收藏夹」新建一个。", en: "No collection yet — click \"+ Collection\" above to create one." },
+    "提示：节点里点文件夹标题栏的 💾 可保存为预设；右键左侧分类可以重命名 / 删除。": {
+        zh: "提示：节点里点文件夹标题栏的 💾 可保存为预设；右键左侧分类可以重命名 / 删除。",
+        en: "Tip: click 💾 on a folder header to save it as a preset; right-click a category to rename / delete."
+    },
+    "在节点里配置好 LoRA 后，点文件夹标题栏的 💾 就能把它保存成预设；保存后的预设会出现在这里。": {
+        zh: "在节点里配置好 LoRA 后，点文件夹标题栏的 💾 就能把它保存成预设；保存后的预设会出现在这里。",
+        en: "After setting up LoRAs in the node, click 💾 on a folder header to save it as a preset — saved presets show up here."
+    },
+    "在节点里右键 LoRA 行，选择「加入收藏夹」，就能把常用的 LoRA 收集到这里。": {
+        zh: "在节点里右键 LoRA 行，选择「加入收藏夹」，就能把常用的 LoRA 收集到这里。",
+        en: "Right-click a LoRA row in the node and choose \"Add to Favorites\" to collect frequently used LoRAs here."
+    },
+    "点下方「➕ 添加 Lora」选择模型；常用组合可存为预设，在「📂预设」里一键发送。": {
+        zh: "点下方「➕ 添加 Lora」选择模型；常用组合可存为预设，在「📂预设」里一键发送。",
+        en: "Click \"➕ Add Lora\" below to pick models; save frequent combos as presets and send them from \"📂Preset\"."
+    },
+    // 添加 Lora 弹窗工具栏
+    "🔍 搜索当前目录（支持文件名与标题）...": { zh: "🔍 搜索当前目录（支持文件名与标题）...", en: "🔍 Search current folder (file name & title)..." },
+    "搜索当前目录（支持文件名与标题）...": { zh: "搜索当前目录（支持文件名与标题）...", en: "Search current folder (file name & title)..." },
+    "排序:": { zh: "排序:", en: "Sort:" },
+    "按名称 A→Z": { zh: "按名称 A→Z", en: "Name A→Z" },
+    "按名称 Z→A": { zh: "按名称 Z→A", en: "Name Z→A" },
+    "按修改时间 最新": { zh: "按修改时间 最新", en: "Modified · newest" },
+    "按修改时间 最早": { zh: "按修改时间 最早", en: "Modified · oldest" },
+    "自动添加触发词": { zh: "自动添加触发词", en: "Auto-add trigger words" },
+    "预设新名称：": { zh: "预设新名称：", en: "New preset name: " },
+    "新建收藏夹名称：": { zh: "新建收藏夹名称：", en: "New collection name: " },
+    // 行内 / 卡片按钮的悬浮提示
+    "拖动排序": { zh: "拖动排序", en: "Drag to reorder" },
+    "启用 / 停用此 LoRA": { zh: "启用 / 停用此 LoRA", en: "Enable / disable this LoRA" },
+    "调整所属分类": { zh: "调整所属分类", en: "Change category" },
+    "删除预设": { zh: "删除预设", en: "Delete preset" },
+    "重命名预设": { zh: "重命名预设", en: "Rename preset" },
+    "从当前收藏夹移除": { zh: "从当前收藏夹移除", en: "Remove from this collection" },
+    "把这个预设的文件夹加入节点": { zh: "把这个预设的文件夹加入节点", en: "Add this preset's folders to the node" },
+    "把这个 LoRA 加入节点": { zh: "把这个 LoRA 加入节点", en: "Add this LoRA to the node" },
+    // 右键菜单（LoRA 行 / 文件夹 / 添加弹窗卡片）
+    "复制 LoRA": { zh: "复制 LoRA", en: "Duplicate LoRA" },
+    "单独复制此项": { zh: "单独复制此项", en: "Duplicate This Only" },
+    "组成文件夹": { zh: "组成文件夹", en: "Group into Folder" },
+    "额外群组（复制）": { zh: "额外群组（复制）", en: "Extra Group (Duplicate)" },
+    "在 Civitai 打开": { zh: "在 Civitai 打开", en: "Open in Civitai" },
+    "颜色设置": { zh: "颜色设置", en: "Color Settings" },
+    "编辑信息/触发词": { zh: "编辑信息/触发词", en: "Edit Info / Triggers" },
+    "删除文件夹": { zh: "删除文件夹", en: "Delete Folder" },
+    // 颜色设置弹窗（单条 LoRA / 文件夹）
+    "本条 LoRA 颜色": { zh: "本条 LoRA 颜色", en: "This LoRA's Colors" },
+    "本条文件夹颜色": { zh: "本条文件夹颜色", en: "This Folder's Colors" },
+    "颜色来源": { zh: "颜色来源", en: "Color Source" },
+    "跟随全局": { zh: "跟随全局", en: "Follow Global" },
+    "独立固定": { zh: "独立固定", en: "Custom" },
+    "选择颜色来源后，下方色块用于「独立固定」模式": {
+        zh: "选择颜色来源后，下方色块用于「独立固定」模式",
+        en: "After choosing a color source, the swatches below apply to \"Custom\" mode"
+    },
+    "选中背景色": { zh: "选中背景色", en: "Selected BG" },
+    "文字色": { zh: "文字色", en: "Text Color" },
+    "标题栏背景": { zh: "标题栏背景", en: "Header BG" },
+    "卡片背景": { zh: "卡片背景", en: "Card BG" },
+    "左侧色条": { zh: "左侧色条", en: "Left Bar" },
+    "文件夹标题": { zh: "文件夹标题", en: "Folder Title" },
+    "· 内含 LoRA 行区域": { zh: "· 内含 LoRA 行区域", en: "· LoRA rows area" },
+    "示例 LoRA 行（选中状态）": { zh: "示例 LoRA 行（选中状态）", en: "Sample LoRA row (selected)" },
+    "全局默认颜色": { zh: "全局默认颜色", en: "Global Default Colors" },
+    "全局默认文件夹颜色": { zh: "全局默认文件夹颜色", en: "Global Default Folder Colors" },
+    "跟随全局的 LoRA 使用此颜色；改动会同步到所有跟随全局的条目": {
+        zh: "跟随全局的 LoRA 使用此颜色；改动会同步到所有跟随全局的条目",
+        en: "LoRAs that follow global use these colors; changes sync to all of them"
+    },
+    "跟随全局的文件夹使用此颜色；改动会同步到所有跟随全局的文件夹": {
+        zh: "跟随全局的文件夹使用此颜色；改动会同步到所有跟随全局的文件夹",
+        en: "Folders that follow global use these colors; changes sync to all of them"
+    },
+    "清除本条色": { zh: "清除本条色", en: "Clear This Item" },
+    "清除此项单独颜色（回退全局）": { zh: "清除此项单独颜色（回退全局）", en: "Clear this override (fall back to global)" },
+    "恢复默认颜色": { zh: "恢复默认颜色", en: "Reset Default Colors" },
+    "颜色预设管理": { zh: "颜色预设管理", en: "Color Presets" },
+    "设置 LoRA 颜色": { zh: "设置 LoRA 颜色", en: "Set LoRA Color" },
+    "设置文件夹颜色": { zh: "设置文件夹颜色", en: "Set Folder Color" },
+    "恢复默认": { zh: "恢复默认", en: "Reset Default" },
+    "主题配色与预设": { zh: "主题配色与预设", en: "Theme Colors & Presets" },
+    "点击预设卡片一键套用整套配色（LoRA 选中高亮 + 文件夹默认色），也可手动微调色值并另存为预设。": {
+        zh: "点击预设卡片一键套用整套配色（LoRA 选中高亮 + 文件夹默认色），也可手动微调色值并另存为预设。",
+        en: "Click a preset card to apply the full color scheme (LoRA selection highlight + default folder colors), or fine-tune colors and save as a custom preset."
+    },
+    "恢复默认配色": { zh: "恢复默认配色", en: "Reset Default Colors" },
+    "📁 示例文件夹（默认配色预览）": { zh: "📁 示例文件夹（默认配色预览）", en: "📁 Sample Folder (Default Color Preview)" },
+    "2 个 LoRA": { zh: "2 个 LoRA", en: "2 LoRAs" },
+    "✓ 示例 LoRA 模型（选中高亮状态）": { zh: "✓ 示例 LoRA 模型（选中高亮状态）", en: "✓ Sample LoRA Model (Selected Highlight)" },
+    "○ 普通 LoRA 模型（未选中状态）": { zh: "○ 普通 LoRA 模型（未选中状态）", en: "○ Regular LoRA Model (Unselected)" },
+    "LoRA 选中高亮": { zh: "LoRA 选中高亮", en: "LoRA Selection Highlight" },
+    "文件夹默认色": { zh: "文件夹默认色", en: "Default Folder Color" },
+    "背景": { zh: "背景", en: "Bg" },
+    "色条": { zh: "色条", en: "Bar" },
+    "文字": { zh: "文字", en: "Text" },
+    "标题栏": { zh: "标题栏", en: "Header" },
+    "底色": { zh: "底色", en: "Base" },
+    "输入预设名称（如：赛博霓虹），将当前配色保存为自定义预设...": {
+        zh: "输入预设名称（如：赛博霓虹），将当前配色保存为自定义预设...",
+        en: "Enter preset name (e.g. Cyber Neon) to save current colors as a custom preset..."
+    },
+    "另存当前配色为预设": { zh: "另存当前配色为预设", en: "Save Current as Preset" },
+    "预设方案列表": { zh: "预设方案列表", en: "Color Presets" },
+    "当前使用": { zh: "当前使用", en: "Active" },
+    "LoRA 行（选中）": { zh: "LoRA 行（选中）", en: "LoRA Row (Selected)" }
 };
 
 // 节点翻译映射表 - Magic SDNQ Loader & Sampler
@@ -1773,6 +1946,65 @@ function translateText(text, lang, nodeType = null) {
         return text;
     }
 
+    // 处理预设卡片统计：`3 个 LoRA · 1 个文件夹`
+    const presetStatMatch = text.match(/^(\d+)\s*个\s*LoRA\s*·\s*(\d+)\s*个文件夹$/);
+    if (presetStatMatch) {
+        if (lang === "en") {
+            const folders = presetStatMatch[2];
+            return `${presetStatMatch[1]} LoRA · ${folders} folder${folders === "1" ? "" : "s"}`;
+        }
+        return text;
+    }
+
+    // 处理顶部状态条：`已启用 3 个 LoRA`
+    const enabledCountMatch = text.match(/^已启用\s*(\d+)\s*个\s*LoRA$/);
+    if (enabledCountMatch) {
+        if (lang === "en") return `${enabledCountMatch[1]} LoRA enabled`;
+        return text;
+    }
+
+    // 处理预设/收藏夹操作失败提示：`重命名失败：xxx` / `删除失败：xxx`
+    const presetOpFailMatch = text.match(/^(重命名失败|删除失败)[：:]\s*(.*)$/);
+    if (presetOpFailMatch) {
+        if (lang === "en") {
+            const head = presetOpFailMatch[1] === "重命名失败" ? "Rename failed" : "Delete failed";
+            return `${head}: ${presetOpFailMatch[2]}`;
+        }
+        return text;
+    }
+
+    // 颜色设置弹窗标题：`文件夹颜色设置：xxx` / `颜色设置：xxx`
+    const folderColorTitleMatch = text.match(/^文件夹颜色设置：(.+)$/);
+    if (folderColorTitleMatch) {
+        return lang === "en" ? `Folder Color Settings: ${folderColorTitleMatch[1]}` : text;
+    }
+    const loraColorTitleMatch = text.match(/^颜色设置：(.+)$/);
+    if (loraColorTitleMatch) {
+        return lang === "en" ? `Color Settings: ${loraColorTitleMatch[1]}` : text;
+    }
+
+    // 右键菜单里的动态计数
+    const dupLoraCountMatch = text.match(/^复制 LoRA（(\d+) 个）$/);
+    if (dupLoraCountMatch) {
+        return lang === "en" ? `Duplicate LoRA (${dupLoraCountMatch[1]})` : text;
+    }
+    const groupFolderCountMatch = text.match(/^组成文件夹（选中 (\d+) 个）$/);
+    if (groupFolderCountMatch) {
+        return lang === "en" ? `Group into Folder (${groupFolderCountMatch[1]} selected)` : text;
+    }
+    const extraGroupCountMatch = text.match(/^额外群组（复制 (\d+) 个）$/);
+    if (extraGroupCountMatch) {
+        return lang === "en" ? `Extra Group (duplicate ${extraGroupCountMatch[1]})` : text;
+    }
+    const fetchInfoCountMatch = text.match(/^爬取信息（(?:已选 )?(\d+) 个）$/);
+    if (fetchInfoCountMatch) {
+        return lang === "en" ? `Fetch Info (${fetchInfoCountMatch[1]})` : text;
+    }
+    const deletePresetMenuMatch = text.match(/^删除预设：(.+)$/);
+    if (deletePresetMenuMatch) {
+        return lang === "en" ? `Delete preset: ${deletePresetMenuMatch[1]}` : text;
+    }
+
     // 处理LoRA检测窗口动态文本：`检测范围：文件夹「xxx」及其所有子目录内的 LoRA。`
     const detectScopeFolderMatch = text.match(/^检测范围：文件夹[「"]?([^」"\\/\s]+)[」"]?及其所有子目录内的 LoRA。$/);
     if (detectScopeFolderMatch) {
@@ -2117,24 +2349,26 @@ function showLanguageMenu(switcher) {
         position: fixed;
         left: ${rect.left + rect.width + 10}px;
         top: ${rect.top}px;
-        background: #2a2a2a;
-        border: 1px solid #555;
-        border-radius: 8px;
-        padding: 8px 0;
-        min-width: 150px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.8);
+        background: #111114;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 10px;
+        padding: 6px;
+        min-width: 190px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.06);
         z-index: 10000;
-        font-family: sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+        backdrop-filter: blur(10px);
     `;
 
     // 菜单标题
     const title = document.createElement("div");
-    title.textContent = "魔法助手语言设置 / Magic Assistant Language Settings";
+    title.textContent = "魔法助手语言设置 / Language";
     title.style.cssText = `
-        padding: 8px 16px;
-        color: #ccc;
-        font-size: 12px;
-        border-bottom: 1px solid #444;
+        padding: 7px 10px 8px;
+        color: #71717a;
+        font-size: 11px;
+        font-weight: 600;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
         margin-bottom: 4px;
     `;
     menu.appendChild(title);
@@ -2143,31 +2377,38 @@ function showLanguageMenu(switcher) {
     const zhOption = document.createElement("div");
     zhOption.textContent = "中文 (Chinese)";
     zhOption.style.cssText = `
-        padding: 10px 16px;
-        color: ${currentLang === "zh" ? "#4CAF50" : "#fff"};
-        font-size: 14px;
+        padding: 8px 12px;
+        color: ${currentLang === "zh" ? "#f4f4f5" : "#a1a1aa"};
+        font-size: 13px;
+        font-weight: ${currentLang === "zh" ? "600" : "400"};
         cursor: pointer;
-        background: ${currentLang === "zh" ? "#1a3a1a" : "transparent"};
+        background: ${currentLang === "zh" ? "rgba(99, 102, 241, 0.16)" : "transparent"};
+        border: 1px solid ${currentLang === "zh" ? "rgba(99, 102, 241, 0.38)" : "transparent"};
+        border-radius: 6px;
         display: flex;
         align-items: center;
         gap: 8px;
+        margin-bottom: 2px;
+        transition: all 0.14s ease;
     `;
     
     if (currentLang === "zh") {
         const check = document.createElement("span");
         check.textContent = "✓";
-        check.style.cssText = "color: #4CAF50; font-weight: bold;";
+        check.style.cssText = "color: #818cf8; font-weight: bold;";
         zhOption.insertBefore(check, zhOption.firstChild);
     }
     
     zhOption.addEventListener("mouseenter", () => {
         if (currentLang !== "zh") {
-            zhOption.style.background = "#333";
+            zhOption.style.background = "#18181c";
+            zhOption.style.color = "#f4f4f5";
         }
     });
     zhOption.addEventListener("mouseleave", () => {
         if (currentLang !== "zh") {
             zhOption.style.background = "transparent";
+            zhOption.style.color = "#a1a1aa";
         }
     });
     zhOption.addEventListener("click", () => {
@@ -2186,31 +2427,37 @@ function showLanguageMenu(switcher) {
     const enOption = document.createElement("div");
     enOption.textContent = "English (英文)";
     enOption.style.cssText = `
-        padding: 10px 16px;
-        color: ${currentLang === "en" ? "#4CAF50" : "#fff"};
-        font-size: 14px;
+        padding: 8px 12px;
+        color: ${currentLang === "en" ? "#f4f4f5" : "#a1a1aa"};
+        font-size: 13px;
+        font-weight: ${currentLang === "en" ? "600" : "400"};
         cursor: pointer;
-        background: ${currentLang === "en" ? "#1a3a1a" : "transparent"};
+        background: ${currentLang === "en" ? "rgba(99, 102, 241, 0.16)" : "transparent"};
+        border: 1px solid ${currentLang === "en" ? "rgba(99, 102, 241, 0.38)" : "transparent"};
+        border-radius: 6px;
         display: flex;
         align-items: center;
         gap: 8px;
+        transition: all 0.14s ease;
     `;
     
     if (currentLang === "en") {
         const check = document.createElement("span");
         check.textContent = "✓";
-        check.style.cssText = "color: #4CAF50; font-weight: bold;";
+        check.style.cssText = "color: #818cf8; font-weight: bold;";
         enOption.insertBefore(check, enOption.firstChild);
     }
     
     enOption.addEventListener("mouseenter", () => {
         if (currentLang !== "en") {
-            enOption.style.background = "#333";
+            enOption.style.background = "#18181c";
+            enOption.style.color = "#f4f4f5";
         }
     });
     enOption.addEventListener("mouseleave", () => {
         if (currentLang !== "en") {
             enOption.style.background = "transparent";
+            enOption.style.color = "#a1a1aa";
         }
     });
     enOption.addEventListener("click", () => {
@@ -2339,6 +2586,11 @@ const nodeTranslations = {
     "MagicSDNQSampler": {
         zh: "🎲 SDNQ K采样器 Magic SDNQ K Sampler",
         en: "🎲 Magic SDNQ K Sampler"
+    },
+    // 节点11: Magic Style Prompt Filter
+    "MALLMStyleFilter": {
+        zh: "🧹 风格词过滤 Magic Style Prompt Filter",
+        en: "🧹 Magic Style Prompt Filter"
     }
 };
 
@@ -2917,6 +3169,18 @@ function isLoraNodeElement(element) {
     return false;
 }
 
+// 属于我们自己的 UI（LoRA 节点 / 预设弹窗等）：不改写 innerHTML，但继续递归子元素做纯文本翻译。
+// 这些弹窗是「先拼好整棵 DOM 再一次性 append」的，若不继续递归，内部文案永远不会被翻译。
+function translateOwnedChildren(element, lang, nodeType) {
+    if (!element || typeof element.closest !== 'function') return;
+    if (!element.closest('.ma-modal, .ma-modal-backdrop, .mpl-embedded-container, [class*="mpl-"]')) return;
+    Array.from(element.children || []).forEach(child => {
+        if (child && child.nodeType === Node.ELEMENT_NODE) {
+            translateElementRecursive(child, lang, nodeType);
+        }
+    });
+}
+
 // 递归翻译元素及其子元素
 function translateElementRecursive(element, lang, nodeType = null) {
     if (!element || element.nodeType !== Node.ELEMENT_NODE || isManagedTranslation(element)) return;
@@ -3035,7 +3299,8 @@ function translateElementRecursive(element, lang, nodeType = null) {
             
             const hasUnsafeContent = unsafePatterns.some(pattern => pattern.test(element.innerHTML));
             if (hasUnsafeContent) {
-                // 包含不安全内容，跳过innerHTML翻译
+                // 包含不安全内容：跳过 innerHTML 翻译，但仍继续翻译子元素文本
+                translateOwnedChildren(element, lang, nodeType);
                 return;
             }
             
@@ -3077,7 +3342,9 @@ function translateElementRecursive(element, lang, nodeType = null) {
             );
             
             if (!isSafeToTranslate) {
-                // 不是教程区域，跳过innerHTML翻译，避免影响ComfyUI核心功能
+                // 不是教程区域，跳过innerHTML翻译，避免影响ComfyUI核心功能；
+                // 但我们自己的弹窗/节点继续递归子元素，保证内部文案能翻译
+                translateOwnedChildren(element, lang, nodeType);
                 return;
             }
             
