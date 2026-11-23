@@ -73,9 +73,11 @@
 <img width="1021" height="496" alt="屏幕截图 2026-11-24 070445" src="https://github.com/user-attachments/assets/b520fb64-fe6e-443a-8cc7-93620ae331dd" />
 <img width="1028" height="499" alt="屏幕截图 2026-11-24 070511" src="https://github.com/user-attachments/assets/44fbe974-2572-4716-a5b7-9977eb365659" />
 <img width="1028" height="506" alt="屏幕截图 2026-11-24 070531" src="https://github.com/user-attachments/assets/338eb814-0b5a-4d32-a99f-537199de130b" />
+>
 > 
 > **V1.4.8 版本介绍 / Version Introduction** 2026-11-17
 >
+> 
 > 🙏 **特别鸣谢 / Special Thanks**: 本版本整合了来自 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) 的多项强力 LoRA 管理增强功能，并结合本项目 UI 风格进行了深度优化与重构。
 > 🙏 **Special Thanks**: This release integrates enhanced LoRA management features from [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader), refined to fit Magic Assistant's dark UI system.
 >
@@ -93,8 +95,10 @@
 >    * 修复语言切换器（`language_switcher.js`）在嵌套弹窗 DOM 挂载时遗漏子元素翻译的问题，并补齐所有新增弹窗与右键菜单的中英文对照
 >    * **UI Unification & i18n**: Unified all plugin modals under a modern dark design system (`magic_modal_theme.css` / `magic_ui_shared.js`), fixed nested modal translation in `language_switcher.js`, and completed bilingual coverage for all new UI elements
 >
+> 
 > **V1.4.7 版本介绍 / Version Introduction** 2026-11-08
 >
+> 
 > 1. **🛡️ 稳定性提升**: 彻底解决与其他插件冲突报错（全节点兼容性增强）
 >    * 彻底改进了底层模块的加载机制，不再改写 ComfyUI 全局运行路径
 >    * 解决了与 `ComfyUI-DanbooruSearcher` 等常见插件同时安装时可能出现的冲突、报错或启动失败问题，无论安装多少扩展都能和平稳定共存
@@ -117,10 +121,10 @@
 >    * 内置修图画板弹窗现在会根据屏幕分辨率自适应弹性缩放，并在不同窗口尺寸下均能居中显示
 >    * 增加拖拽边界碰撞保护，防止窗口不小心被拖到屏幕外找不到
 >    * **UI Polish**: Magic Photopea modal now features adaptive viewport scaling and drag boundary constraints, preventing the dialog from being dragged offscreen
->
+
 <details>
 <summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
-> 
+
 > **V1.4.6 版本介绍 / Version Introduction** 2026-10-09
 >
 > 1. **✨ 新增节点**: Magic Mask Edit - 统一遮罩裁切、缩放与回贴
