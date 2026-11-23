@@ -1,0 +1,1323 @@
+/* ==========================================================================
+   Magic Local Image Studio — Original Magic Assistant Indigo/Violet Dark UI
+   ========================================================================== */
+
+.mls-window {
+    --mls-bg-0: #09090d;
+    --mls-bg-1: #101016;
+    --mls-bg-2: #16161f;
+    --mls-bg-3: #1f1f2b;
+    --mls-border-subtle: rgba(255, 255, 255, 0.065);
+    --mls-border: rgba(255, 255, 255, 0.11);
+    --mls-border-strong: rgba(255, 255, 255, 0.2);
+    --mls-text-1: #f4f4f5;
+    --mls-text-2: #a1a1aa;
+    --mls-text-3: #71717a;
+    --mls-accent: #6366f1;
+    --mls-accent-2: #8b5cf6;
+    --mls-accent-light: #a5b4fc;
+    --mls-accent-soft: rgba(99, 102, 241, 0.16);
+    --mls-accent-border: rgba(129, 140, 248, 0.48);
+
+    position: fixed;
+    z-index: 9100;
+    resize: both;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--mls-bg-0);
+    color: var(--mls-text-1);
+    border: 1px solid var(--mls-border);
+    border-radius: 16px;
+    box-shadow:
+        0 32px 96px rgba(0, 0, 0, 0.85),
+        0 6px 24px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 12.5px;
+    color-scheme: dark;
+    box-sizing: border-box;
+}
+
+.mls-window *,
+.mls-window *::before,
+.mls-window *::after {
+    box-sizing: border-box;
+}
+
+.mls-window ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.mls-window ::-webkit-scrollbar-track {
+    background: transparent;
+}
+.mls-window ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+}
+.mls-window ::-webkit-scrollbar-thumb:hover {
+    background: rgba(165, 180, 252, 0.36);
+}
+
+/* ==========================================================================
+   Header & Main Module Switcher
+   ========================================================================== */
+
+.mls-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 18px;
+    background:
+        radial-gradient(60% 140% at 50% 0%, rgba(99, 102, 241, 0.14), transparent 70%),
+        var(--mls-bg-1);
+    border-bottom: 1px solid var(--mls-border-subtle);
+    cursor: move;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.mls-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--mls-text-1);
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+.mls-brand-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.28), rgba(139, 92, 246, 0.28));
+    border: 1px solid rgba(165, 180, 252, 0.35);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.mls-brand-badge {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: #c4b5fd;
+    background: rgba(139, 92, 246, 0.14);
+    border: 1px solid rgba(167, 139, 250, 0.32);
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.mls-main-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: rgba(9, 9, 13, 0.85);
+    border: 1px solid var(--mls-border);
+    border-radius: 11px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.mls-main-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--mls-text-2);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.16s ease;
+    white-space: nowrap;
+}
+
+.mls-main-tab:hover {
+    color: var(--mls-text-1);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mls-main-tab.active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.92), rgba(139, 92, 246, 0.92));
+    border-color: rgba(199, 210, 254, 0.35);
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.35);
+}
+
+.mls-win-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ==========================================================================
+   Main Split Body: Compact Parameter Sidebar (Left) + Big Visual Stage (Right)
+   ========================================================================== */
+
+.mls-body {
+    flex: 1 1 0%;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    background: var(--mls-bg-0);
+}
+
+.mls-left {
+    width: 368px;
+    min-width: 320px;
+    max-width: 42%;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--mls-border-subtle);
+    background: var(--mls-bg-1);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.mls-subtabs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 9px 12px;
+    background: #0d0d13;
+    border-bottom: 1px solid var(--mls-border-subtle);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.mls-subtabs.mls-subtabs-grid2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.mls-subtab {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 9px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--mls-text-2);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    white-space: nowrap;
+}
+
+.mls-subtab:hover {
+    color: var(--mls-text-1);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.mls-subtab.active {
+    background: var(--mls-accent-soft);
+    border-color: var(--mls-accent-border);
+    color: #e0e7ff;
+    font-weight: 600;
+}
+
+.mls-left-scroll {
+    flex: 1 1 0%;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mls-left-footer {
+    padding: 12px;
+    background: #0d0d13;
+    border-top: 1px solid var(--mls-border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Parameter Panels & Controls
+   ========================================================================== */
+
+.mls-panel {
+    background: var(--mls-bg-2);
+    border: 1px solid var(--mls-border-subtle);
+    border-radius: 11px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.mls-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.mls-panel-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--mls-accent-light);
+    letter-spacing: 0.02em;
+}
+
+.mls-panel-sub {
+    font-size: 11px;
+    color: var(--mls-text-3);
+}
+
+.mls-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.mls-row-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.mls-label {
+    font-size: 12px;
+    color: #e4e4e7;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.mls-muted {
+    font-size: 11px;
+    color: var(--mls-text-3);
+}
+
+.mls-chip-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.mls-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 9px;
+    border-radius: 7px;
+    border: 1px solid var(--mls-border);
+    background: var(--mls-bg-1);
+    color: #d4d4d8;
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    user-select: none;
+}
+
+.mls-chip:hover {
+    background: var(--mls-bg-3);
+    border-color: var(--mls-border-strong);
+    color: #ffffff;
+}
+
+.mls-chip.active {
+    background: var(--mls-accent-soft);
+    border-color: var(--mls-accent-border);
+    color: #e0e7ff;
+    font-weight: 600;
+}
+
+.mls-chip.active-violet {
+    background: rgba(139, 92, 246, 0.22);
+    border-color: rgba(167, 139, 250, 0.6);
+    color: #ede9fe;
+    font-weight: 600;
+}
+
+.mls-seg {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--mls-bg-0);
+    border: 1px solid var(--mls-border);
+}
+
+.mls-seg-btn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--mls-text-2);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    white-space: nowrap;
+}
+
+.mls-seg-btn:hover {
+    color: var(--mls-text-1);
+}
+
+.mls-seg-btn.active {
+    background: linear-gradient(135deg, #6366f1, #7c3aed);
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 1px 6px rgba(99, 102, 241, 0.35);
+}
+
+.mls-input,
+.mls-select {
+    background: var(--mls-bg-0);
+    color: var(--mls-text-1);
+    border: 1px solid var(--mls-border);
+    border-radius: 7px;
+    padding: 5px 8px;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.mls-input:focus,
+.mls-select:focus {
+    border-color: var(--mls-accent);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.24);
+}
+
+.mls-select option {
+    background: #181822;
+    color: #f4f4f5;
+}
+
+.mls-input-num {
+    width: 72px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.mls-input-wide {
+    flex: 1 1 0%;
+    min-width: 0;
+}
+
+.mls-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.mls-mini-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mls-mini-field span {
+    font-size: 10.5px;
+    color: var(--mls-text-2);
+}
+
+.mls-mini-field input {
+    width: 100%;
+    text-align: center;
+}
+
+.mls-color-swatch {
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.mls-quick-color {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.12s ease;
+}
+
+.mls-quick-color:hover {
+    transform: scale(1.12);
+}
+
+/* Recommended sizes grid */
+.mls-size-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.mls-size-btn {
+    padding: 6px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--mls-border-subtle);
+    background: var(--mls-bg-1);
+    color: #d4d4d8;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: all 0.13s ease;
+    text-align: center;
+}
+
+.mls-size-btn:hover {
+    background: var(--mls-bg-3);
+    border-color: var(--mls-accent-border);
+    color: #ffffff;
+}
+
+.mls-size-btn.active {
+    background: var(--mls-accent-soft);
+    border-color: var(--mls-accent-border);
+    color: #e0e7ff;
+    font-weight: 600;
+}
+
+/* ControlNet selector list */
+.mls-cn-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+    max-height: 210px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.mls-cn-card {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--mls-border-subtle);
+    background: var(--mls-bg-1);
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mls-cn-card:hover {
+    background: var(--mls-bg-3);
+    border-color: var(--mls-border-strong);
+}
+
+.mls-cn-card.active {
+    background: var(--mls-accent-soft);
+    border-color: var(--mls-accent-border);
+    box-shadow: inset 3px 0 0 #818cf8;
+}
+
+.mls-cn-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mls-text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mls-cn-card-sub {
+    font-size: 10.5px;
+    color: var(--mls-text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Dynamic parameter rows */
+.mls-param-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.mls-param-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.mls-param-row .mls-param-name {
+    font-size: 12px;
+    color: #e4e4e7;
+    min-width: 96px;
+}
+
+.mls-param-row .mls-param-ctrl {
+    flex: 1 1 0%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    min-width: 0;
+}
+
+.mls-param-row input[type="range"] {
+    flex: 1 1 0%;
+    min-width: 60px;
+    accent-color: #818cf8;
+}
+
+.mls-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mls-toggle input {
+    accent-color: #818cf8;
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+/* Missing-plugin warning banner */
+.mls-missing-box {
+    padding: 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    background: rgba(245, 158, 11, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: #fde68a;
+    line-height: 1.55;
+}
+
+.mls-missing-box b {
+    font-size: 13px;
+    color: #fbbf24;
+}
+
+.mls-missing-box code {
+    background: rgba(0, 0, 0, 0.45);
+    color: #f4f4f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11.5px;
+}
+
+/* ==========================================================================
+   Right Main Visual Stage (Interactive Canvas + Result Preview + Compare)
+   ========================================================================== */
+
+.mls-right {
+    flex: 1 1 0%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--mls-bg-0);
+    overflow: hidden;
+}
+
+.mls-stage-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 16px;
+    background: #0e0e14;
+    border-bottom: 1px solid var(--mls-border-subtle);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.mls-preview-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--mls-text-2);
+}
+
+.mls-badge-pill {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--mls-bg-2);
+    border: 1px solid var(--mls-border);
+    color: #e4e4e7;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.mls-badge-pill.accent {
+    background: var(--mls-accent-soft);
+    border-color: var(--mls-accent-border);
+    color: #e0e7ff;
+}
+
+.mls-stage-viewport {
+    position: relative;
+    flex: 1 1 0%;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background-image:
+        linear-gradient(45deg, #111118 25%, transparent 25%),
+        linear-gradient(-45deg, #111118 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #111118 75%),
+        linear-gradient(-45deg, transparent 75%, #111118 75%);
+    background-size: 22px 22px;
+    background-position: 0 0, 0 11px, 11px -11px, -11px 0;
+    background-color: #09090d;
+}
+
+.mls-interactive-canvas-wrap {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(65% 65% at 50% 48%, rgba(99, 102, 241, 0.08) 0%, transparent 70%),
+        #0b0b11;
+    user-select: none;
+    touch-action: none;
+}
+
+.mls-interactive-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Floating glass HUD at bottom of interactive stage */
+.mls-stage-hud {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgba(16, 16, 24, 0.84);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+    font-size: 11.5px;
+    color: #d4d4d8;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 3;
+}
+
+.mls-stage-hud b {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.mls-hud-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 10px;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    color: #a1a1aa;
+}
+
+.mls-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.mls-preview-pad {
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.mls-preview-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    display: block;
+}
+
+.mls-compare-wrap {
+    width: 100%;
+    height: 100%;
+    padding: 18px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    align-items: center;
+    justify-items: center;
+}
+
+.mls-compare-pane {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.mls-compare-pane img {
+    max-width: 100%;
+    max-height: calc(100% - 28px);
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+}
+
+/* rgthree-style Swipe / Curtain Image Comparer */
+.mls-swipe-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 20px 24px 62px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    touch-action: none;
+}
+
+.mls-swipe-box {
+    position: relative;
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 22px 64px rgba(0, 0, 0, 0.75);
+    cursor: ew-resize;
+    background-image:
+        linear-gradient(45deg, #16161f 25%, transparent 25%),
+        linear-gradient(-45deg, #16161f 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #16161f 75%),
+        linear-gradient(-45deg, transparent 75%, #16161f 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    background-color: #0b0b11;
+}
+
+.mls-swipe-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    display: block;
+}
+
+.mls-swipe-img-left {
+    clip-path: inset(0 calc(100% - var(--mls-split, 50%)) 0 0);
+}
+
+.mls-swipe-img-right {
+    clip-path: inset(0 0 0 var(--mls-split, 50%));
+}
+
+.mls-swipe-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--mls-split, 50%);
+    width: 2px;
+    transform: translateX(-1px);
+    background: linear-gradient(180deg, rgba(165, 180, 252, 0.55) 0%, #ffffff 50%, rgba(192, 132, 252, 0.75) 100%);
+    box-shadow: 0 0 14px rgba(99, 102, 241, 0.85), 0 0 3px rgba(0, 0, 0, 0.9);
+    pointer-events: none;
+    z-index: 3;
+}
+
+.mls-swipe-knob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.94), rgba(139, 92, 246, 0.94));
+    border: 2px solid rgba(255, 255, 255, 0.88);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.65), 0 0 16px rgba(129, 140, 248, 0.55);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mls-swipe-tag {
+    position: absolute;
+    top: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(12, 12, 18, 0.74);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #f4f4f5;
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 4;
+}
+
+.mls-swipe-tag-left {
+    left: 12px;
+}
+
+.mls-swipe-tag-right {
+    right: 12px;
+    border-color: rgba(165, 180, 252, 0.45);
+    color: #e0e7ff;
+}
+
+.mls-swipe-hud {
+    pointer-events: auto;
+}
+
+.mls-swipe-mode-btn {
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(165, 180, 252, 0.4);
+    background: rgba(99, 102, 241, 0.18);
+    color: #e0e7ff;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.14s ease;
+}
+
+.mls-swipe-mode-btn:hover {
+    background: rgba(99, 102, 241, 0.34);
+    color: #ffffff;
+}
+
+.mls-preview-loading {
+    position: absolute;
+    inset: 0;
+    background: rgba(9, 9, 13, 0.72);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--mls-text-1);
+    font-size: 13px;
+    z-index: 6;
+}
+
+.mls-spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.14);
+    border-top-color: #818cf8;
+    animation: mls-spin 0.75s linear infinite;
+}
+
+@keyframes mls-spin {
+    to { transform: rotate(360deg); }
+}
+
+.mls-error-banner {
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.14);
+    border: 1px solid rgba(239, 68, 68, 0.42);
+    color: #fca5a5;
+    font-size: 12px;
+    line-height: 1.45;
+    word-break: break-word;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Bottom Footer & Action Buttons
+   ========================================================================== */
+
+.mls-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 18px;
+    background: #0b0b10;
+    border-top: 1px solid var(--mls-border-subtle);
+    flex-shrink: 0;
+}
+
+.mls-footer-status {
+    font-size: 12px;
+    color: var(--mls-text-2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mls-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.mls-btn-generate {
+    flex: 1 1 0%;
+    padding: 9px 16px;
+    border-radius: 9px;
+    border: 1px solid rgba(199, 210, 254, 0.28);
+    background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.28);
+}
+
+.mls-btn-generate:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: 0 6px 22px rgba(99, 102, 241, 0.45);
+}
+
+.mls-btn-generate:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* ==========================================================================
+   Image Composition (Multi-Layer Studio) & Dropzone Overlay
+   ========================================================================== */
+
+.mls-layer-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.mls-layer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.mls-layer-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--mls-border-subtle);
+    background: var(--mls-bg-1);
+    cursor: pointer;
+    transition: all 0.14s ease;
+    user-select: none;
+}
+
+.mls-layer-item:hover {
+    background: var(--mls-bg-3);
+    border-color: var(--mls-border-strong);
+}
+
+.mls-layer-item.active {
+    background: var(--mls-accent-soft);
+    border-color: var(--mls-accent-border);
+    box-shadow: inset 3px 0 0 #818cf8;
+}
+
+.mls-layer-item.hidden-layer {
+    opacity: 0.48;
+}
+
+.mls-layer-thumb {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background-image:
+        linear-gradient(45deg, #1b1b26 25%, transparent 25%),
+        linear-gradient(-45deg, #1b1b26 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #1b1b26 75%),
+        linear-gradient(-45deg, transparent 75%, #1b1b26 75%);
+    background-size: 10px 10px;
+    background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+    background-color: #0e0e14;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mls-layer-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.mls-layer-meta {
+    flex: 1 1 0%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mls-layer-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mls-text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mls-layer-sub {
+    font-size: 10.5px;
+    color: var(--mls-text-3);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.mls-layer-badge {
+    font-size: 9.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(139, 92, 246, 0.22);
+    color: #ddd6fe;
+    border: 1px solid rgba(167, 139, 250, 0.35);
+}
+
+.mls-layer-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.mls-icon-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--mls-text-2);
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s ease;
+}
+
+.mls-icon-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+}
+
+.mls-icon-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.mls-icon-btn.danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.22);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #fca5a5;
+}
+
+.mls-drop-overlay {
+    position: absolute;
+    inset: 14px;
+    border-radius: 14px;
+    border: 2px dashed #a78bfa;
+    background: rgba(18, 16, 36, 0.84);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #e0e7ff;
+    font-size: 15px;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 20;
+    box-shadow: 0 0 40px rgba(99, 102, 241, 0.35);
+}
+
+.mls-drop-overlay span {
+    font-size: 12px;
+    font-weight: 400;
+    color: #a5b4fc;
+}
+
+/* Gallery picker mini-modal for importing from ComfyUI input/ */
+.mls-picker-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 5, 9, 0.72);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    padding: 24px;
+}
+
+.mls-picker-box {
+    width: min(680px, 92%);
+    max-height: 82%;
+    background: var(--mls-bg-1);
+    border: 1px solid var(--mls-border-strong);
+    border-radius: 14px;
+    box-shadow: 0 24px 72px rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.mls-picker-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--mls-border-subtle);
+    background: #0d0d13;
+}
+
+.mls-picker-grid {
+    flex: 1 1 0%;
+    min-height: 180px;
+    overflow-y: auto;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 10px;
+    align-content: start;
+}
+
+.mls-picker-card {
+    border-radius: 9px;
+    border: 1px solid var(--mls-border-subtle);
+    background: var(--mls-bg-2);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.14s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.mls-picker-card:hover {
+    border-color: var(--mls-accent-border);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+.mls-picker-card img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    background: #09090d;
+    display: block;
+}
+
+.mls-picker-card div {
+    padding: 5px 6px;
+    font-size: 10.5px;
+    color: var(--mls-text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+}
+
+.mls-rmbg-layer-btn {
+    width: 100%;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(192, 132, 252, 0.45);
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.24), rgba(99, 102, 241, 0.2));
+    color: #ede9fe;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.14s ease;
+}
+
+.mls-rmbg-layer-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.38), rgba(99, 102, 241, 0.34));
+    border-color: #c084fc;
+    color: #ffffff;
+}
+
+.mls-rmbg-layer-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}

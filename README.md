@@ -1,6 +1,6 @@
 <img width="2" height="1" alt="image" src="https://github.com/user-attachments/assets/044e31f8-3bd9-4ecc-9d93-668d8d0ce35b" /># ✨ Magic Assistant for ComfyUI
 
-**A powerful 13-in-1 suite designed to simplify your workflow.**
+**A powerful 12-in-1 suite designed to simplify your workflow.**
 **一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
 
 > 💬 **Join our Discord community for support, feature requests, and latest updates!**
@@ -16,37 +16,80 @@
 
 ## 📝 Version Update Introduction / 版本更新介绍
 
-> Latest Update / 最新更新：**2026-11-17**
+> Latest Update / 最新更新：**2026-11-24**
 >
+> **V1.4.9 版本介绍 / Version Introduction** 2026-11-24
+>
+> 🙏 **特别鸣谢 / Special Thanks**: 本版本继续同步整合了 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)（1.0.4 ~ 1.0.8）的强力 LoRA 管理增强特性，同时保持 Magic Assistant 原有暗黑主题与简洁 UI 布局，并修复了弹窗卡顿闪现等老问题。
+> 🙏 **Special Thanks**: This release integrates the 1.0.4–1.0.8 LoRA enhancements from [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) while preserving Magic Assistant's existing dark theme and compact layout, alongside major modal UX and performance fixes.
+>
+> 1. **🚀 重磅升级**: Magic Power LoRA Loader - 整合 `ComfyUI-lyw-MA-Loader`（1.0.4 ~ 1.0.8）全部核心特性，保持原有简洁 UI 布局
+>    * **作者推荐权重 & 独立 CLIP 权重**: 所有信息爬取路径均自动解析并持久化 Civitai 作者推荐权重（同步写入 LM sidecar），行内存在推荐值时显示紧凑「荐」标签（单击一键套用）；标准加载路径新增独立 CLIP 权重支持（默认跟随模型权重，右键切换跟随/自定义，默认隐藏，可在「⚙️设置 → 布局样式 → 列表显示」中随时开关）
+>    * **多触发词逐项屏蔽**: 行内 `🏷️` 按钮保留左键编辑、右键一键开关，当 LoRA 含 2 个及以上触发词时右键弹出逐项勾选菜单，支持屏蔽单个触发词（悬停仅预览已启用词，后端按屏蔽列表精准过滤）
+>    * **LORA 串批量导入 & 智能近似匹配**: 在「➕ 添加 Lora」弹窗顶部新增「📋 导入 LORA 串」入口，支持 `<lora:名称:模型权重:CLIP权重>` 格式导入；自动忽略 `krea2`/`k2`/`anima`/`sdxl`/`pony` 等常见个人前缀并容忍 `1/i/I/l/L`、`0/o/O` 等轻微拼写/OCR 差异，近似匹配弹出本地候选选择器，并自动同步触发词、备注与推荐权重
+>    * **替换 LoRA 重同步 & 目标群组选择**: 行右键新增「替换 LoRA」，替换后保留模型/CLIP 权重与启用状态，同时重新同步新文件的触发词、备注与推荐权重；「添加 Lora」路径栏右侧新增「加入位置」下拉框，可直接添加到指定节点群组或预设组
+>    * **文件夹交互与拖拽增强**: 文件夹标题栏新增独立眼睛/划掉眼睛忽略按钮（可在全局文件夹颜色中分别设置「忽略时颜色」与「未忽略颜色」），左键标题改为折叠/展开；拖拽 LoRA 到文件夹上下边缘可精准插空、拖到头部中间移入组内；文件夹右键新增「保存为预设组」
+>    * **预设收藏备份 & 工作流一键补全**: 「📂 预设与收藏」弹窗右上角新增「导出备份 / 导入备份」一键 JSON 备份与恢复（导入前自动下载备份）；「📥 一键下载信息」弹窗底栏新增「⚡ 一键补全当前工作流」按钮，可一次性强刷当前工作流全部 LoRA 的触发词、推荐权重与预览图
+>    * **ComfyUI 桌面端兼容与布局守护**: 将全部原生 `prompt`/`confirm`/`alert` 替换为暗黑风格页面内弹窗与权重就地输入气泡，全面兼容 ComfyUI Desktop (Electron)；新增布局守护与 `notranslate` 防误翻译保护
+>    * **Major Upgrade**: Integrated 1.0.4–1.0.8 features from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) while preserving Magic Assistant's existing layout
+>    * **Recommended & Independent CLIP Weights**: Auto-extracts and persists Civitai author recommended weights with a compact one-click apply badge when available; adds independent follow/custom CLIP weights on the standard loading path (both columns configurable under Settings → Layout Style → List Display)
+>    * **Per-Word Trigger Blocking**: Per-row `🏷️` keeps left-click editing and adds a right-click per-word checklist for multi-word triggers (tooltips preview only enabled words; backend filters disabled terms)
+>    * **LORA String Import & Fuzzy Matching**: Added `📋 Import LORA String` in the Add LoRA header supporting `<lora:name:weight:clip>`, personal prefix stripping (`krea2`/`k2`/`anima`, etc.), typo/OCR-confusable tolerance (`1/i/I/l/L`, `0/o/O`), a local candidate picker, and auto-sync of trigger words & recommended weights
+>    * **Replace LoRA Resync & Target Group Selection**: Right-click "Replace LoRA" keeps model/CLIP weights and enabled state while resyncing trigger words, notes, and recommended weight; Add LoRA path bar adds a target-group selector
+>    * **Folder UX, Presets Backup & Workflow Refresh**: Added dedicated eye/crossed-eye ignore toggle with separate global ignored/normal colors, left-click title to collapse/expand, edge-insert drag & drop, "Save as Preset Group" in folder menu, Export/Import JSON backup in the `📂Preset` header (auto-backup before import), and one-click workflow-wide metadata refresh in the Download Info dialog
+>    * **ComfyUI Desktop Compatibility & Layout Guard**: Replaced all native `prompt`/`confirm`/`alert` dialogs with dark in-page dialogs and inline weight editors, plus layout guard and `notranslate` protection
+>
+> 2. **🪟 体验优化 & 🐛 弹窗卡顿闪现修复**: 无遮罩悬浮窗口与渲染性能优化
+>    * **无遮罩悬浮操作**: 「📂 预设与收藏」与「⚙️ 设置」窗口均取消全屏模糊遮罩，改为可自由拖拽、可边角缩放、记忆位置与尺寸的悬浮窗口，打开期间可直接查看与操作 ComfyUI 画布；同时修复「添加 Lora」弹窗工具栏换行错位，搜索与排序/开关/刷新稳稳单行对齐
+>    * **根治弹窗闪现跳动**: 修复 `magic_modal_theme.css` 中 `.ma-modal` 默认动画硬编码 `translate(-50%, -50%)` 导致悬浮/非居中弹窗打开前 0.16s 偏移后闪现跳回的问题，改为纯淡入动画；预设窗口改为先渲染再挂载，消除空框闪烁
+>    * **根治弹窗打开卡顿**: 修复 `language_switcher.js` 中 `translateElementImmediately` 的平方级重复递归扫描与挂载后多轮定时全树重扫问题，并在默认中文模式下跳过对新建中文弹窗的无效扫描，点击预设与设置秒开丝滑
+>    * **Floating Modeless Windows & Toolbar Polish**: Removed full-screen blurred backdrops from `📂Preset` and `⚙️Settings` so both act as draggable, resizable floating windows that remember position/size while leaving the canvas interactive; fixed toolbar wrapping in the Add LoRA dialog
+>    * **Fixed Modal Stutter & Position Flash**: Removed hardcoded `translate(-50%, -50%)` from `.ma-modal` CSS keyframes (eliminating the open-then-jump flash), pre-rendered the Preset modal before mounting, and eliminated O(N²) / repeated DOM scans in `language_switcher.js`
+>
+> 3. **🗑️ 移除节点**: Magic Style Prompt Filter (`🧹 风格词过滤`)
+>    * 完整移除 `MALLMStyleFilter` 节点及其源码文件（`nodes/magic_style_filter.py`）、节点注册映射与双语词条，精简套装回 `12-in-1`
+>    * **Removed Node**: Completely removed **Magic Style Prompt Filter** (`MALLMStyleFilter` / `nodes/magic_style_filter.py`) and its registrations/translations, returning the suite to `12-in-1`
+>
+> 4. **🎨 重磅升级**: Magic Photopea Node - 新增「Magic 本地图像处理工作室 (Local Studio)」并修复 Photopea 弹窗体验
+>    * **节点双入口与原生风格融合**: 原「打开编辑器」单按钮升级为与 ComfyUI 原生风格 1:1 融为一体的左右并排双按钮——左侧 **`🖌️ Photopea编辑`**（完整保留原有在线 PS 编辑与同步能力）+ 右侧 **`🛠️ 本地处理`**（打开全新原创紫靛蓝暗黑主题本地工作室弹窗）
+>    * **✂️ 基础处理（4 合 1 高效修图）**:
+>      * **📐 裁剪·扩图**: 右侧超大交互画布支持纯白三分法裁剪框、柔紫圆角胶囊四向扩图拉条（带实时 `+px` 读数）与居中旋转旋钮，提供比例预设、裁剪/扩图适配切换、四边像素微调与居中、5 种填充模式（纯色/边缘拉伸/镜像反射/模糊背景/透明通道）、边缘羽化、步进对齐与百万像素缩放
+>      * **📏 画布分辨率**: 星空点阵 + 等像素曲线（`0.5 / 1.0 / 2.0 / 4.0 MP`）可视化拖拽画布，支持横竖屏一键切换、常用比例与快捷推荐尺寸表、扩图填充/居中裁切/等比适应/拉伸填满四种适配模式
+>      * **✨ 去除背景 (RMBG)**: 直接调用原版 `ComfyUI-RMBG` 节点全部参数，支持一键切换预览与输出 **去背图像 (`IMAGE`) / 遮罩 (`MASK`) / 遮罩图像 (`MASK_IMAGE`)**（未安装插件时友好提示安装）
+>      * **🎨 调色·滤镜**: 内置 6 套快捷风格预设（通透提亮/电影冷调/暖阳胶片/日系清新/高反差黑白等）与亮度、对比度、饱和度、色相、冷暖色温、锐化、高斯模糊、翻转、灰度、反色实时预览与高清渲染
+>    * **🧩 图像组合（多图层合成工作室）**: 输入图像自动作为底图，支持**直接拖入外部图片、文件夹多选导入、从 ComfyUI `input/` 图库选图及 `Ctrl+V` 剪贴板粘贴**；提供完整图层列表（显隐、上移/下移调整上下层级、复制、删除）、画布拖拽平移（带中心磁吸对齐线）、等比缩放、拉伸、旋转、翻转、不透明度、7 种混合模式及**单层一键 RMBG 抠图与还原**，全分辨率合成后一键传回节点
+>    * **🎯 ControlNet 预处理**: 自动扫描已安装的 `comfyui_controlnet_aux` 节点，按线稿/深度/姿态/其他分类与关键词搜索，动态生成对应原节点参数并实时预览（未安装插件时给出清晰安装指引）
+>    * **🪞 专业预览、对比与连续处理**: 主舞台支持 **`🎛️ 交互画布` / `🖼️ 预览结果` / `🪞 滑动对比`（rgthree 风格悬停滑移 & 拖拽对比，支持透明图无透底对比）/ `⚖️ 左右对比`** 四种视图；支持「`↪ 设为输入`」将结果作为下一步输入连续叠加处理（如扩图 → 去背 → 合成 → 提线稿），满意后点击底部「`💾 传回图片 (Apply)`」同步回节点
+>    * **🐛 Photopea 弹窗修复 & 🌐 全量中英双语**: 修复 Photopea 窗口顶部拖拽时因动态 `max-width/max-height` 导致的窗口缩放与抖动问题，并加固 `iframe` 视口防滚动偏移；节点双按钮与本地工作室全部 250+ 文案均已接入 `language_switcher.js`，支持打开状态下实时热切换中英文
+>    * **Major Upgrade — Magic Local Image Studio & Photopea Fixes**: Replaced the single editor button with native-styled side-by-side buttons (`🖌️ Photopea` + `🛠️ Local Edit`) and introduced a full-featured local image processing studio in Magic Assistant's signature indigo/violet dark UI
+>    * **Basic Edit (4-in-1)**: Interactive visual **Crop / Rotate / Pad** canvas (rule-of-thirds crop frame, 4-side padding pills, top rotation knob, solid/edge/mirror/blur/transparent fill, feathering, step alignment, megapixel budget), **Canvas Resolution** stage with iso-MP curves (`0.5–4.0 MP`) & recommended sizes, native **RMBG** background removal with switchable `Image / Mask / Mask Image` output, and live **Color Grading & Filters** (6 style presets + full sliders & flips)
+>    * **Multi-Layer Image Compose**: Uses the current image as the base layer; supports drag-and-drop, multi-file import, ComfyUI `input/` gallery picker, and `Ctrl+V` clipboard paste; includes layer ordering (up/down/show/hide/duplicate/delete), move with center snap guides, scale, rotate, flip, opacity, 7 blend modes, and one-click per-layer **RMBG cutout** with revert
+>    * **ControlNet Aux Preprocessors**: Auto-discovers installed `comfyui_controlnet_aux` nodes with category filters, search, dynamic native parameter UI, and clear installation guidance if missing
+>    * **rgthree-Style Swipe Comparer, Chaining & i18n**: Added `🪞 Swipe` (hover/drag curtain comparer with alpha-safe clipping) alongside `⚖️ Side-by-Side`, `↪ Use as Input` multi-step chaining, and `💾 Apply to Node`; fixed Photopea modal drag jitter/resizing & iframe clipping, and added complete live ZH/EN translations in `language_switcher.js`
+><img width="427" height="366" alt="屏幕截图 2026-11-24 070354" src="https://github.com/user-attachments/assets/137c7304-39c5-4e4f-9a8d-5fba4904fa3b" />
+<img width="1028" height="494" alt="屏幕截图 2026-11-24 070406" src="https://github.com/user-attachments/assets/285c9db3-e4fd-4d0a-a33d-dbfee7e3d4f0" />
+<img width="1018" height="499" alt="屏幕截图 2026-11-24 070421" src="https://github.com/user-attachments/assets/e6f88956-dfa2-43ba-9e59-061311bd3aa3" />
+<img width="1028" height="494" alt="屏幕截图 2026-11-24 070439" src="https://github.com/user-attachments/assets/8d48f4e1-e78d-45ae-b588-c294302337cc" />
+<img width="1021" height="496" alt="屏幕截图 2026-11-24 070445" src="https://github.com/user-attachments/assets/b520fb64-fe6e-443a-8cc7-93620ae331dd" />
+<img width="1028" height="499" alt="屏幕截图 2026-11-24 070511" src="https://github.com/user-attachments/assets/44fbe974-2572-4716-a5b7-9977eb365659" />
+<img width="1028" height="506" alt="屏幕截图 2026-11-24 070531" src="https://github.com/user-attachments/assets/338eb814-0b5a-4d32-a99f-537199de130b" />
+> 
 > **V1.4.8 版本介绍 / Version Introduction** 2026-11-17
 >
-> 🙏 **特别鸣谢 / Special Thanks**: 本版本整合了来自 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) 的多项强力 LoRA 管理增强与新节点功能，并结合本项目 UI 风格进行了深度优化与重构。
-> 🙏 **Special Thanks**: This release integrates enhanced LoRA management features and the style-filter node from [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader), refined to fit Magic Assistant's dark UI system.
+> 🙏 **特别鸣谢 / Special Thanks**: 本版本整合了来自 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) 的多项强力 LoRA 管理增强功能，并结合本项目 UI 风格进行了深度优化与重构。
+> 🙏 **Special Thanks**: This release integrates enhanced LoRA management features from [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader), refined to fit Magic Assistant's dark UI system.
 >
-> 1. **🚀 重磅升级**: Magic Power LoRA Loader - 整合 `ComfyUI-lyw-MA-Loader` 全新特性与 UI 精简重构
+> 1. **🚀 重磅升级**: Magic Power LoRA Loader - 整合 `ComfyUI-lyw-MA-Loader` 基础特性与 UI 精简重构
 >    * **LoRA-Manager 互通与缓存加速**: 兼容读写 `ComfyUI-LoRA-Manager` 的 `<模型名>.metadata.json` sidecar 与 SQLite 缓存，互通模型标题（支持文件名旁展示与双关键词搜索）、本地备注持久化、触发词与预览图，并支持 WebP 磁盘缩略图缓存
->    * **独立触发词开关**: 新增顶部「触发词」总开关与单条 LoRA 独立触发词开关（`🏷️` 左键编辑、右键一键启用/屏蔽），无需清空文本即可快速控制触发词输出
+>    * **独立触发词开关**: 新增顶部「触发词」总开关与单条 LoRA 独立触发词开关（`🏷️` 左键编辑、右键一键启用/屏蔽）
 >    * **预设与收藏中心**: 将「预设分类」与「LoRA 收藏夹」整合进底部「📂预设」双标签弹窗，支持分类创建/重命名/归属调整、预设重命名、右键「加入收藏夹 ⭐」及一键添加到节点
->    * **文件夹与加载增强**: 支持单击文件夹标题快速「忽略/恢复」整组 LoRA、根列表与文件夹自由混排、在 Civitai 打开/打开所在文件夹、同步官方 `lora_metadata` 缓存及链末端可选 `clip`
->    * **界面与排版优化**: 修复工作流恢复或缩放节点时嵌入 UI 宽度异常锁死的 Bug；恢复清晰的 LoRA 行布局（缩略图 · 拖拽手柄 · 勾选 · 名称 · 备注 · 权重 · 标签/编辑/删除），简化「添加 Lora」弹窗排序为单一下拉框，并在「⚙️设置 → 布局样式」中整合「主题配色与预设」（内置 10 套配色 + 自定义方案）
->    * **Major Upgrade**: Integrated capabilities from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) into Magic Power LoRA Loader with a cleaner layout
->    * **LoRA-Manager Interop & Thumbnails**: Reads/writes `<stem>.metadata.json` sidecars and LM cache to share titles (displayed & searchable), persistent notes, trigger words, and WebP-cached thumbnails
->    * **Per-LoRA & Master Trigger Toggles**: Added a master Triggers toggle and per-row trigger switch (left-click `🏷️` to edit, right-click to mute/unmute without losing tags)
->    * **Presets & Favorites Modal**: Unified Preset Categories and LoRA Favorites into the two-tab `📂Preset` dialog, with category management, preset renaming, right-click "Add to Favorites ⭐", and one-click loading
->    * **Folder & Loader Enhancements**: Click folder title to ignore/restore, free root/folder interleaving, Open in Civitai / Open Containing Folder, official `lora_metadata` caching, and optional `clip` on chain end
->    * **UI & Layout Fixes**: Fixed the DOM widget width lock bug on resize/reload; restored clean row layout, streamlined the Add LoRA toolbar sort dropdown, and integrated 10+ theme color presets into Settings → Layout Style
+>    * **文件夹与加载增强**: 支持文件夹忽略/恢复、根列表与文件夹自由混排、在 Civitai 打开/打开所在文件夹、同步官方 `lora_metadata` 缓存及链末端可选 `clip`
+>    * **界面与排版优化**: 修复工作流恢复或缩放节点时嵌入 UI 宽度异常锁死的 Bug；整合「主题配色与预设」（内置 10 套配色 + 自定义方案）进「⚙️设置 → 布局样式」
+>    * **Major Upgrade**: Integrated LoRA-Manager sidecar/cache interop, WebP thumbnail caching, master & per-row trigger toggles, unified `📂Preset` & Favorites modal, Civitai/folder quick actions, and 10+ theme color presets
 ><img width="845" height="405" alt="image" src="https://github.com/user-attachments/assets/0d091cdb-a3da-4cf0-8d57-599749ee5f15" /><img width="663" height="400" alt="image" src="https://github.com/user-attachments/assets/4f71b8b5-01f5-4024-bc58-91da3189a24a" /><img width="613" height="533" alt="image" src="https://github.com/user-attachments/assets/890d296c-09d9-4021-b356-3898cc42eafc" /><img width="629" height="443" alt="image" src="https://github.com/user-attachments/assets/088a08ad-d8c2-49fe-82a5-721e46da657b" /><img width="418" height="488" alt="image" src="https://github.com/user-attachments/assets/23980a88-475f-4478-89aa-21b57ddea988" /><img width="686" height="408" alt="image" src="https://github.com/user-attachments/assets/3ee4e3aa-2b65-4ebd-a27a-a03acf470c6f" />
 >
-> 2. **✨ 新增节点**: Magic Style Prompt Filter (`🧹 风格词过滤`)
->    * 来自 `ComfyUI-lyw-MA-Loader` 整合的实用伴随节点，专为配合强力 LoRA 加载器使用
->    * 采用「规则秒判 + 可选本地 `llama_cpp` LLM 仅裁决模糊片段」混合策略，智能剥离画风、光影、质感等风格词，保留画面主体、动作与场景描述
->    * 可直接接入强力 LoRA 加载器的 `tags_output` 触发词，原样保留触发词并输出过滤后的 `内容提示词` 与 `positive`（CONDITIONING），让 LoRA 风格自然接管画面
->    * **New Node**: Added **Magic Style Prompt Filter** (`MALLMStyleFilter`), integrated from `ComfyUI-lyw-MA-Loader`
->    * Uses a fast rule router + optional local `llama_cpp` LLM for ambiguous segments to strip style/lighting/quality terms while preserving subject, action, and scene content
->    * Accepts LoRA trigger words (`tags_output`) untouched and outputs both filtered `STRING` and encoded `CONDITIONING` so LoRA styles take over cleanly
->
-> 3. **🎨 视觉升级**: 全插件统一 Linear / Vercel Modern Dark 暗黑主题与双语完善
->    * 新增共享样式表 `magic_modal_theme.css` 与主题加载器 `magic_ui_shared.js`，统一升级全插件 12+ 个节点弹窗的深色质感、玻璃遮罩、圆角与交互细节
+> 2. **🎨 视觉升级**: 全插件统一 Linear / Vercel Modern Dark 暗黑主题与双语完善
+>    * 新增共享样式表 `magic_modal_theme.css` 与主题加载器 `magic_ui_shared.js`，统一升级全插件节点弹窗的深色质感、玻璃遮罩、圆角与交互细节
 >    * 修复语言切换器（`language_switcher.js`）在嵌套弹窗 DOM 挂载时遗漏子元素翻译的问题，并补齐所有新增弹窗与右键菜单的中英文对照
 >    * **UI Unification & i18n**: Unified all plugin modals under a modern dark design system (`magic_modal_theme.css` / `magic_ui_shared.js`), fixed nested modal translation in `language_switcher.js`, and completed bilingual coverage for all new UI elements
 >
@@ -75,6 +118,9 @@
 >    * 增加拖拽边界碰撞保护，防止窗口不小心被拖到屏幕外找不到
 >    * **UI Polish**: Magic Photopea modal now features adaptive viewport scaling and drag boundary constraints, preventing the dialog from being dragged offscreen
 >
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+> 
 > **V1.4.6 版本介绍 / Version Introduction** 2026-10-09
 >
 > 1. **✨ 新增节点**: Magic Mask Edit - 统一遮罩裁切、缩放与回贴
@@ -98,9 +144,6 @@
 >    * Updates use exact version/hash matching, atomic writes, and file-change guards; edited trigger words, tags, weights, enabled states, and ordering are preserved
 >    * Civitai rate-limit or permission failures pause the remaining queue with retry guidance, and failed fields can be retried independently
 >
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
-
 > **V1.4.5 版本介绍 / Version Introduction** 2026-10-07
 >
 > 1. **✨ 新增**: Magic Power LoRA Loader - 一键批量补全 LoRA 信息
@@ -840,26 +883,32 @@
 ## 🧩 Node Features / 节点功能详解
 
 ### 1. 🎨 Magic Photopea Node (Photopea 图像处理与加载图像)
-> **The image manager & image editor inside ComfyUI.** / **ComfyUI 图片管理与修图工具。**
+> **The all-in-one image manager, Photopea editor & local image studio inside ComfyUI.** / **集图库管理、Photopea 在线修图与本地全能图像处理工作室于一体的 ComfyUI 图像节点。**
 
 <details>
 <summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
 
-* **输入文件管理**: 一个可视化的文件管理器，专门用于管理**您自己上传的图片**以及**修图保存的历史记录**。彻底告别在下拉菜单里"盲找"文件的痛苦。
-* **无缝修图**: 一键将您导入的图片发送到 Photopea (类PS体验) 进行编辑，保存后自动同步，无需下载上传。
-* **双路径支持**: 智能识别并管理 `input/` 根目录（用户上传）和 `magic_photopea/` 目录（编辑存档）下的所有文件。
-* **批量管理**: 提供**多选删除**、**批量清理**和**重命名**功能，帮您把杂乱的 input 文件夹整理得井井有条。
-* **修复**: 完美兼容官方遮罩编辑器（右键绘画保存即生效）。
-* **修复**: 图库可以识别并加载 ComfyUI Mask Editor 生成的 `clipspace-*` 伴随文件，方便继续进行遮罩编辑。
-* **新增**: "🧹 清空缓存"按钮，一键清理遮罩临时文件。
+* **输入文件图库管理 (`🖼️ 打开图库`)**: 可视化的 `input/` 文件管理器，支持搜索、排序、缩放、**常用图固定 (Pin)**、**批量多选删除**、**原地重命名**与「`🧹 清空缓存`」一键清理 `clipspace` / `pasted` 临时文件。
+* **双模式编辑入口 (`🖌️ Photopea编辑` + `🛠️ 本地处理`)**: 与 ComfyUI 原生风格融为一体的左右并排双按钮——左侧一键打开内置 Photopea (类 PS 体验) 编辑并自动回传；右侧一键打开 **Magic 本地图像处理工作室**，无需联网即可完成高频预处理与合成。
+* **本地工作室 · ✂️ 基础处理**:
+  * **📐 裁剪·扩图**: 大画布可视化拖拽裁剪、四向扩图与自由旋转，支持常用比例、裁剪/扩图模式、5 种填充（纯色/边缘拉伸/镜像反射/模糊背景/透明通道）、边缘羽化、步进对齐与像素预算缩放。
+  * **📏 分辨率**: 带 `0.5 / 1.0 / 2.0 / 4.0 MP` 等像素参考线的可视化画布，支持横竖切换、快捷推荐尺寸与扩图填充/居中裁切/等比适应/拉伸填满。
+  * **✨ 去除背景 (RMBG)**: 调用已安装的 `ComfyUI-RMBG` 原节点全部参数，可自由选择预览与输出 **去背图像 / 遮罩 / 遮罩图像**（未安装时提示安装）。
+  * **🎨 调色·滤镜**: 内置 6 套风格预设与亮度、对比度、饱和度、色相、冷暖色温、锐化、高斯模糊、翻转、灰度、反色实时预览与高清输出。
+* **本地工作室 · 🧩 图像组合**: 以当前图为底图，支持**拖入外部图片 / 文件夹导入 / 图库选图 / `Ctrl+V` 粘贴**为独立图层，支持上下层级调整、显隐、复制/删除、磁吸居中、缩放旋转翻转、不透明度、7 种混合模式及**单层一键 RMBG 抠图**，全分辨率合成后一键回传。
+* **本地工作室 · 🎯 ControlNet 预处理**: 自动扫描本地 `comfyui_controlnet_aux` 预处理器（Canny、LineArt、Depth Anything、OpenPose/DWPose、Normal、Seg 等），按分类与搜索筛选并动态呈现原节点参数（未安装时提示安装）。
+* **专业对比与多步串联**: 支持 **交互画布 / 预览结果 / 🪞 滑动对比（悬停滑移 & 拖拽对比）/ ⚖️ 左右对比**；支持「`↪ 设为输入`」连续多步叠加处理，满意后点击「`💾 传回图片 (Apply)`」自动同步回节点；全面兼容官方 Mask Editor 与中英双语实时切换。
 
-* **Input File Manager**: A visual gallery to manage **your uploaded images** and **saved history** in the `input` folder. No more digging through dropdown lists!
-* **Seamless Editing**: One-click to send any user image to Photopea for editing (Photoshop-like experience) and save it back instantly.
-* **Dual Path Support**: Automatically detects and manages files in both the root `input/` folder (uploads) and the `magic_photopea/` folder (edits).
-* **Batch Management**: Features **Multi-Select**, **Batch Delete**, and **Rename** to keep your input directory clean and organized.
-* **Fixed**: Compatibility with official Mask Editor (right-click -> Save to node now works perfectly).
-* **Fixed**: Gallery can recognize and load `clipspace-*` companion files generated by ComfyUI Mask Editor for continued mask editing.
-* **New**: Added "🧹 Clear Cache" button to remove temporary mask files.
+* **Visual Input Gallery (`🖼️ Open Gallery`)**: Manage uploaded images and edit history in `input/` with search, sorting, thumbnail zoom, **Pin**, **Batch Delete**, **Inline Rename**, and one-click `🧹 Clear Cache` for `clipspace` / `pasted` temp files.
+* **Dual Native Editor Buttons (`🖌️ Photopea` + `🛠️ Local Edit`)**: Seamlessly styled side-by-side buttons — open the built-in Photopea web editor on the left, or launch the offline **Magic Local Image Studio** on the right.
+* **Local Studio · ✂️ Basic Edit**:
+  * **📐 Crop & Pad**: Interactive visual canvas for cropping, 4-side padding, and rotation with aspect presets, Crop/Pad fit toggle, 5 fill modes (solid / edge / mirror / blur / transparent), feathering, step alignment, and megapixel budget resizing.
+  * **📏 Resolution**: Interactive canvas with `0.5–4.0 MP` iso-pixel curves, portrait/landscape flip, recommended sizes grid, and Pad/Crop/Contain/Stretch fit modes.
+  * **✨ Remove BG (RMBG)**: Invokes the installed native `ComfyUI-RMBG` node with all original parameters and switchable `Image / Mask / Mask Image` output (prompts to install if missing).
+  * **🎨 Color & Filter**: 6 quick style presets plus live-preview sliders for brightness, contrast, saturation, hue, temperature, sharpness, blur, flip, grayscale, and invert.
+* **Local Studio · 🧩 Compose (Multi-Layer)**: Starts with the current image as the base layer; add external layers via **drag-and-drop, file picker, `input/` gallery picker, or `Ctrl+V` paste**; supports layer reordering (up/down), visibility, duplicate/delete, snap-to-center dragging, scale, rotate, flip, opacity, 7 blend modes, and **one-click per-layer RMBG cutout**.
+* **Local Studio · 🎯 ControlNet Aux**: Auto-discovers installed `comfyui_controlnet_aux` preprocessors (Canny, LineArt, Depth, OpenPose/DWPose, Normal, Segmentation, etc.) with category tabs, search, and dynamic native parameter controls (prompts to install if missing).
+* **Pro Comparison, Chaining & Full Bilingual Support**: Switch freely between **Canvas / Preview / 🪞 Swipe Comparer (rgthree-style hover & drag) / ⚖️ Side-by-Side**; chain steps via `↪ Use as Input` and click `💾 Apply to Node` to sync back; fully compatible with ComfyUI's official Mask Editor and live ZH/EN switching via `language_switcher.js`.
 
 </details>
 
@@ -1068,9 +1117,10 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **LoRA 串连功能**: 通过 `lora串接受` 和 `lora串输出` 端口，支持多个强力 LoRA 加载器之间串连。输出了 `lora串` 的加载器不加载 LoRA，仅将自己配置的 LoRA 列表传递给下一个加载器。直到最后一个不输出 `lora串` 的加载器（链末端）才加载所有自身以及接收到的 LoRA。链末端加载器必须连接 model 和 clip；中间加载器可以不连接 model/clip。可搭配 SDNQ 模式用于模型全局卸载再加载使用。支持 bypass（忽略）节点时正确透传 lora 串。
 * **自定义权重调节方式（V1.4.0 新增）**: 在“设置 → 界面设置”中，可为每个 LoRA 的权重调节切换原有的紧凑箭头按钮或水平滑条。滑条模式支持自定义步长、最小值、最大值及宽度，可选择显示并直接编辑当前数值，也可开启 ±0.02 范围内自动吸附到 0；节点会自动扩展最小宽度，保证滑条控件完整显示。
 * **Anima 2.9B 模式（V1.4.1 新增）**: 新增 Anima 2.9B（40 层）LoRA 模式。在节点设置中开启后，可在 Anima 2.9B（40 层）模型上加载旧版 28 层 Anima LoRA；重映射在内存中完成（28→40 层），不写盘、不改原文件、不生成副本。仅标准加载路径生效（Klein / SDNQ 模式走专用加载器，不受影响）；非 Anima 或已是 40 层的 LoRA 原样加载。
-* **LoRA-Manager 互通与缓存加速（V1.4.8 新增，整合自 [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)）**: 兼容读写 `ComfyUI-LoRA-Manager` 的 `<模型名>.metadata.json` sidecar 与 SQLite 缓存，互通标题（支持展示与检索）、备注持久化、触发词及预览图，并支持 WebP 磁盘缩略图缓存。
-* **独立触发词与文件夹忽略（V1.4.8 新增）**: 顶部状态条提供全局「触发词」总开关，每条 LoRA 的 `🏷️` 按钮支持左键编辑、右键一键启用/屏蔽触发词；单击文件夹标题可快速「忽略/恢复」整组 LoRA。
-* **预设与收藏中心 & 主题配色（V1.4.8 新增）**: 底部「📂预设」弹窗整合「📁 预设分组」与「⭐ 收藏夹」双标签页，支持分类管理、预设重命名与右键收藏 LoRA；「⚙️设置 → 布局样式」内置 10 套主题配色预设及自定义颜色存取，同时支持单条 LoRA 与文件夹独立配色。
+* **LoRA-Manager 互通与缓存加速（V1.4.8 新增，整合自 [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)）**: 兼容读写 `ComfyUI-LoRA-Manager` 的 `<模型名>.metadata.json` sidecar 与 SQLite 缓存，互通标题（支持展示与检索）、备注持久化、触发词、作者推荐权重及预览图，并支持 WebP 磁盘缩略图缓存。
+* **作者推荐权重与独立 CLIP 权重（V1.4.9 新增）**: 自动从 Civitai 描述中解析并持久化作者推荐权重，行内有推荐值时显示紧凑「荐」标签（单击一键套用）；标准加载路径支持独立 CLIP 权重（默认跟随模型权重，右键切换跟随/自定义，可在「⚙️设置 → 布局样式 → 列表显示」中开关显示）。
+* **多触发词逐项屏蔽 & 文件夹眼睛忽略（V1.4.9 升级）**: 顶部状态条提供全局「触发词」总开关，每条 LoRA 的 `🏷️` 按钮支持左键编辑、右键开关或弹出多触发词逐项勾选屏蔽菜单；文件夹标题栏配备独立眼睛/划掉眼睛忽略按钮（支持自定义忽略/未忽略全局配色），左键标题折叠/展开，拖拽 LoRA 到文件夹上下边缘可精准插空，文件夹右键支持「保存为预设组」。
+* **LORA 串导入、替换重同步 & 悬浮交互体验（V1.4.9 新增）**: 「➕ 添加 Lora」弹窗顶部支持「📋 导入 LORA 串」（忽略 `krea2`/`k2`/`anima` 等前缀、容忍拼写/OCR 差异并弹出近似匹配选择器）与路径栏右侧「加入位置」目标群组选择；行右键「替换 LoRA」保留权重与启用态并自动重同步触发词/备注/推荐权重；「📂 预设与收藏」与「⚙️ 设置」升级为无全屏遮罩、可拖拽缩放并记忆位置尺寸的悬浮窗口，弹窗右上角内置 JSON「导出备份 / 导入备份」，「📥 一键下载信息」新增「⚡ 一键补全当前工作流」，且全面采用页面内弹窗兼容 ComfyUI 桌面端。
 
 * **Visual Management**: Beautiful gallery interface to browse and manage all your LoRAs. No more scrolling through long dropdown lists!
 * **Folder Organization**: Organize LoRAs into custom folders for better categorization and management.
@@ -1095,9 +1145,10 @@ Click the **"📝 编辑提示词"** button at the bottom of the node to open th
 * **LoRA Chain Feature**: Chain multiple Magic Power LoRA Loaders together using `lora串接受` (lora chain input) and `lora串输出` (lora chain output) ports. Loaders that output `lora串` don't load LoRAs themselves; they only pass their configured LoRA list to the next loader. Only the chain-end loader (the one that doesn't output `lora串`) loads all LoRAs (its own + received from upstream). Chain-end loaders must connect model and clip; intermediate loaders don't require model/clip connections. Perfect for SDNQ mode global model unload/reload workflows. Bypassed nodes correctly pass through lora chains.
 * **Customizable Weight Controls (New in V1.4.0)**: In Settings → Interface Settings, switch between the original compact arrow buttons and a horizontal slider for adjusting each LoRA's weight. Slider mode supports configurable step size, minimum/maximum values, and width; it can optionally show a directly editable current value and snap to zero within ±0.02. The node automatically expands its minimum width so the slider controls remain fully visible.
 * **Anima 2.9B Mode (New in V1.4.1)**: Added Anima 2.9B (40-layer) LoRA mode. Enable it in node settings to load legacy 28-layer Anima LoRAs on Anima 2.9B (40-layer) models; remapping happens in memory (28→40 layers) without writing to disk or modifying original files. Applies only to the standard loading path (Klein / SDNQ modes use dedicated loaders and are unaffected); non-Anima or already-40-layer LoRAs load unchanged.
-* **LoRA-Manager Interop & WebP Thumbnails (New in V1.4.8, integrated from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader))**: Reads and writes `ComfyUI-LoRA-Manager` `<stem>.metadata.json` sidecars and SQLite cache to sync titles (displayed & searchable), persistent notes, trigger words, and preview images with disk-cached WebP thumbnails.
-* **Trigger Toggles & Folder Ignore (New in V1.4.8)**: Master Triggers toggle on the top bar plus per-row `🏷️` trigger switch (left-click to edit, right-click to mute/unmute); click a folder header title to ignore/restore the entire group without losing selections.
-* **Presets & Favorites Modal & Theme Presets (New in V1.4.8)**: The `📂Preset` dialog unifies Preset Groups and Favorites in two tabs, supporting category management, preset renaming, and right-click favoriting; Settings → Layout Style includes 10 built-in theme color presets plus custom preset saving and per-row/folder color overrides.
+* **LoRA-Manager Interop & WebP Thumbnails (New in V1.4.8, integrated from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader))**: Reads and writes `ComfyUI-LoRA-Manager` `<stem>.metadata.json` sidecars and SQLite cache to sync titles (displayed & searchable), persistent notes, trigger words, author recommended weights, and preview images with disk-cached WebP thumbnails.
+* **Author Recommended Weights & Independent CLIP Weights (New in V1.4.9)**: Automatically parses and persists recommended weights from Civitai metadata with a compact one-click apply badge when available; supports independent follow/custom CLIP weights on the standard loading path (both columns configurable under Settings → Layout Style → List Display).
+* **Per-Word Trigger Blocking & Folder Eye Ignore (Upgraded in V1.4.9)**: Master Triggers toggle plus per-row `🏷️` trigger switch (left-click to edit, right-click to toggle or open a per-word checklist for multi-word triggers); dedicated eye/crossed-eye folder ignore button with separate global ignored/normal colors, left-click folder title to collapse/expand, edge-insert drag & drop, and "Save as Preset Group" in the folder context menu.
+* **LORA String Import, Replace Resync & Floating Windows (New in V1.4.9)**: Add LoRA dialog includes `📋 Import LORA String` (strips common prefixes, tolerates typos/OCR confusables with a candidate picker) and a path-bar target-group selector; right-click "Replace LoRA" keeps weights/enabled state while resyncing trigger words, notes, and recommended weight; `📂Preset` and `⚙️Settings` are now modeless floating windows (draggable, resizable, position-remembered, no blocking backdrop) with Export/Import JSON backup in the `📂Preset` header, workflow-wide refresh in Download Info, and full ComfyUI Desktop compatibility via in-page dialogs.
 
 </details>
 
@@ -1429,24 +1480,6 @@ You can download the image and import into ComfyUI.
 5. The default blend uses the saved source mask; use Settings & Presets to choose full-crop replacement, an external blend mask, content-only input, or candidate batch ordering
 
 <img width="951" height="413" alt="Image" src="https://github.com/user-attachments/assets/0f620a92-186f-4787-8b86-55550a31d192" />
-
-</details>
-
-### 13. 🧹 Magic Style Prompt Filter (风格词过滤)
-> **Rule + optional tiny local LLM style-word filter for LoRA workflows (Integrated from [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)).** / **「规则秒判 + 微型本地 LLM」风格词过滤节点，剥离风格词让 LoRA 风格自然接管画面（整合自 [ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)）。**
-
-<details>
-<summary>Click to expand detailed features / 点击展开详细功能介绍</summary>
-
-#### 核心特性 / Key Features
-
-* **规则 + LLM 混合裁决**: 先通过规则快速判断明确的画风、光影、画质等风格词与人物/场景/动作等内容词；仅将模糊片段交给可选的本地 `llama_cpp` 微型模型裁决，兼顾速度与准确率（可将 `max_llm_parts` 设为 `0` 纯规则零模型运行）。
-* **触发词无损保留**: 可直接连接强力 LoRA 加载器的 `tags_output` 输出至 `触发词` 输入口；触发词原样保留且不参与过滤，再与过滤后的主体内容拼接并编码输出 `内容提示词`（STRING）与 `positive`（CONDITIONING）。
-* **内容描述防误伤**: 自动识别并保护主语、人物、服饰、姿态、镜头景别与带下划线标签等核心内容，只剥离干扰 LoRA 画风发挥的修饰词；支持缓存命中加速与运行后可选自动释放本地模型（`unload_after`）。
-
-* **Hybrid Rule + Local LLM Routing**: Instantly classifies obvious style/lighting/quality terms and subject/scene content via built-in rules, sending only ambiguous segments to an optional local `llama_cpp` model (set `max_llm_parts` to `0` for rule-only mode).
-* **Lossless Trigger Preservation**: Connect `tags_output` from Magic Power LoRA Loader to the `触发词` input; trigger words bypass filtering untouched and are prepended to the filtered content, outputting both `内容提示词` (STRING) and encoded `positive` (CONDITIONING).
-* **Content-Safe Filtering**: Protects subjects, people, clothing, actions, camera framing, and underscored tags from accidental removal, with result caching and optional `unload_after` VRAM release.
 
 </details>
 

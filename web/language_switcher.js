@@ -448,6 +448,34 @@ const loraLoaderTranslations = {
     "打开所在文件夹": { zh: "打开所在文件夹", en: "Open Containing Folder" },
     "➕ 添加到节点": { zh: "➕ 添加到节点", en: "➕ Add to Node" },
     "🌐 在 CivitAI 查看": { zh: "🌐 在 CivitAI 查看", en: "🌐 View on CivitAI" },
+    "替换 LoRA": { zh: "替换 LoRA", en: "Replace LoRA" },
+    "替换 Lora": { zh: "替换 Lora", en: "Replace LoRA" },
+    "替换为选中 LoRA": { zh: "替换为选中 LoRA", en: "Replace with Selected LoRA" },
+    "保存为预设组": { zh: "保存为预设组", en: "Save as Preset Group" },
+    "加入位置:": { zh: "加入位置:", en: "Add to:" },
+    "📋 导入 LORA 串": { zh: "📋 导入 LORA 串", en: "📋 Import LORA String" },
+    "LoRA 近似匹配": { zh: "LoRA 近似匹配", en: "LoRA Fuzzy Match" },
+    "使用所选匹配": { zh: "使用所选匹配", en: "Apply Selected Matches" },
+    "保持原名称（不匹配）": { zh: "保持原名称（不匹配）", en: "Keep Original Name (No Match)" },
+    "直接加入根列表": { zh: "直接加入根列表", en: "Add to Root List" },
+    "加入为群组": { zh: "加入为群组", en: "Add as Group" },
+    "⚡ 一键补全当前工作流": { zh: "⚡ 一键补全当前工作流", en: "⚡ Refresh All Workflow LoRAs" },
+    "⚡ 一键补全当前工作流 LoRA": { zh: "⚡ 一键补全当前工作流 LoRA", en: "⚡ Refresh All Workflow LoRAs" },
+    "全部屏蔽": { zh: "全部屏蔽", en: "Mute All" },
+    "忽略时颜色": { zh: "忽略时颜色", en: "Ignored Color" },
+    "未忽略颜色": { zh: "未忽略颜色", en: "Normal Color" },
+    "列表显示": { zh: "列表显示", en: "List Display" },
+    "显示 CLIP 权重列（右键切换跟随/自定义，默认隐藏）": { zh: "显示 CLIP 权重列（右键切换跟随/自定义，默认隐藏）", en: "Show CLIP Weight Column (Right-click to toggle follow/custom; hidden by default)" },
+    "显示作者推荐权重标签（存在推荐值时显示「荐」，单击套用）": { zh: "显示作者推荐权重标签（存在推荐值时显示「荐」，单击套用）", en: "Show Recommended Weight Badge (Click to apply when available)" },
+    "预设收藏": { zh: "预设收藏", en: "Presets & Favorites" },
+    "预设与收藏备份": { zh: "预设与收藏备份", en: "Presets & Favorites Backup" },
+    "导出备份": { zh: "导出备份", en: "Export Backup" },
+    "导入备份": { zh: "导入备份", en: "Import Backup" },
+    "导出预设和收藏": { zh: "导出预设和收藏", en: "Export Presets & Favorites" },
+    "导入预设和收藏": { zh: "导入预设和收藏", en: "Import Presets & Favorites" },
+    "请确认": { zh: "请确认", en: "Confirm" },
+    "提示": { zh: "提示", en: "Notice" },
+    "知道了": { zh: "知道了", en: "OK" },
     "➕ 添加": { zh: "➕ 添加", en: "➕ Add" },
     "🔁 替换": { zh: "🔁 替换", en: "🔁 Replace" },
     "🔄 刷新": { zh: "🔄 刷新", en: "🔄 Refresh" },
@@ -791,6 +819,8 @@ const photopeaTranslations = {
     // 按钮文本
     "🖼️ 打开图库 / Open Gallery": { zh: "🖼️ 打开图库 / Open Gallery", en: "🖼️ Open Gallery" },
     "🖌️ 打开编辑器 / Open Editor": { zh: "🖌️ 打开编辑器 / Open Editor", en: "🖌️ Open Editor" },
+    "🖌️ Photopea编辑": { zh: "🖌️ Photopea编辑", en: "🖌️ Photopea" },
+    "🛠️ 本地处理": { zh: "🛠️ 本地处理", en: "🛠️ Local Edit" },
     
     // 错误提示
     "没有找到图片列表！(Component 'image' missing)": { zh: "没有找到图片列表！(Component 'image' missing)", en: "Image list not found! (Component 'image' missing)" },
@@ -834,7 +864,252 @@ const photopeaTranslations = {
     "💾 保存并发送 (Save)": { zh: "💾 保存并发送 (Save)", en: "💾 Save and Send" },
     "⏳ 传输中...": { zh: "⏳ 传输中...", en: "⏳ Transferring..." },
     "确定要清空 clipspace 和 pasted 缓存吗？": { zh: "确定要清空 clipspace 和 pasted 缓存吗？", en: "Are you sure you want to clear the clipspace and pasted caches?" },
-    "clipspace-": { zh: "clipspace-", en: "clipspace-" }
+    "clipspace-": { zh: "clipspace-", en: "clipspace-" },
+
+    // ============================================================
+    // Magic 本地图像处理工作室 (Local Image Studio)
+    // ============================================================
+    "Magic 本地图像处理": { zh: "Magic 本地图像处理", en: "Magic Local Image Studio" },
+    "工作室": { zh: "工作室", en: "Studio" },
+    "✂️ 基础处理": { zh: "✂️ 基础处理", en: "✂️ Basic Edit" },
+    "🧩 图像组合": { zh: "🧩 图像组合", en: "🧩 Compose" },
+    "🎯 ControlNet 预处理": { zh: "🎯 ControlNet 预处理", en: "🎯 ControlNet Aux" },
+    "最大化 / 还原": { zh: "最大化 / 还原", en: "Maximize / Restore" },
+    "关闭": { zh: "关闭", en: "Close" },
+    "取消": { zh: "取消", en: "Cancel" },
+    "💾 传回图片 (Apply)": { zh: "💾 传回图片 (Apply)", en: "💾 Apply to Node" },
+    "⏳ 正在传回...": { zh: "⏳ 正在传回...", en: "⏳ Applying..." },
+    "⚡ 生成预览": { zh: "⚡ 生成预览", en: "⚡ Generate Preview" },
+    "⚡ 合成并预览": { zh: "⚡ 合成并预览", en: "⚡ Composite & Preview" },
+    "⏳ 正在生成预览...": { zh: "⏳ 正在生成预览...", en: "⏳ Generating..." },
+    "↺ 重置": { zh: "↺ 重置", en: "↺ Reset" },
+    "请先在节点中选择或上传一张图片，再打开本地处理工作室！": { zh: "请先在节点中选择或上传一张图片，再打开本地处理工作室！", en: "Please select or upload an image on the node before opening Local Image Studio!" },
+    "加载当前图片失败，请检查图片文件是否存在。": { zh: "加载当前图片失败，请检查图片文件是否存在。", en: "Failed to load the current image. Please check if the file exists." },
+
+    // 基础处理子标签 & ControlNet 分类标签
+    "📐 裁剪·扩图": { zh: "📐 裁剪·扩图", en: "📐 Crop & Pad" },
+    "📏 分辨率": { zh: "📏 分辨率", en: "📏 Resolution" },
+    "✨ 去除背景": { zh: "✨ 去除背景", en: "✨ Remove BG" },
+    "🎨 调色·滤镜": { zh: "🎨 调色·滤镜", en: "🎨 Color & Filter" },
+    "全部": { zh: "全部", en: "All" },
+    "线稿": { zh: "线稿", en: "Edge / Line" },
+    "深度": { zh: "深度", en: "Depth" },
+    "姿态": { zh: "姿态", en: "Pose" },
+    "其他": { zh: "其他", en: "Other" },
+
+    // 右侧主舞台工具栏与视图切换
+    "输入": { zh: "输入", en: "Input" },
+    "预览": { zh: "预览", en: "Preview" },
+    "原图": { zh: "原图", en: "Original" },
+    "🎛️ 交互画布": { zh: "🎛️ 交互画布", en: "🎛️ Canvas" },
+    "🖼️ 预览结果": { zh: "🖼️ 预览结果", en: "🖼️ Preview" },
+    "📄 当前输入": { zh: "📄 当前输入", en: "📄 Source" },
+    "🪞 滑动对比": { zh: "🪞 滑动对比", en: "🪞 Swipe" },
+    "⚖️ 左右对比": { zh: "⚖️ 左右对比", en: "⚖️ Side-by-Side" },
+    "↪ 设为输入": { zh: "↪ 设为输入", en: "↪ Use as Input" },
+    "把当前预览结果设为新的输入图，继续叠加下一步处理": { zh: "把当前预览结果设为新的输入图，继续叠加下一步处理", en: "Use the current preview as the new input for chained editing" },
+    "↩ 还原原图": { zh: "↩ 还原原图", en: "↩ Restore Original" },
+    "当前输入": { zh: "当前输入", en: "Source" },
+    "预览结果": { zh: "预览结果", en: "Result" },
+    "在左侧调好参数后，点击「⚡ 生成预览」即可在此查看高清处理结果": { zh: "在左侧调好参数后，点击「⚡ 生成预览」即可在此查看高清处理结果", en: "Adjust parameters on the left and click '⚡ Generate Preview' to view the result here" },
+    "正在本地处理图像，请稍候...": { zh: "正在本地处理图像，请稍候...", en: "Processing image locally, please wait..." },
+    "✅ 已生成预览": { zh: "✅ 已生成预览", en: "✅ Preview Ready" },
+    "📄 当前图片：": { zh: "📄 当前图片：", en: "📄 Current Image: " },
+
+    // 滑动对比 HUD
+    "🖱️ 悬停滑移": { zh: "🖱️ 悬停滑移", en: "🖱️ Hover Slide" },
+    "✋ 拖拽对比": { zh: "✋ 拖拽对比", en: "✋ Drag Slide" },
+    "切换「悬停滑移」(rgthree 风格) 或「拖拽滑移」": { zh: "切换「悬停滑移」(rgthree 风格) 或「拖拽滑移」", en: "Toggle Hover Slide (rgthree style) or Drag Slide" },
+    "重置分割线到正中间": { zh: "重置分割线到正中间", en: "Reset divider to center" },
+
+    // 裁剪·旋转·扩图
+    "比例与适配模式": { zh: "比例与适配模式", en: "Aspect Ratio & Fit" },
+    "裁剪": { zh: "裁剪", en: "Crop" },
+    "扩图": { zh: "扩图", en: "Pad" },
+    "旋转": { zh: "旋转", en: "Rotate" },
+    "▯ 竖": { zh: "▯ 竖", en: "▯ Port." },
+    "▭ 横": { zh: "▭ 横", en: "▭ Land." },
+    "自由": { zh: "自由", en: "Free" },
+    "🔒 已锁比例": { zh: "🔒 已锁比例", en: "🔒 Locked" },
+    "🔓 锁比例": { zh: "🔓 锁比例", en: "🔓 Lock Ratio" },
+    "旋转与外扩微调": { zh: "旋转与外扩微调", en: "Rotate & Padding" },
+    "也可在右侧画布直接拖拽": { zh: "也可在右侧画布直接拖拽", en: "Or drag directly on canvas" },
+    "旋转角度": { zh: "旋转角度", en: "Rotation" },
+    "扩图边距 (px)": { zh: "扩图边距 (px)", en: "Padding (px)" },
+    "水平居中": { zh: "水平居中", en: "Center H" },
+    "垂直居中": { zh: "垂直居中", en: "Center V" },
+    "左": { zh: "左", en: "Left" },
+    "上": { zh: "上", en: "Top" },
+    "右": { zh: "右", en: "Right" },
+    "下": { zh: "下", en: "Bottom" },
+    "填充与输出规格": { zh: "填充与输出规格", en: "Fill & Output" },
+    "纯色填充": { zh: "纯色填充", en: "Solid Color" },
+    "边缘拉伸": { zh: "边缘拉伸", en: "Edge Replicate" },
+    "镜像反射": { zh: "镜像反射", en: "Mirror Reflect" },
+    "模糊背景": { zh: "模糊背景", en: "Blurred BG" },
+    "透明通道": { zh: "透明通道", en: "Transparent" },
+    "边缘羽化": { zh: "边缘羽化", en: "Feather" },
+    "对齐": { zh: "对齐", en: "Snap" },
+    "不对齐": { zh: "不对齐", en: "Off" },
+    "按像素预算缩放输出": { zh: "按像素预算缩放输出", en: "Resize to Megapixel Budget" },
+    "裁剪/旋转/扩图": { zh: "裁剪/旋转/扩图", en: "Crop / Rotate / Pad" },
+
+    // 画布分辨率
+    "比例预设": { zh: "比例预设", en: "Aspect Presets" },
+    "竖屏": { zh: "竖屏", en: "Portrait" },
+    "横屏": { zh: "横屏", en: "Landscape" },
+    "▯ 竖屏": { zh: "▯ 竖屏", en: "▯ Portrait" },
+    "▭ 横屏": { zh: "▭ 横屏", en: "▭ Landscape" },
+    "宽高与像素预算": { zh: "宽高与像素预算", en: "Size & Pixel Budget" },
+    "步长": { zh: "步长", en: "Step" },
+    "交换宽高": { zh: "交换宽高", en: "Swap Width & Height" },
+    "像素预算": { zh: "像素预算", en: "Budget" },
+    "图像适配与填充": { zh: "图像适配与填充", en: "Image Fit & Fill" },
+    "扩图填充 (Pad)": { zh: "扩图填充 (Pad)", en: "Pad to Fit" },
+    "居中裁切 (Crop)": { zh: "居中裁切 (Crop)", en: "Center Crop" },
+    "等比适应 (Contain)": { zh: "等比适应 (Contain)", en: "Contain (Keep Aspect)" },
+    "拉伸填满 (Stretch)": { zh: "拉伸填满 (Stretch)", en: "Stretch to Fill" },
+    "扩图填充": { zh: "扩图填充", en: "Pad" },
+    "居中裁切": { zh: "居中裁切", en: "Crop" },
+    "等比适应": { zh: "等比适应", en: "Contain" },
+    "拉伸填满": { zh: "拉伸填满", en: "Stretch" },
+    "目标画布": { zh: "目标画布", en: "Target" },
+    "模式：": { zh: "模式：", en: "Mode: " },
+    "拖拽边缘调整（Shift 锁比例）": { zh: "拖拽边缘调整（Shift 锁比例）", en: "Drag edges to resize (Shift locks ratio)" },
+    "画布分辨率": { zh: "画布分辨率", en: "Canvas Resolution" },
+
+    // RMBG 去除背景
+    "正在检测本地 RMBG 节点...": { zh: "正在检测本地 RMBG 节点...", en: "Detecting local RMBG node..." },
+    "⚠️ 未检测到去除背景节点 (RMBG)": { zh: "⚠️ 未检测到去除背景节点 (RMBG)", en: "⚠️ RMBG Node Not Installed" },
+    "当前 ComfyUI 环境中未安装": { zh: "当前 ComfyUI 环境中未安装", en: "Not installed in this ComfyUI environment: " },
+    "插件，无法调用去除背景功能。": { zh: "插件，无法调用去除背景功能。", en: " plugin is required for background removal." },
+    "请通过 ComfyUI Manager 安装": { zh: "请通过 ComfyUI Manager 安装", en: "Please install via ComfyUI Manager: " },
+    "并重启 ComfyUI 后再试！": { zh: "并重启 ComfyUI 后再试！", en: " and restart ComfyUI." },
+    "选择输出类型": { zh: "选择输出类型", en: "Output Type" },
+    "调用原版 RMBG": { zh: "调用原版 RMBG", en: "Native RMBG Node" },
+    "🖼️ 图像": { zh: "🖼️ 图像", en: "🖼️ Image" },
+    "🎭 遮罩": { zh: "🎭 遮罩", en: "🎭 Mask" },
+    "⬛⬜ 遮罩图像": { zh: "⬛⬜ 遮罩图像", en: "⬛⬜ Mask Image" },
+    "RMBG 参数": { zh: "RMBG 参数", en: "RMBG Parameters" },
+    "去背图像": { zh: "去背图像", en: "Cutout Image" },
+    "遮罩": { zh: "遮罩", en: "Mask" },
+    "遮罩图像": { zh: "遮罩图像", en: "Mask Image" },
+    "开启": { zh: "开启", en: "On" },
+    "未开启": { zh: "未开启", en: "Off" },
+    "该节点没有额外参数，直接点击下方「⚡ 生成预览」即可。": { zh: "该节点没有额外参数，直接点击下方「⚡ 生成预览」即可。", en: "No extra parameters. Click '⚡ Generate Preview' below." },
+
+    // ControlNet 预处理
+    "正在扫描 comfyui_controlnet_aux 节点...": { zh: "正在扫描 comfyui_controlnet_aux 节点...", en: "Scanning comfyui_controlnet_aux nodes..." },
+    "⚠️ 未检测到 ControlNet 预处理器插件": { zh: "⚠️ 未检测到 ControlNet 预处理器插件", en: "⚠️ ControlNet Aux Preprocessors Not Installed" },
+    "无法调用 Canny / Depth / OpenPose 等预处理节点。": { zh: "无法调用 Canny / Depth / OpenPose 等预处理节点。", en: "Required to run Canny, Depth, OpenPose, Lineart, etc." },
+    "🔍 搜索预处理器（canny / depth / pose / lineart...）": { zh: "🔍 搜索预处理器（canny / depth / pose / lineart...）", en: "🔍 Search preprocessors (canny / depth / pose / lineart...)" },
+    "没有匹配的预处理器": { zh: "没有匹配的预处理器", en: "No matching preprocessors" },
+
+    // 调色·滤镜
+    "风格预设与快速变换": { zh: "风格预设与快速变换", en: "Presets & Quick Flip" },
+    "通透提亮": { zh: "通透提亮", en: "Vivid" },
+    "电影冷调": { zh: "电影冷调", en: "Cinematic Cool" },
+    "暖阳胶片": { zh: "暖阳胶片", en: "Warm Film" },
+    "日系清新": { zh: "日系清新", en: "Fresh Soft" },
+    "高反差黑白": { zh: "高反差黑白", en: "Hi-Contrast B&W" },
+    "⇄ 水平翻转": { zh: "⇄ 水平翻转", en: "⇄ Flip H" },
+    "⇅ 垂直翻转": { zh: "⇅ 垂直翻转", en: "⇅ Flip V" },
+    "◐ 灰度": { zh: "◐ 灰度", en: "◐ Grayscale" },
+    "◑ 反色": { zh: "◑ 反色", en: "◑ Invert" },
+    "精细调色与滤镜": { zh: "精细调色与滤镜", en: "Color Grading & Filters" },
+    "右侧实时预览": { zh: "右侧实时预览", en: "Live Preview" },
+    "亮度": { zh: "亮度", en: "Brightness" },
+    "对比度": { zh: "对比度", en: "Contrast" },
+    "对比": { zh: "对比", en: "Contrast" },
+    "饱和度": { zh: "饱和度", en: "Saturation" },
+    "饱和": { zh: "饱和", en: "Sat" },
+    "色相偏移": { zh: "色相偏移", en: "Hue Shift" },
+    "色相": { zh: "色相", en: "Hue" },
+    "冷暖色温": { zh: "冷暖色温", en: "Temperature" },
+    "色温": { zh: "色温", en: "Temp" },
+    "锐化强度": { zh: "锐化强度", en: "Sharpness" },
+    "锐化": { zh: "锐化", en: "Sharp" },
+    "高斯模糊": { zh: "高斯模糊", en: "Gaussian Blur" },
+    "模糊": { zh: "模糊", en: "Blur" },
+    "水平翻转": { zh: "水平翻转", en: "Flip H" },
+    "垂直翻转": { zh: "垂直翻转", en: "Flip V" },
+    "灰度": { zh: "灰度", en: "Grayscale" },
+    "反色": { zh: "反色", en: "Invert" },
+    "实时调色预览：": { zh: "实时调色预览：", en: "Live Grading: " },
+    "实时调色预览 · 拖动左侧滑块即刻生效，满意后点「⚡ 生成预览」渲染高清结果": { zh: "实时调色预览 · 拖动左侧滑块即刻生效，满意后点「⚡ 生成预览」渲染高清结果", en: "Live grading preview · Drag sliders to adjust, then click '⚡ Generate Preview' to render" },
+    "调色与滤镜": { zh: "调色与滤镜", en: "Color & Filter" },
+
+    // 图像组合 (多图层合成)
+    "底图": { zh: "底图", en: "Base" },
+    "导入图层": { zh: "导入图层", en: "Layer" },
+    "外部图像": { zh: "外部图像", en: "Imported Image" },
+    "图层管理": { zh: "图层管理", en: "Layers" },
+    "支持直接拖入 / Ctrl+V": { zh: "支持直接拖入 / Ctrl+V", en: "Drag & Drop / Ctrl+V" },
+    "📁 导入外部图像": { zh: "📁 导入外部图像", en: "📁 Import Files" },
+    "从电脑文件夹选择一张或多张图片作为新图层导入": { zh: "从电脑文件夹选择一张或多张图片作为新图层导入", en: "Choose one or more local images to add as layers" },
+    "🖼️ 从图库选图": { zh: "🖼️ 从图库选图", en: "🖼️ From Gallery" },
+    "从 ComfyUI input 图库中挑选图片插入为新图层": { zh: "从 ComfyUI input 图库中挑选图片插入为新图层", en: "Pick an image from ComfyUI input/ folder as a new layer" },
+    "🖼️ 从 ComfyUI 图库 (input/) 插入图层": { zh: "🖼️ 从 ComfyUI 图库 (input/) 插入图层", en: "🖼️ Insert Layer from ComfyUI Gallery (input/)" },
+    "🔍 搜索图片文件名...": { zh: "🔍 搜索图片文件名...", en: "🔍 Search image filename..." },
+    "正在加载图库...": { zh: "正在加载图库...", en: "Loading gallery..." },
+    "没有找到图片": { zh: "没有找到图片", en: "No images found" },
+    "加载图库列表失败": { zh: "加载图库列表失败", en: "Failed to load gallery list" },
+    "已抠图": { zh: "已抠图", en: "Cutout" },
+    "隐藏图层": { zh: "隐藏图层", en: "Hide Layer" },
+    "显示图层": { zh: "显示图层", en: "Show Layer" },
+    "上移一层": { zh: "上移一层", en: "Move Up" },
+    "下移一层": { zh: "下移一层", en: "Move Down" },
+    "复制此图层": { zh: "复制此图层", en: "Duplicate Layer" },
+    "副本": { zh: "副本", en: "Copy" },
+    "至少保留一个图层": { zh: "至少保留一个图层", en: "Keep at least one layer" },
+    "删除图层": { zh: "删除图层", en: "Delete Layer" },
+    "选中图层：": { zh: "选中图层：", en: "Layer: " },
+    "✨ 一键抠图 (RMBG 去背景)": { zh: "✨ 一键抠图 (RMBG 去背景)", en: "✨ One-Click Cutout (RMBG)" },
+    "⏳ 正在抠图 (RMBG)...": { zh: "⏳ 正在抠图 (RMBG)...", en: "⏳ Removing BG (RMBG)..." },
+    "↩ 还原": { zh: "↩ 还原", en: "↩ Revert" },
+    "还原该图层抠图前的原始图像": { zh: "还原该图层抠图前的原始图像", en: "Restore this layer before background removal" },
+    "居中": { zh: "居中", en: "Center" },
+    "铺满画布": { zh: "铺满画布", en: "Fill" },
+    "适应画布": { zh: "适应画布", en: "Fit" },
+    "⇄ 水平翻": { zh: "⇄ 水平翻", en: "⇄ Flip H" },
+    "⇅ 垂直翻": { zh: "⇅ 垂直翻", en: "⇅ Flip V" },
+    "缩放比例": { zh: "缩放比例", en: "Scale" },
+    "不透明度": { zh: "不透明度", en: "Opacity" },
+    "混合模式": { zh: "混合模式", en: "Blend Mode" },
+    "正常 (Normal)": { zh: "正常 (Normal)", en: "Normal" },
+    "正片叠底 (Multiply)": { zh: "正片叠底 (Multiply)", en: "Multiply" },
+    "滤色 (Screen)": { zh: "滤色 (Screen)", en: "Screen" },
+    "叠加 (Overlay)": { zh: "叠加 (Overlay)", en: "Overlay" },
+    "变暗 (Darken)": { zh: "变暗 (Darken)", en: "Darken" },
+    "变亮 (Lighten)": { zh: "变亮 (Lighten)", en: "Lighten" },
+    "柔光 (Soft Light)": { zh: "柔光 (Soft Light)", en: "Soft Light" },
+    "画布尺寸与底色": { zh: "画布尺寸与底色", en: "Canvas Size & Background" },
+    "匹配底图": { zh: "匹配底图", en: "Match Base" },
+    "透明画布背景": { zh: "透明画布背景", en: "Transparent Canvas" },
+    "纯色画布背景": { zh: "纯色画布背景", en: "Solid Color Canvas" },
+    "画布": { zh: "画布", en: "Canvas" },
+    "个图层": { zh: "个图层", en: "layers" },
+    "已选": { zh: "已选", en: "Selected" },
+    "点击画布选择图层": { zh: "点击画布选择图层", en: "Click canvas to select a layer" },
+    "可直接拖入外部图片": { zh: "可直接拖入外部图片", en: "Drop external images anywhere" },
+    "📥 松手即可插入为新图层": { zh: "📥 松手即可插入为新图层", en: "📥 Drop Images to Insert as New Layers" },
+    "支持 PNG / JPG / WebP，可一次拖入多张外部图像": { zh: "支持 PNG / JPG / WebP，可一次拖入多张外部图像", en: "Supports PNG / JPG / WebP — drop one or multiple images" },
+    "图像组合": { zh: "图像组合", en: "Composition" },
+    "层": { zh: "层", en: "layers" },
+    "未检测到去除背景节点 (RMBG)，请先通过 ComfyUI Manager 安装 ComfyUI-RMBG 并重启 ComfyUI！": { zh: "未检测到去除背景节点 (RMBG)，请先通过 ComfyUI Manager 安装 ComfyUI-RMBG 并重启 ComfyUI！", en: "RMBG node not found. Please install ComfyUI-RMBG via ComfyUI Manager and restart ComfyUI." },
+    "图层抠图失败: ": { zh: "图层抠图失败: ", en: "Layer cutout failed: " },
+    "导入图像失败: ": { zh: "导入图像失败: ", en: "Failed to import image: " },
+    "从图库导入失败: ": { zh: "从图库导入失败: ", en: "Failed to import from gallery: " },
+    "拖入图像失败: ": { zh: "拖入图像失败: ", en: "Failed to drop image: " },
+    "粘贴图像失败: ": { zh: "粘贴图像失败: ", en: "Failed to paste image: " },
+    "合成预览失败: ": { zh: "合成预览失败: ", en: "Composite failed: " },
+    "传回图片失败: ": { zh: "传回图片失败: ", en: "Failed to apply image: " },
+    "处理失败": { zh: "处理失败", en: "Processing failed" },
+    "RMBG 执行失败": { zh: "RMBG 执行失败", en: "RMBG failed" },
+    "ControlNet 预处理失败": { zh: "ControlNet 预处理失败", en: "ControlNet preprocessing failed" },
+    "去除背景 (RMBG)": { zh: "去除背景 (RMBG)", en: "Remove Background (RMBG)" },
+    "无法获取 RMBG 节点信息: ": { zh: "无法获取 RMBG 节点信息: ", en: "Failed to query RMBG node info: " },
+    "无法获取 ControlNet 预处理器列表: ": { zh: "无法获取 ControlNet 预处理器列表: ", en: "Failed to fetch ControlNet preprocessors: " }
 };
 
 // 节点翻译映射表 - Magic Resolution Resize & Magic Resolution
@@ -2586,11 +2861,6 @@ const nodeTranslations = {
     "MagicSDNQSampler": {
         zh: "🎲 SDNQ K采样器 Magic SDNQ K Sampler",
         en: "🎲 Magic SDNQ K Sampler"
-    },
-    // 节点11: Magic Style Prompt Filter
-    "MALLMStyleFilter": {
-        zh: "🧹 风格词过滤 Magic Style Prompt Filter",
-        en: "🧹 Magic Style Prompt Filter"
     }
 };
 
@@ -2695,28 +2965,27 @@ function interceptNativeDialogs() {
 }
 
 // 立即翻译元素（供外部调用）
-function translateElementImmediately(element) {
-    if (!element || isManagedTranslation(element)) return;
+// 修复：此前先递归整棵子树，再 querySelectorAll('*') 对每个后代重新递归，导致 O(N²) 卡顿；
+// 现在仅单遍递归，且在默认中文模式下对新建未翻译的中文弹窗直接跳过，消除打开弹窗时的卡顿。
+function translateElementImmediately(element, force = false) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE || isManagedTranslation(element)) return;
     const currentLang = getCurrentLanguage();
-    
-    // 清除翻译标记，强制重新翻译
-    if (element.hasAttribute && element.hasAttribute(TRANSLATED_MARKER)) {
+    const prevLang = element.getAttribute ? element.getAttribute(TRANSLATED_MARKER) : null;
+    if (!force && prevLang === currentLang) return;
+    // 默认中文且该元素从未被翻译成英文：原文即中文，无需遍历整棵子树
+    if (!force && currentLang === DEFAULT_LANGUAGE && !prevLang) {
+        try { element.setAttribute(TRANSLATED_MARKER, currentLang); } catch (e) {}
+        return;
+    }
+    if (force && element.removeAttribute) {
         element.removeAttribute(TRANSLATED_MARKER);
-    }
-    
-    // 立即翻译（nodeType会自动检测）
-    translateElementRecursive(element, currentLang);
-    
-    // 如果元素有子元素，也翻译它们
-    if (element.querySelectorAll) {
-        const allChildren = element.querySelectorAll('*');
-        allChildren.forEach(child => {
-            if (child.hasAttribute && child.hasAttribute(TRANSLATED_MARKER)) {
+        if (element.querySelectorAll) {
+            element.querySelectorAll(`[${TRANSLATED_MARKER}]`).forEach(child => {
                 child.removeAttribute(TRANSLATED_MARKER);
-            }
-            translateElementRecursive(child, currentLang);
-        });
+            });
+        }
     }
+    translateElementRecursive(element, currentLang);
 }
 
 // 拦截 appendChild 方法，在弹窗添加到DOM后立即翻译
@@ -2731,6 +3000,11 @@ function interceptAppendChild() {
         
         // 检查是否是添加到body的固定定位元素（通常是弹窗）
         if (this === document.body && child && child.nodeType === Node.ELEMENT_NODE) {
+            const langNow = getCurrentLanguage();
+            // 默认中文模式下新建的原生中文弹窗无需做重型扫描与延迟重复遍历
+            if (langNow === DEFAULT_LANGUAGE && !child.getAttribute(TRANSLATED_MARKER)) {
+                return result;
+            }
             // 立即检查样式（如果已设置）
             const checkAndTranslate = () => {
                 try {
@@ -2741,12 +3015,12 @@ function interceptAppendChild() {
                             translateElementImmediately(child);
                             
                             // 特别处理LABEL元素（checkbox/radio标签）
-                            // 立即翻译一次，然后延迟再翻译一次（确保捕获所有label）
                             const translateLabels = () => {
                                 const labels = child.querySelectorAll('label');
                                 labels.forEach(label => {
                                     if (isManagedTranslation(label)) return;
                                     const currentLang = getCurrentLanguage();
+                                    if (label.getAttribute(TRANSLATED_MARKER) === currentLang) return;
                                     let detectedNodeType = "MagicPowerLoraLoader";
                                     const parentText = label.textContent || '';
                                     if (parentText.includes('逻辑') || parentText.includes('Logic') || parentText.includes('编辑器') || parentText.includes('Editor') ||
@@ -2802,25 +3076,18 @@ function interceptAppendChild() {
                                 });
                             };
                             
-                            // 立即翻译一次
+                            // 立即翻译一次，延迟补扫动态新增的 label
                             translateLabels();
-                            
-                            // 延迟再翻译一次，确保捕获所有动态创建的label（如"模型介绍信息"、"预览图像"、"默认权重下载"）
-                            setTimeout(translateLabels, 50);
-                            setTimeout(translateLabels, 150);
+                            setTimeout(translateLabels, 80);
                         }
                     }
                 } catch (e) {
-                    // 如果样式还没设置，延迟检查
                     setTimeout(checkAndTranslate, 10);
                 }
             };
             
-            // 立即检查一次
+            // 立即检查一次（不再 50ms 后重复全树重扫导致卡顿）
             checkAndTranslate();
-            
-            // 也延迟检查一次，确保元素完全创建
-            setTimeout(checkAndTranslate, 50);
         }
         
         // 检查是否是文本节点被添加到LABEL元素（弹窗中的checkbox/radio标签）
@@ -2944,6 +3211,8 @@ function setupTranslationInterceptor() {
     // 使用MutationObserver监听DOM变化
     translationObserver = new MutationObserver((mutations) => {
         const currentLang = getCurrentLanguage();
+        // 默认中文模式下，新建 DOM 默认已是中文，仅在切换为英文时才需要自动拦截翻译
+        if (currentLang === DEFAULT_LANGUAGE) return;
         const batch = [];
         
         mutations.forEach((mutation) => {

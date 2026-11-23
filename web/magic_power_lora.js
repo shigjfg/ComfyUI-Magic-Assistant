@@ -67,6 +67,9 @@ const MPL_ICONS = {
     chevronRight: '<polyline points="9 18 15 12 9 6"/>',
     layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeCute: '<ellipse cx="12" cy="12" rx="9" ry="6.2"/><circle cx="12" cy="12" r="2.8"/>',
+    eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
     paste: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>'
 };
 function mplIcon(name, size) {
@@ -116,6 +119,317 @@ function mplColorModeSwitch(parent, initial, onChange) {
 
 function mplNormalizeLoraName(name) {
     return String(name || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+}
+
+function mplClampWeight(v) {
+    const n = parseFloat(v);
+    if (!Number.isFinite(n)) return 1.0;
+    return Math.max(-10, Math.min(10, parseFloat(n.toFixed(2))));
+}
+function mplLoraWeight(l) {
+    const n = parseFloat(l?.weight);
+    return Number.isFinite(n) ? n : 1.0;
+}
+function mplClipFollowsWeight(l) {
+    if (!l || typeof l !== "object") return true;
+    if (l.clipFollow === false) return false;
+    if (l.clipFollow === true) return true;
+    return l.clipWeight === undefined || l.clipWeight === null;
+}
+function mplClipWeightValue(l) {
+    if (mplClipFollowsWeight(l)) return mplLoraWeight(l);
+    const n = parseFloat(l?.clipWeight);
+    return Number.isFinite(n) ? n : mplLoraWeight(l);
+}
+function mplSyncClipWeight(l) {
+    if (!l || typeof l !== "object") return;
+    if (mplClipFollowsWeight(l)) {
+        l.clipFollow = true;
+        l.clipWeight = mplLoraWeight(l);
+    } else {
+        l.clipWeight = mplClampWeight(l.clipWeight);
+    }
+}
+function mplSetCustomClipWeight(l, v) {
+    if (!l || typeof l !== "object") return false;
+    const n = parseFloat(v);
+    if (!Number.isFinite(n)) return false;
+    l.clipFollow = false;
+    l.clipWeight = mplClampWeight(n);
+    return true;
+}
+function mplToggleClipFollow(l) {
+    if (!l || typeof l !== "object") return true;
+    const follow = !mplClipFollowsWeight(l);
+    l.clipFollow = follow;
+    if (follow) mplSyncClipWeight(l);
+    else if (l.clipWeight === undefined || l.clipWeight === null) l.clipWeight = mplLoraWeight(l);
+    return follow;
+}
+function mplParseCssColor(value) {
+    const m = String(value || "").trim().match(/^rgba?\(([^)]+)\)$/i);
+    if (!m) return null;
+    const p = m[1].split(",").map(v => parseFloat(v.trim()));
+    if (p.length < 3 || p.slice(0, 3).some(v => !Number.isFinite(v))) return null;
+    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+}
+function mplFolderDropColors(el) {
+    for (let node = el; node; node = node.parentElement) {
+        const c = mplParseCssColor(getComputedStyle(node).backgroundColor);
+        if (!c || c.a < 0.35) continue;
+        const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+        return lum > 0.55
+            ? { color: "#0b57d0", glow: "rgba(11,87,208,0.45)" }
+            : { color: "#ffd166", glow: "rgba(255,209,102,0.48)" };
+    }
+    return { color: "#ffd166", glow: "rgba(255,209,102,0.48)" };
+}
+function mplUpdateClipBadgeUI(el, l) {
+    if (!el || !l) return;
+    mplSyncClipWeight(l);
+    const follow = mplClipFollowsWeight(l);
+    const val = mplClipWeightValue(l);
+    el.textContent = "C " + val.toFixed(2);
+    el.classList.toggle("mpl-clip-custom", !follow);
+    el.title = follow
+        ? `CLIP 权重：${val.toFixed(2)}（跟随模型权重）\n左键输入自定义值 · 右键切换自定义/跟随`
+        : `CLIP 权重：${val.toFixed(2)}（自定义）\n左键修改 · 右键恢复跟随模型权重`;
+}
+
+// ===== LORA 串解析：兼容 <lora:名称:模型权重:CLIP权重> 格式 + 智能近似匹配 =====
+const MPL_LORA_MATCH_CACHE = new WeakMap();
+const MPL_LORA_FAMILY_PREFIX = /^(?:krea[\s._-]*2|k2|anima|sdxl|xl|pony|illustrious|noob(?:ai)?)(?:[\s._-]+|(?=[A-Z]))/i;
+function mplStripLoraFamilyPrefix(value) {
+    let s = String(value || "");
+    for (let i = 0; i < 2; i++) {
+        const next = s.replace(MPL_LORA_FAMILY_PREFIX, "");
+        if (next === s) break;
+        s = next;
+    }
+    return s;
+}
+function mplLoraNameVariants(value) {
+    const base = String(value || "").replace(/\\/g, "/").split("/").pop()
+        .replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, "").trim();
+    const trim = (s) => s.replace(/^[\s._-]+|[\s._-]+$/g, "");
+    const clean = trim(base);
+    const noPrefix = trim(mplStripLoraFamilyPrefix(clean));
+    return [...new Set([clean, noPrefix].filter(Boolean))];
+}
+function mplLoraCompactVariants(value) {
+    const variants = mplLoraNameVariants(value)
+        .map(s => s.toLowerCase().replace(/[\s._-]+/g, ""))
+        .filter(Boolean);
+    const confusable = variants.map(s => s.replace(/[1il]/g, "1").replace(/[0o]/g, "0"));
+    return [...new Set([...variants, ...confusable])];
+}
+function mplBigramProfile(text) {
+    const map = new Map();
+    for (let i = 0; i < text.length - 1; i++) {
+        const g = text.slice(i, i + 2);
+        map.set(g, (map.get(g) || 0) + 1);
+    }
+    return { text, map, total: Math.max(0, text.length - 1) };
+}
+function mplBigramScore(a, b) {
+    if (!a || !b || !a.total || !b.total) return a?.text === b?.text ? 1 : 0;
+    if (a.text === b.text) return 1;
+    const [small, large] = a.map.size <= b.map.size ? [a, b] : [b, a];
+    let overlap = 0;
+    for (const [g, count] of small.map) {
+        const other = large.map.get(g);
+        if (other) overlap += Math.min(count, other);
+    }
+    return (2 * overlap) / (a.total + b.total);
+}
+function mplLoraFuzzyEntries(list) {
+    const cached = MPL_LORA_MATCH_CACHE.get(list);
+    if (cached && cached.length === list.length) return cached.entries;
+    const entries = list.map(name => ({
+        name,
+        profiles: mplLoraCompactVariants(name).map(mplBigramProfile),
+    }));
+    MPL_LORA_MATCH_CACHE.set(list, { length: list.length, entries });
+    return entries;
+}
+function mplResolveLoraFileName(raw, options) {
+    const wanted = String(raw || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    if (!wanted) return { name: "", found: false };
+    const list = Array.isArray(options) ? options : (Array.isArray(loraNamesOptionsCache) ? loraNamesOptionsCache : []);
+    if (list.length) {
+        const norm = (s) => String(s || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+        const stripExt = (s) => s.replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, "");
+        const wNorm = norm(wanted);
+        const wNoExt = stripExt(wNorm);
+        const exact = list.find(f => norm(f) === wNorm || stripExt(norm(f)) === wNoExt);
+        if (exact) return { name: exact, found: true };
+        const base = wNoExt.split("/").pop();
+        const byBase = list.find(f => stripExt(norm(f).split("/").pop()) === base);
+        if (byBase) return { name: byBase, found: true };
+        const bySuffix = list.find(f => norm(f).endsWith("/" + base));
+        if (bySuffix) return { name: bySuffix, found: true };
+
+        const targetProfiles = mplLoraCompactVariants(wanted).map(mplBigramProfile);
+        let best = null, bestScore = 0;
+        const candidates = [];
+        for (const entry of mplLoraFuzzyEntries(list)) {
+            let score = 0;
+            for (const a of targetProfiles) {
+                for (const b of entry.profiles) score = Math.max(score, mplBigramScore(a, b));
+            }
+            if (score >= 0.80) candidates.push({ name: entry.name, score });
+            if (score > bestScore) {
+                bestScore = score;
+                best = entry.name;
+            }
+        }
+        if (best && bestScore >= 0.83) {
+            const top = candidates
+                .filter(c => c.score >= Math.max(0.80, bestScore - 0.08))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5);
+            return { name: best, found: true, fuzzy: true, candidates: top };
+        }
+    }
+    return { name: wanted, found: false };
+}
+
+function mplChooseLoraMatches(matches) {
+    return new Promise((resolve) => {
+        document.querySelectorAll(".mpl-lora-match-overlay").forEach(el => el.remove());
+
+        const overlay = document.createElement("div");
+        overlay.className = "ma-modal-backdrop mpl-lora-match-overlay";
+        overlay.style.cssText = "position:fixed;inset:0;z-index:10070;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;";
+        const box = document.createElement("div");
+        box.className = "ma-modal ma-modal-static-anim";
+        box.style.cssText = "box-sizing:border-box;width:min(640px,94vw);max-height:82vh;display:flex;flex-direction:column;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.78);color:#f4f4f5;font:13px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;padding:18px 20px 16px;";
+        const head = document.createElement("div");
+        head.textContent = "LoRA 近似匹配";
+        head.style.cssText = "font-size:15px;font-weight:650;color:#f4f4f5;margin-bottom:6px;";
+        const msg = document.createElement("div");
+        msg.textContent = "以下名称没有精确匹配。请确认推荐项，或改选其它本地文件；选择“保持原名称”则按原样加入。";
+        msg.style.cssText = "font-size:12px;color:#a1a1aa;margin-bottom:12px;";
+        const list = document.createElement("div");
+        list.style.cssText = "display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;padding-right:2px;";
+        const selects = [];
+        matches.forEach((entry) => {
+            const row = document.createElement("div");
+            row.style.cssText = "padding:10px 12px;background:#18181c;border:1px solid rgba(255,255,255,0.08);border-radius:9px;";
+            const raw = document.createElement("div");
+            raw.textContent = "原始名称：" + entry._rawName;
+            raw.title = entry._rawName;
+            raw.style.cssText = "font:11.5px Consolas,monospace;color:#fbbf24;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px;";
+            const sel = document.createElement("select");
+            sel.className = "ma-select";
+            sel.style.cssText = "box-sizing:border-box;width:100%;background:#09090b;border:1px solid rgba(255,255,255,0.12);border-radius:7px;color:#f4f4f5;padding:6px 8px;font-size:12px;";
+            const keep = document.createElement("option");
+            keep.value = "";
+            keep.textContent = "保持原名称（不匹配）";
+            sel.appendChild(keep);
+            (entry._matchCandidates || []).forEach((candidate) => {
+                const opt = document.createElement("option");
+                opt.value = candidate.name;
+                opt.textContent = `${candidate.name}  （相似度 ${Math.round(candidate.score * 100)}%）`;
+                sel.appendChild(opt);
+            });
+            if (entry._matchCandidates?.length) sel.value = entry._matchCandidates[0].name;
+            row.append(raw, sel);
+            list.appendChild(row);
+            selects.push({ entry, sel });
+        });
+
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;justify-content:flex-end;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);";
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "ma-btn";
+        cancel.textContent = "取消";
+        const ok = document.createElement("button");
+        ok.type = "button";
+        ok.className = "ma-btn ma-btn-primary";
+        ok.textContent = "使用所选匹配";
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener("keydown", onKey, true);
+            overlay.remove();
+            resolve(value);
+        };
+        const onKey = (e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+            else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); ok.click(); }
+        };
+        cancel.onclick = () => finish(false);
+        ok.onclick = () => {
+            selects.forEach(({ entry, sel }) => {
+                const chosen = sel.value;
+                entry._fuzzy = false;
+                entry._matchCandidates = [];
+                if (chosen) {
+                    entry.name = chosen;
+                    entry._found = true;
+                } else {
+                    entry.name = entry._rawName;
+                    entry._found = false;
+                }
+            });
+            finish(true);
+        };
+        row.appendChild(cancel);
+        row.appendChild(ok);
+        box.append(head, msg, list, row);
+        ["pointerdown", "mousedown", "click", "dblclick", "wheel"].forEach(ev => {
+            overlay.addEventListener(ev, (e) => e.stopPropagation(), { passive: ev === "wheel" });
+        });
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        document.addEventListener("keydown", onKey, true);
+        setTimeout(() => { try { selects[0]?.sel.focus(); } catch (e) {} }, 20);
+    });
+}
+
+function mplParseLoraString(text, options) {
+    const src = String(text || "");
+    const out = [];
+    const pushEntry = (rawName, rawW, rawClip) => {
+        const clean = String(rawName || "").trim();
+        if (!clean) return;
+        const resolved = mplResolveLoraFileName(clean, options);
+        const w = rawW !== undefined && rawW !== "" && Number.isFinite(parseFloat(rawW)) ? mplClampWeight(rawW) : 1.0;
+        const hasClip = rawClip !== undefined && rawClip !== "" && Number.isFinite(parseFloat(rawClip));
+        const cw = hasClip ? mplClampWeight(rawClip) : w;
+        const follow = !hasClip || Math.abs(cw - w) < 1e-6;
+        out.push({
+            name: resolved.name || clean,
+            weight: w,
+            clipWeight: cw,
+            clipFollow: follow,
+            enabled: true,
+            tags: "",
+            note: "",
+            triggerWords: "",
+            _found: resolved.found,
+            _rawName: clean,
+            _fuzzy: !!resolved.fuzzy,
+            _matchCandidates: resolved.candidates || [],
+        });
+    };
+    const re = /<lora:([^:>]+)(?::([^:>]+))?(?::([^:>]+))?>/gi;
+    let m;
+    while ((m = re.exec(src)) !== null) {
+        pushEntry(m[1], m[2], m[3]);
+    }
+    if (!out.length) {
+        src.split(/[\r\n]+/).forEach(line => {
+            const t = line.trim();
+            if (!t) return;
+            const parts = t.split(/[:\t]+/).map(s => s.trim());
+            if (parts[0]) pushEntry(parts[0], parts[1], parts[2]);
+        });
+    }
+    return out;
 }
 
 // 唯一的「是否启用」判定：只有显式 false / 0 / "false" 等才算停用，缺省一律启用。
@@ -224,6 +538,261 @@ function mplRefreshAllSidebars() {
     });
 }
 
+// ===================== 页面内弹窗（替代 window.prompt / confirm / alert） =====================
+// 兼容 ComfyUI 桌面端（Electron 不支持原生 prompt/confirm），同时统一沿用暗黑主题。
+function mplDialog(opts = {}) {
+    const {
+        title = "",
+        message = "",
+        defaultValue = null,
+        placeholder = "",
+        okText = "确定",
+        cancelText = "取消",
+        danger = false,
+        withInput = true,
+    } = opts;
+
+    return new Promise((resolve) => {
+        document.querySelectorAll(".mpl-dialog-overlay").forEach(el => el.remove());
+
+        const overlay = document.createElement("div");
+        overlay.className = "ma-modal-backdrop mpl-dialog-overlay";
+        overlay.style.cssText = "position:fixed;inset:0;z-index:10080;background:rgba(0,0,0,.66);" +
+            "display:flex;align-items:center;justify-content:center;";
+
+        const box = document.createElement("div");
+        box.className = "ma-modal ma-modal-static-anim mpl-dialog";
+        box.style.cssText = "box-sizing:border-box;width:min(420px,92vw);background:#111114;" +
+            "border:1px solid rgba(255,255,255,0.12);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.78);" +
+            "color:#f4f4f5;font:13px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;padding:18px 20px 16px;";
+
+        let input = null;
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener("keydown", onKey, true);
+            overlay.remove();
+            resolve(value);
+        };
+        const onKey = (e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); }
+            else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); finish(withInput ? (input ? input.value : "") : true); }
+        };
+
+        if (title) {
+            const head = document.createElement("div");
+            head.textContent = title;
+            head.style.cssText = "font-size:14.5px;font-weight:650;color:#f4f4f5;margin-bottom:8px;";
+            box.appendChild(head);
+        }
+        if (message) {
+            const msg = document.createElement("div");
+            msg.textContent = message;
+            msg.style.cssText = "font-size:12.5px;color:#a1a1aa;white-space:pre-wrap;word-break:break-word;margin-bottom:12px;";
+            box.appendChild(msg);
+        }
+        if (withInput) {
+            input = document.createElement("input");
+            input.type = "text";
+            input.className = "ma-input";
+            input.value = defaultValue == null ? "" : String(defaultValue);
+            if (placeholder) input.placeholder = placeholder;
+            input.style.cssText = "box-sizing:border-box;width:100%;background:#09090b;border:1px solid rgba(255,255,255,0.14);" +
+                "border-radius:8px;color:#f4f4f5;padding:8px 10px;font-size:13px;outline:none;";
+            input.addEventListener("focus", () => { input.style.borderColor = "#6366f1"; });
+            input.addEventListener("blur", () => { input.style.borderColor = "rgba(255,255,255,0.14)"; });
+            box.appendChild(input);
+        }
+
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;justify-content:flex-end;gap:8px;margin-top:16px;";
+        if (cancelText) {
+            const cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "ma-btn";
+            cancel.textContent = cancelText;
+            cancel.onclick = () => finish(null);
+            row.appendChild(cancel);
+        }
+        const ok = document.createElement("button");
+        ok.type = "button";
+        ok.className = danger ? "ma-btn ma-btn-danger" : "ma-btn ma-btn-primary";
+        ok.textContent = okText;
+        ok.onclick = () => finish(withInput ? (input ? input.value : "") : true);
+        row.appendChild(ok);
+        box.appendChild(row);
+
+        ["pointerdown", "mousedown", "click", "dblclick", "wheel"].forEach(ev => {
+            overlay.addEventListener(ev, (e) => e.stopPropagation(), { passive: ev === "wheel" });
+        });
+        overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) finish(null); });
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        document.addEventListener("keydown", onKey, true);
+        setTimeout(() => {
+            if (input) { try { input.focus(); input.select(); } catch (e) {} }
+            else { try { ok.focus(); } catch (e) {} }
+        }, 30);
+    });
+}
+
+function mplAsk(title, defaultValue = "", opts = {}) {
+    return mplDialog(Object.assign({ title, defaultValue, withInput: true }, opts));
+}
+function mplConfirm(message, opts = {}) {
+    return mplDialog(Object.assign({ title: "请确认", message, withInput: false, okText: "确定" }, opts))
+        .then(v => v !== null);
+}
+function mplAlert(message, title = "提示") {
+    return mplDialog({ title, message, withInput: false, okText: "知道了", cancelText: "" }).then(() => undefined);
+}
+
+// 点数字就地改值：在数值旁边弹一个迷你输入框
+function mplEditValueAt(anchorEl, currentValue, opts = {}) {
+    const { label = "", width = 92 } = opts;
+    return new Promise((resolve) => {
+        document.querySelectorAll(".mpl-inline-edit").forEach(el => el.remove());
+
+        const wrap = document.createElement("div");
+        wrap.className = "mpl-inline-edit";
+        wrap.style.cssText = "position:fixed;z-index:10090;display:flex;align-items:center;gap:6px;" +
+            "padding:6px 8px;background:#111114;border:1px solid #6366f1;border-radius:9px;" +
+            "box-shadow:0 12px 30px rgba(0,0,0,.72);font:12px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;color:#f4f4f5;";
+
+        if (label) {
+            const lab = document.createElement("span");
+            lab.textContent = label;
+            lab.style.cssText = "color:#a1a1aa;white-space:nowrap;";
+            wrap.appendChild(lab);
+        }
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = currentValue == null ? "" : String(currentValue);
+        input.style.cssText = "width:" + width + "px;box-sizing:border-box;background:#09090b;border:1px solid rgba(255,255,255,0.14);" +
+            "border-radius:6px;color:#f4f4f5;padding:4px 6px;font-size:12px;text-align:center;outline:none;";
+        wrap.appendChild(input);
+
+        let settled = false;
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener("keydown", onKey, true);
+            document.removeEventListener("mousedown", onDown, true);
+            wrap.remove();
+            resolve(value);
+        };
+        const onKey = (e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); }
+            else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); finish(input.value); }
+        };
+        const onDown = (e) => { if (!wrap.contains(e.target)) finish(null); };
+
+        document.body.appendChild(wrap);
+
+        try {
+            const r = anchorEl && anchorEl.getBoundingClientRect ? anchorEl.getBoundingClientRect() : null;
+            const w = wrap.offsetWidth || 140;
+            const h = wrap.offsetHeight || 34;
+            let left = r ? r.left + r.width / 2 - w / 2 : window.innerWidth / 2 - w / 2;
+            let top = r ? r.bottom + 6 : window.innerHeight / 2;
+            if (r && top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+            left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+            wrap.style.left = left + "px";
+            wrap.style.top = top + "px";
+        } catch (e) {}
+
+        ["pointerdown", "mousedown", "click", "dblclick"].forEach(ev => {
+            wrap.addEventListener(ev, (e) => e.stopPropagation());
+        });
+        document.addEventListener("keydown", onKey, true);
+        setTimeout(() => document.addEventListener("mousedown", onDown, true), 0);
+        setTimeout(() => { try { input.focus(); input.select(); } catch (e) {} }, 20);
+    });
+}
+
+// ===================== 预设与收藏导出 / 导入 =====================
+function mplBuildSidebarBackup() {
+    return {
+        format: "magic-assistant-presets-favorites",
+        version: 1,
+        exported_at: new Date().toISOString(),
+        presets: JSON.parse(JSON.stringify(MPL_SIDEBAR.presets || {})),
+        categories: JSON.parse(JSON.stringify(MPL_SIDEBAR.categories || [])),
+        assignments: JSON.parse(JSON.stringify(MPL_SIDEBAR.assignments || {})),
+        preset_order: JSON.parse(JSON.stringify(MPL_SIDEBAR.preset_order || [])),
+        favorites: JSON.parse(JSON.stringify(MPL_SIDEBAR.favorites || [])),
+    };
+}
+function mplDownloadJson(filename, data) {
+    const text = JSON.stringify(data, null, 2);
+    const url = URL.createObjectURL(new Blob([text], { type: "application/json;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function mplNormalizeSidebarImport(payload) {
+    if (!payload || typeof payload !== "object") throw new Error("文件内容不是有效的 JSON 对象");
+    const rawPresets = payload.presets && typeof payload.presets === "object" && !Array.isArray(payload.presets)
+        ? payload.presets : null;
+    if (!rawPresets) throw new Error("文件里没有 presets 字段");
+    const presets = {};
+    Object.keys(rawPresets).forEach(name => {
+        const key = String(name || "").trim();
+        if (!key || !rawPresets[name] || typeof rawPresets[name] !== "object") return;
+        presets[key] = JSON.parse(JSON.stringify(rawPresets[name]));
+    });
+    const rawFavorites = Array.isArray(payload.favorites)
+        ? payload.favorites
+        : (Array.isArray(payload.favorites?.collections) ? payload.favorites.collections : []);
+    const cats = Array.isArray(payload.categories) ? payload.categories : [];
+    const asg = payload.assignments && typeof payload.assignments === "object" && !Array.isArray(payload.assignments)
+        ? payload.assignments : {};
+    const order = Array.isArray(payload.preset_order) ? payload.preset_order : [];
+    return {
+        presets,
+        categories: cats.map(x => String(x)).filter(Boolean),
+        assignments: Object.fromEntries(Object.entries(asg).map(([k, v]) => [String(k), String(v || "")])),
+        preset_order: order.map(x => String(x)).filter(Boolean),
+        favorites: JSON.parse(JSON.stringify(rawFavorites)),
+    };
+}
+async function mplImportSidebarBackup(payload) {
+    const data = mplNormalizeSidebarImport(payload);
+    const currentNames = Object.keys(MPL_SIDEBAR.presets || {});
+    for (const name of currentNames) {
+        try {
+            await api.fetchApi("/ma/lora/delete_preset", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name }),
+            });
+        } catch (e) {}
+    }
+    for (const [name, content] of Object.entries(data.presets)) {
+        const resp = await api.fetchApi("/ma/lora/save_preset", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, content }),
+        });
+        const rj = await resp.json().catch(() => ({}));
+        if (rj && rj.status === "error") throw new Error(rj.message || `保存预设 ${name} 失败`);
+    }
+    MPL_SIDEBAR.presets = data.presets;
+    MPL_SIDEBAR.categories = data.categories;
+    MPL_SIDEBAR.assignments = data.assignments;
+    MPL_SIDEBAR.preset_order = data.preset_order;
+    MPL_SIDEBAR.favorites = data.favorites;
+    await mplSavePresetMeta();
+    await mplSaveFavorites();
+    await mplLoadSidebar(true);
+    mplRefreshAllSidebars();
+    return Object.keys(data.presets).length;
+}
+
 // ---------- Lora-Manager 标题/备注 + 按文件名记忆的备注 ----------
 const MPL_LM = { info: {}, notes: {}, paths: {}, loaded: false, loading: null };
 async function mplLoadExtraInfo(force) {
@@ -303,8 +872,27 @@ function mplDecorateAllNames() {
 function mplDecorateNewLora(l) {
     if (!l) return l;
     if (!l.note) l.note = mplNoteFor(l.name) || "";
-    if (String(l.tags || "").trim()) l.triggerWords = l.tags;
+    const key = mplMetadataNameKey(l.name);
+    let info = mplLmEntry(l.name);
+    if (!info || !Object.keys(info).length) info = MPL_LM.info?.[l.name] || MPL_LM.info?.[key] || null;
+    if (!info && MPL_LM.info) {
+        for (const [name, entry] of Object.entries(MPL_LM.info)) {
+            if (mplMetadataNameKey(name) === key) { info = entry; break; }
+        }
+    }
+    const infoWords = String(info?.trigger_words || info?.triggerWords || "").trim();
+    if (!String(l.tags || "").trim() && !String(l.triggerWords || "").trim() && infoWords) {
+        l.tags = infoWords;
+        l.triggerWords = infoWords;
+    } else if (String(l.tags || "").trim()) l.triggerWords = l.tags;
     else if (String(l.triggerWords || "").trim()) l.tags = l.triggerWords;
+    const rec = Number(info?.recommended_weight);
+    if ((l.recommendedWeight === undefined || l.recommendedWeight === null) &&
+        Number.isFinite(rec) && rec > 0 && rec <= 1) {
+        l.recommendedWeight = rec;
+        l.recommendedWeightSource = info?.recommended_weight_source || "作者推荐";
+    }
+    mplSyncClipWeight(l);
     return l;
 }
 void mplLoadExtraInfo();
@@ -606,9 +1194,53 @@ function mplCollectMetadataNames(node, scope = "node", localFiles = []) {
     }, []);
 }
 
+function mplSplitTriggerWords(value) {
+    return String(value == null ? "" : value)
+        .split(/[\r\n,，;；]+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+}
+function mplTriggerDisabledList(lora) {
+    if (!lora || !Array.isArray(lora.triggerDisabled)) return [];
+    return lora.triggerDisabled.map(s => String(s).trim()).filter(Boolean);
+}
+function mplSameTriggerWord(a, b) {
+    return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+function mplIsTriggerWordDisabled(lora, word) {
+    return mplTriggerDisabledList(lora).some(x => mplSameTriggerWord(x, word));
+}
+function mplTriggerEffectivelyDisabled(lora, word) {
+    return !lora || lora.triggerEnabled === false || mplIsTriggerWordDisabled(lora, word);
+}
+function mplSetTriggerWordEnabled(lora, word, enabled) {
+    if (!lora) return;
+    const words = mplSplitTriggerWords(lora.tags || lora.triggerWords);
+    if (!words.length) return;
+    const target = words.find(w => mplSameTriggerWord(w, word)) || word;
+    let disabled = mplTriggerDisabledList(lora);
+    if (enabled) {
+        if (lora.triggerEnabled === false) {
+            lora.triggerEnabled = true;
+            disabled = words.filter(w => !mplSameTriggerWord(w, target));
+        } else {
+            disabled = disabled.filter(w => !mplSameTriggerWord(w, target));
+        }
+    } else {
+        if (lora.triggerEnabled !== false) {
+            const has = disabled.some(w => mplSameTriggerWord(w, target));
+            if (!has) disabled.push(target);
+        }
+    }
+    lora.triggerDisabled = disabled;
+}
 function mplSetTriggerWords(item, words) {
     if (!item || typeof item !== "object") return;
-    const text = String(words || "").trim();
+    const text = String(words == null ? "" : words).trim();
+    const list = mplSplitTriggerWords(text);
+    if (Array.isArray(item.triggerDisabled) && item.triggerDisabled.length) {
+        item.triggerDisabled = item.triggerDisabled.filter(w => list.some(x => mplSameTriggerWord(x, w)));
+    }
     item.tags = text;
     item.triggerWords = text;
 }
@@ -616,6 +1248,9 @@ function mplSetTriggerWords(item, words) {
 function mplApplyMetadataData(node, name, data) {
     const key = mplMetadataNameKey(name);
     let changed = false;
+    const recWeight = (typeof data?.recommendedWeight === "number" && data.recommendedWeight > 0 && data.recommendedWeight <= 1)
+        ? data.recommendedWeight : null;
+    const recSource = typeof data?.recommendedWeightSource === "string" ? data.recommendedWeightSource : "";
     const items = [
         ...(node?.loraData?.loras || []),
         ...(node?.loraData?.folders || []).flatMap(folder => folder?.loras || []),
@@ -636,6 +1271,10 @@ function mplApplyMetadataData(node, name, data) {
                 item[field] = data[field];
                 changed = true;
             }
+        }
+        if (recWeight !== null) {
+            if (item.recommendedWeight !== recWeight) { item.recommendedWeight = recWeight; changed = true; }
+            if (item.recommendedWeightSource !== recSource) { item.recommendedWeightSource = recSource; changed = true; }
         }
     }
     return changed;
@@ -661,6 +1300,7 @@ const MPL_METADATA_SETTLED_STATES = ["not_found", "unavailable", "unresolved", "
 function mplMetadataAllSettled(name, settings, metadata = {}, fieldStates = {}) {
     const types = mplMetadataTypes(settings);
     if (!types.length) return false;
+    if (mplMetadataRecNeeded(name, settings, metadata)) return false;
     let hasSettled = false;
     const done = types.every(type => {
         const state = mplMetadataFieldState(name, type, metadata, fieldStates).state;
@@ -672,6 +1312,17 @@ function mplMetadataAllSettled(name, settings, metadata = {}, fieldStates = {}) 
 
 function mplMetadataHasLm(name, metadata) {
     return !!(metadata && metadata[mplMetadataNameKey(name)]?.lm);
+}
+
+function mplMetadataHasRec(name, metadata) {
+    const value = metadata?.[mplMetadataNameKey(name)]?.recommended_weight;
+    return typeof value === "number" && value > 0;
+}
+
+function mplMetadataRecNeeded(name, settings, metadata) {
+    const entry = metadata?.[mplMetadataNameKey(name)];
+    if (settings.download_rec === false || !entry || mplMetadataHasRec(name, metadata)) return false;
+    return entry.recommended_weight_available === true;
 }
 
 function mplMetadataRequestedTypes(name, settings, metadata = null, fieldStates = {}) {
@@ -700,7 +1351,8 @@ function mplMetadataRequestedTypes(name, settings, metadata = null, fieldStates 
 }
 
 function mplMetadataNeeds(name, settings, metadata, fieldStates = {}) {
-    return mplMetadataRequestedTypes(name, settings, metadata, fieldStates).length > 0;
+    return mplMetadataRequestedTypes(name, settings, metadata, fieldStates).length > 0 ||
+        (!settings.local_action && mplMetadataRecNeeded(name, settings, metadata));
 }
 
 function mplMetadataFailureDetails(result, typeLabels) {
@@ -796,7 +1448,8 @@ async function mplRunMetadataQueue(names, settings, state, onProgress, metadata 
             if (state.cancelRequested || stopped) return;
             onProgress({ current: name, completed, total: names.length });
             let result;
-            const requestedTypes = mplMetadataRequestedTypes(name, settings, metadata, fieldStates);
+            let requestedTypes = mplMetadataRequestedTypes(name, settings, metadata, fieldStates);
+            if (!requestedTypes.length && mplMetadataRecNeeded(name, settings, metadata)) requestedTypes = ["rec"];
             if (!requestedTypes.length) { completed++; return; }
             try {
                 const response = await api.fetchApi("/ma/lora/fetch_metadata", {
@@ -804,7 +1457,10 @@ async function mplRunMetadataQueue(names, settings, state, onProgress, metadata 
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         lora_name: name,
-                        options: Object.fromEntries(["txt", "json", "image", "log"].map(type => [`download_${type}`, requestedTypes.includes(type)])),
+                        options: {
+                            ...Object.fromEntries(["txt", "json", "image", "log"].map(type => [`download_${type}`, requestedTypes.includes(type)])),
+                            download_rec: settings.download_rec !== false,
+                        },
                         save_path_mode: settings.save_path,
                         overwrite: settings.overwrite === true,
                         force_refresh: settings.force_refresh === true,
@@ -1049,6 +1705,8 @@ app.registerExtension({
                         sliderWidth: 110,
                         showWeightValue: true,
                         snapToZero: true,
+                        hideClip: true,
+                        hideRecWeight: false,
                     };
                     this.layoutSettings = (saved && typeof saved === "object")
                         ? Object.assign({}, defaults, saved)
@@ -1064,10 +1722,10 @@ app.registerExtension({
                         : colorDefaults;
                 }
 
-                // 初始化文件夹全局默认颜色（外卡片背景 / 里标题栏 / 左侧色条）
+                // 初始化文件夹全局默认颜色（外卡片背景 / 里标题栏 / 左侧色条 / 忽略与未忽略颜色）
                 if (!this.folderColorSettings) {
                     const savedFolderColors = this.properties["folder_color_settings"];
-                    const folderColorDefaults = { outer: "", inner: "", bar: "" };
+                    const folderColorDefaults = { outer: "", inner: "", bar: "", ignore: "", normal: "" };
                     this.folderColorSettings = (savedFolderColors && typeof savedFolderColors === "object")
                         ? Object.assign({}, folderColorDefaults, savedFolderColors)
                         : folderColorDefaults;
@@ -1119,7 +1777,8 @@ app.registerExtension({
                 if(this.embeddedDiv) return;
 
                 this.embeddedDiv = document.createElement("div");
-                this.embeddedDiv.className = "mpl-embedded-container";
+                this.embeddedDiv.className = "mpl-embedded-container notranslate";
+                this.embeddedDiv.setAttribute("translate", "no");
                 
                 // 🛑 核心修复：全域事件拦截 🛑
                 // 必须配合 CSS 中的 pointer-events: auto 才能生效
@@ -1188,21 +1847,22 @@ app.registerExtension({
                                 }
                             }
                             if (!item) return;
-                            const inRoot = (this.loraData.loras || []).includes(item);
-                            if (!inRoot) {
+                            const topDrop = this._mplComputeTopDropTarget(e.clientX, e.clientY);
+                            const movedTok = "l:" + this._uidFor(item);
+                            if (!(this.loraData.loras || []).includes(item)) {
                                 for (const f of (this.loraData.folders || [])) {
                                     const i = (f.loras || []).indexOf(item);
                                     if (i >= 0) { f.loras.splice(i, 1); break; }
                                 }
                                 this.loraData.loras.push(item);
-                                const tl = this._topLayout || [];
-                                tl.push("l:" + this._uidFor(item));
+                            }
+                            if (topDrop && topDrop.tok && topDrop.tok !== movedTok) {
+                                this._mplPlaceToken(movedTok, topDrop.tok, topDrop.after);
                             } else {
                                 const tl = this._topLayout || [];
-                                const tok = "l:" + this._uidFor(item);
-                                const i = tl.indexOf(tok);
+                                const i = tl.indexOf(movedTok);
                                 if (i >= 0) tl.splice(i, 1);
-                                tl.push(tok);
+                                tl.push(movedTok);
                             }
                             this._currentTopDrag = null;
                             this._currentSortDrag = null;
@@ -1261,6 +1921,7 @@ app.registerExtension({
                 this.injectStyles();
                 this.renderEmbeddedList();
                 this.updateWidget(); 
+                this._mplInstallLayoutGuard();
             };
 
             nodeType.prototype._mplSyncDOMLayout = function() {
@@ -1278,6 +1939,48 @@ app.registerExtension({
                 }
                 this.onResize?.(this.size);
                 this.setDirtyCanvas?.(true, true);
+            };
+            nodeType.prototype._mplGuardLayout = function() {
+                if (!this.embeddedDiv || this._mplGuardBusy) return;
+                this._mplGuardBusy = true;
+                try {
+                    const minW = this.minWidth || (MPL_MIN_W + 20);
+                    let changed = false;
+                    const sw = Number(this.size?.[0]);
+                    const sh = Number(this.size?.[1]);
+                    if (Number.isFinite(sw) && sw > 0 && sw < minW - 0.5) {
+                        const h = Math.max(Number.isFinite(sh) ? sh : 0, MPL_MIN_H);
+                        this.size[0] = minW;
+                        this.size[1] = h;
+                        try { this.setSize?.([minW, h]); } catch (e) {}
+                        changed = true;
+                    }
+                    const w = this._mplDomWidget;
+                    if (w && w.width != null) {
+                        try { delete w.width; } catch (e) { w.width = null; }
+                        changed = true;
+                    }
+                    if (changed) this.setDirtyCanvas?.(true, true);
+                } finally {
+                    this._mplGuardBusy = false;
+                }
+            };
+            nodeType.prototype._mplInstallLayoutGuard = function() {
+                if (this._mplGuardInstalled) return;
+                this._mplGuardInstalled = true;
+                this._mplGuardTimer = setInterval(() => {
+                    try { this._mplGuardLayout?.(); } catch (e) {}
+                }, 600);
+            };
+            // 文件夹头部上下边缘：拖 LoRA 时插到该文件夹前/后；中间仍拖入文件夹
+            nodeType.prototype._mplFolderHeaderDropEdge = function(fDiv, y) {
+                const header = fDiv?.querySelector(":scope > .mpl-folder-header");
+                const r = (header || fDiv)?.getBoundingClientRect();
+                if (!r) return "";
+                const band = Math.min(14, Math.max(8, r.height * 0.35));
+                if (y <= r.top + band) return "before";
+                if (y >= r.bottom - band) return "after";
+                return "";
             };
             nodeType.prototype._mplScheduleLayoutSync = function() {
                 if (this._mplLayoutSyncTimers) {
@@ -1419,13 +2122,13 @@ app.registerExtension({
             // ---------- 预设操作 ----------
             nodeType.prototype._mplApplyPreset = function(name, drop) {
                 const folders = mplPresetFolders(MPL_SIDEBAR.presets[name]);
-                if (!folders.length) { alert("该预设没有可用的 LoRA"); return; }
+                if (!folders.length) { void mplAlert("该预设没有可用的 LoRA"); return; }
                 const added = [];
                 folders.forEach(f => {
                     const copy = JSON.parse(JSON.stringify(f));
                     delete copy._uid;
                     copy.name = copy.name || name;
-                    (copy.loras || []).forEach(l => { delete l._uid; l.enabled = mplLoraEnabled(l); });
+                    (copy.loras || []).forEach(l => { delete l._uid; l.enabled = mplLoraEnabled(l); mplDecorateNewLora(l); });
                     this.loraData.folders.push(copy);
                     added.push(copy);
                 });
@@ -1445,7 +2148,7 @@ app.registerExtension({
             nodeType.prototype._mplPresetMenu = function(name, x, y) {
                 this._mplSideMenu(x || 200, y || 200, [{
                     label: "重命名预设", fn: async () => {
-                        const nn = prompt("预设新名称：", name);
+                        const nn = await mplAsk("重命名预设", name, { message: "输入新的预设名称：" });
                         if (!nn || !nn.trim() || nn.trim() === name) return;
                         const newName = nn.trim();
                         try {
@@ -1455,18 +2158,18 @@ app.registerExtension({
                             });
                             const rj = await resp.json();
                             if (!rj || rj.status !== "success") {
-                                alert("重命名失败：" + ((rj && rj.message) || "未知错误"));
+                                await mplAlert("重命名失败：" + ((rj && rj.message) || "未知错误"));
                                 return;
                             }
                             await mplLoadSidebar(true);
                             mplRefreshAllSidebars();
                         } catch (e) {
-                            alert("重命名失败：" + e);
+                            await mplAlert("重命名失败：" + e);
                         }
                     }
                 }, {
                     label: "删除预设：" + name, danger: true, fn: async () => {
-                        if (!confirm(`确定要删除预设 "${name}" 吗？`)) return;
+                        if (!(await mplConfirm(`确定要删除预设 "${name}" 吗？`, { danger: true, okText: "删除" }))) return;
                         await api.fetchApi("/ma/lora/delete_preset", {
                             method: "POST", headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ name }),
@@ -1479,7 +2182,7 @@ app.registerExtension({
                 }]);
             };
 
-            nodeType.prototype._mplDropFolderAsPreset = function(e, category) {
+            nodeType.prototype._mplDropFolderAsPreset = async function(e, category) {
                 let presetName = "";
                 try {
                     const rawPreset = e.dataTransfer.getData("text/plain");
@@ -1505,31 +2208,215 @@ app.registerExtension({
                 const folder = (this.loraData.folders || []).find(f => this._uidFor(f) === uid);
                 if (!folder) return;
                 const def = folder.name || "预设";
-                const name = prompt(category ? `保存到「${category}」，预设名称：` : "预设名称：", def);
-                if (!name) return;
+                const name = await mplAsk("保存为预设", def, {
+                    message: category ? `保存到分类「${category}」，预设名称：` : "预设名称：",
+                });
+                if (!name || !name.trim()) return;
                 const content = { folders: [JSON.parse(JSON.stringify(folder))] };
                 delete content.folders[0]._uid;
                 (content.folders[0].loras || []).forEach(l => delete l._uid);
                 api.fetchApi("/ma/lora/save_preset", {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, content, category }),
+                    body: JSON.stringify({ name: name.trim(), content, category }),
                 }).then(() => mplLoadSidebar(true)).then(() => mplRefreshAllSidebars())
-                  .catch((err) => alert("保存预设失败: " + err));
+                  .catch((err) => void mplAlert("保存预设失败: " + err));
             };
 
-            nodeType.prototype._mplNewPresetCategory = function() {
-                const name = prompt("新建预设分类名称：", "");
+            nodeType.prototype._mplNewPresetCategory = async function() {
+                const name = await mplAsk("新建预设分类", "", { message: "给这个分类起个名字：" });
                 if (!name || !name.trim()) return;
                 const n = name.trim();
                 if (!MPL_SIDEBAR.categories.includes(n)) MPL_SIDEBAR.categories.push(n);
-                mplSavePresetMeta().then(() => mplRefreshAllSidebars());
+                await mplSavePresetMeta();
+                mplRefreshAllSidebars();
+            };
+
+            // ---------- LORA 串导入弹窗（支持 <lora:名称:模型权重:CLIP权重> + 近似匹配） ----------
+            nodeType.prototype.showLoraStringModal = async function() {
+                document.querySelectorAll(".mpl-lorastring-overlay").forEach(el => el.remove());
+                try { await loadLoraNameList(); } catch (e) {}
+                try { await mplLoadExtraInfo(); } catch (e) {}
+
+                const overlay = document.createElement("div");
+                overlay.className = "ma-modal-backdrop mpl-lorastring-overlay";
+                overlay.style.cssText = "position:fixed;inset:0;z-index:10060;background:rgba(0,0,0,.68);display:flex;align-items:center;justify-content:center;";
+
+                const box = document.createElement("div");
+                box.className = "ma-modal ma-modal-static-anim";
+                box.style.cssText = "box-sizing:border-box;width:min(640px,94vw);max-height:86vh;display:flex;flex-direction:column;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.78);color:#f4f4f5;font:12.5px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;overflow:hidden;";
+
+                const head = document.createElement("div");
+                head.style.cssText = "padding:14px 18px;background:#151519;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;";
+                const hTitle = document.createElement("div");
+                hTitle.textContent = "📋 导入 LORA 串";
+                hTitle.style.cssText = "font-size:14.5px;font-weight:650;flex:1;";
+                const closeX = document.createElement("button");
+                closeX.type = "button";
+                closeX.textContent = "✕";
+                closeX.className = "ma-btn";
+                closeX.style.cssText = "padding:2px 8px;background:transparent;border-color:transparent;color:#a1a1aa;";
+                closeX.onclick = () => overlay.remove();
+                head.append(hTitle, closeX);
+
+                const body = document.createElement("div");
+                body.style.cssText = "padding:14px 18px;display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto;flex:1;";
+
+                const tip = document.createElement("div");
+                tip.textContent = "粘贴 <lora:名称:模型权重:CLIP权重>（或每行 名称:权重）。自动忽略常见模型前缀（krea2/k2/anima 等）并容忍拼写/OCR 轻微差异，导入时自动同步触发词与作者推荐权重。";
+                tip.style.cssText = "font-size:11.5px;color:#a1a1aa;line-height:1.55;";
+
+                const ta = document.createElement("textarea");
+                ta.className = "ma-input";
+                ta.rows = 4;
+                ta.placeholder = "示例：<lora:style_v1:0.8:0.7> <lora:detailer:0.5>";
+                ta.style.cssText = "width:100%;box-sizing:border-box;background:#09090b;border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#f4f4f5;padding:9px 11px;font:12px/1.5 Consolas,monospace;resize:vertical;min-height:76px;";
+
+                const nameRow = document.createElement("div");
+                nameRow.style.cssText = "display:flex;align-items:center;gap:8px;";
+                const nameLab = document.createElement("span");
+                nameLab.textContent = "新建群组名：";
+                nameLab.style.cssText = "font-size:12px;color:#a1a1aa;white-space:nowrap;";
+                const nameInput = document.createElement("input");
+                nameInput.type = "text";
+                nameInput.className = "ma-input";
+                nameInput.value = "LORA串";
+                nameInput.placeholder = "留空则直接添加到根列表";
+                nameInput.style.cssText = "flex:1;padding:6px 10px;font-size:12px;";
+                nameRow.append(nameLab, nameInput);
+
+                const count = document.createElement("div");
+                count.style.cssText = "font-size:11.5px;color:#a1a1aa;min-height:18px;";
+
+                const list = document.createElement("div");
+                list.style.cssText = "display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;";
+
+                let parsed = [];
+                const renderParsed = () => {
+                    list.innerHTML = "";
+                    parsed.forEach((it) => {
+                        const row = document.createElement("div");
+                        row.style.cssText = "display:flex;align-items:center;gap:8px;padding:7px 10px;background:#18181c;border:1px solid rgba(255,255,255,0.08);border-radius:8px;font-size:12px;";
+                        const chk = document.createElement("input");
+                        chk.type = "checkbox";
+                        chk.checked = it.enabled !== false;
+                        chk.style.cssText = "accent-color:#6366f1;cursor:pointer;";
+                        chk.onchange = () => { it.enabled = chk.checked; };
+                        const nm = document.createElement("span");
+                        nm.textContent = (it.name.split(/[/\\]/).pop() || it.name).replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, "");
+                        nm.title = it._fuzzy ? `${it._rawName} → ${it.name}` : it.name;
+                        nm.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:" + (it._found ? (it._fuzzy ? "#fbbf24" : "#f4f4f5") : "#f87171") + ";";
+                        const mkWeight = (label, value, key, color) => {
+                            const el = document.createElement("span");
+                            el.textContent = label + " " + Number(value).toFixed(2);
+                            el.title = key === "clipWeight"
+                                ? (mplClipFollowsWeight(it) ? "CLIP 跟随模型权重\n右键改为自定义" : "CLIP 自定义权重\n右键恢复跟随")
+                                : "单击修改模型权重";
+                            el.style.cssText = "color:" + color + ";min-width:56px;text-align:right;cursor:pointer;font-family:Consolas,monospace;font-size:11.5px;";
+                            el.onclick = async () => {
+                                const v = await mplEditValueAt(el, value, { label: key === "weight" ? "M" : "C" });
+                                if (v === null) return;
+                                if (key === "weight") {
+                                    const n = parseFloat(v);
+                                    if (!Number.isFinite(n)) return;
+                                    it.weight = mplClampWeight(n);
+                                    mplSyncClipWeight(it);
+                                } else {
+                                    if (!mplSetCustomClipWeight(it, v)) return;
+                                }
+                                renderParsed();
+                            };
+                            if (key === "clipWeight") {
+                                el.oncontextmenu = (e) => {
+                                    e.preventDefault();
+                                    mplToggleClipFollow(it);
+                                    renderParsed();
+                                };
+                            }
+                            return el;
+                        };
+                        const mw = mkWeight("M", mplLoraWeight(it), "weight", "#a5b4fc");
+                        const cw = mkWeight("C", mplClipWeightValue(it), "clipWeight", mplClipFollowsWeight(it) ? "#71717a" : "#34d399");
+                        row.append(chk, nm, mw, cw);
+                        list.appendChild(row);
+                    });
+                    const ok = parsed.filter(x => x._found).length;
+                    const fuzzy = parsed.filter(x => x.enabled && x._matchCandidates?.length).length;
+                    count.textContent = parsed.length
+                        ? ("解析到 " + parsed.length + " 个 LoRA，本机定位 " + ok + " 个" +
+                            (parsed.length - ok ? "（未定位的会保留，加载时按缺失提示）" : "") +
+                            (fuzzy ? `；近似匹配 ${fuzzy} 个，加入时会确认` : ""))
+                        : "请粘贴 LORA 串进行解析";
+                };
+                const parseAndRender = () => {
+                    parsed = mplParseLoraString(ta.value);
+                    renderParsed();
+                };
+                ta.oninput = parseAndRender;
+
+                const btns = document.createElement("div");
+                btns.style.cssText = "padding:12px 18px;background:#151519;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:flex-end;gap:8px;";
+                const mkBtn = (text, primary, fn) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.className = primary ? "ma-btn ma-btn-primary" : "ma-btn";
+                    b.textContent = text;
+                    b.onclick = fn;
+                    return b;
+                };
+                const collect = async () => {
+                    const matches = parsed.filter(x => x.enabled && x._matchCandidates?.length);
+                    if (matches.length && !(await mplChooseLoraMatches(matches))) return null;
+                    const items = parsed.filter(x => x.enabled).map(x => {
+                        const c = Object.assign({}, x);
+                        delete c._found;
+                        delete c._rawName;
+                        delete c._fuzzy;
+                        delete c._matchCandidates;
+                        return mplDecorateNewLora(c);
+                    });
+                    if (!items.length) { void mplAlert("没有可加入的 LoRA"); return null; }
+                    return items;
+                };
+                const addToNode = (groupName, items) => {
+                    if (groupName) {
+                        this.loraData.folders.push({ name: groupName, loras: items, collapsed: false });
+                    } else {
+                        items.forEach(it => this.loraData.loras.push(it));
+                    }
+                    this.renderEmbeddedList();
+                    this.updateWidget();
+                };
+                btns.appendChild(mkBtn("取消", false, () => overlay.remove()));
+                btns.appendChild(mkBtn("直接加入根列表", false, async () => {
+                    const items = await collect();
+                    if (!items) return;
+                    addToNode("", items);
+                    overlay.remove();
+                }));
+                btns.appendChild(mkBtn("加入为群组", true, async () => {
+                    const items = await collect();
+                    if (!items) return;
+                    addToNode(nameInput.value.trim() || "LORA串", items);
+                    overlay.remove();
+                }));
+
+                body.append(tip, ta, nameRow, count, list);
+                box.append(head, body, btns);
+                overlay.appendChild(box);
+                ["pointerdown", "mousedown", "click", "dblclick", "wheel", "keydown"].forEach(ev => {
+                    overlay.addEventListener(ev, (e) => e.stopPropagation(), { passive: ev === "wheel" });
+                });
+                overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) overlay.remove(); });
+                document.body.appendChild(overlay);
+                parseAndRender();
+                setTimeout(() => { try { ta.focus(); } catch (e) {} }, 30);
             };
 
             nodeType.prototype._mplCategoryMenu = function(e, name, isCat) {
                 const idx = MPL_SIDEBAR.categories.indexOf(name);
                 const items = [{
-                    label: "重命名分类", fn: () => {
-                        const nn = prompt("分类新名称：", name);
+                    label: "重命名分类", fn: async () => {
+                        const nn = await mplAsk("重命名分类", name, { message: "输入新的分类名称：" });
                         if (!nn || !nn.trim()) return;
                         const v = nn.trim();
                         MPL_SIDEBAR.categories[idx] = v;
@@ -1539,8 +2426,8 @@ app.registerExtension({
                         mplSavePresetMeta().then(() => mplRefreshAllSidebars());
                     }
                 }, {
-                    label: "删除分类（预设保留在未分类）", danger: true, fn: () => {
-                        if (!confirm(`删除分类 "${name}"？分类里的预设会移到「未分类」。`)) return;
+                    label: "删除分类（预设保留在未分类）", danger: true, fn: async () => {
+                        if (!(await mplConfirm(`删除分类 "${name}"？分类里的预设会移到「未分类」。`, { danger: true, okText: "删除" }))) return;
                         MPL_SIDEBAR.categories.splice(idx, 1);
                         Object.keys(MPL_SIDEBAR.assignments).forEach(k => {
                             if (MPL_SIDEBAR.assignments[k] === name) delete MPL_SIDEBAR.assignments[k];
@@ -1555,7 +2442,6 @@ app.registerExtension({
             // 右键菜单「加入收藏夹」：选一个已有收藏夹，或者现场新建一个
             nodeType.prototype._mplAddLoraToFavoriteMenu = async function(name, x, y) {
                 if (!name) return;
-                // 先确保收藏夹数据已从服务端载入，否则会把已有收藏夹覆盖掉
                 try { await mplLoadSidebar(); } catch (e) {}
                 const cols = Array.isArray(MPL_SIDEBAR.favorites) ? MPL_SIDEBAR.favorites : (MPL_SIDEBAR.favorites = []);
                 const addTo = async (colName) => {
@@ -1571,7 +2457,7 @@ app.registerExtension({
                     mplRefreshAllSidebars();
                 };
                 if (!cols.length) {
-                    const nn = prompt("新建收藏夹名称：", "我的收藏");
+                    const nn = await mplAsk("新建收藏夹", "我的收藏", { message: "给这个收藏夹起个名字：" });
                     if (nn && nn.trim()) void addTo(nn.trim());
                     return;
                 }
@@ -1581,8 +2467,8 @@ app.registerExtension({
                 }));
                 items.push({
                     label: "＋ 新建收藏夹…",
-                    fn: () => {
-                        const nn = prompt("新建收藏夹名称：", "");
+                    fn: async () => {
+                        const nn = await mplAsk("新建收藏夹", "", { message: "给这个收藏夹起个名字：" });
                         if (nn && nn.trim()) void addTo(nn.trim());
                     },
                 });
@@ -1666,28 +2552,29 @@ app.registerExtension({
                 }
             };
 
-            nodeType.prototype._mplNewFavoriteCollection = function() {
-                const name = prompt("新建收藏夹名称：", "");
+            nodeType.prototype._mplNewFavoriteCollection = async function() {
+                const name = await mplAsk("新建收藏夹", "", { message: "给这个收藏夹起个名字：" });
                 if (!name || !name.trim()) return;
                 const n = name.trim();
                 if (!MPL_SIDEBAR.favorites.some(c => c.name === n)) {
                     MPL_SIDEBAR.favorites.push({ name: n, items: [] });
                 }
-                mplSaveFavorites().then(() => mplRefreshAllSidebars());
+                await mplSaveFavorites();
+                mplRefreshAllSidebars();
             };
 
             nodeType.prototype._mplFavoriteMenu = function(e, name) {
                 const items = [{
-                    label: "重命名收藏夹", fn: () => {
-                        const nn = prompt("收藏夹新名称：", name);
+                    label: "重命名收藏夹", fn: async () => {
+                        const nn = await mplAsk("重命名收藏夹", name, { message: "输入新的收藏夹名称：" });
                         if (!nn || !nn.trim()) return;
                         const col = MPL_SIDEBAR.favorites.find(c => c.name === name);
                         if (col) col.name = nn.trim();
                         mplSaveFavorites().then(() => mplRefreshAllSidebars());
                     }
                 }, {
-                    label: "删除收藏夹", danger: true, fn: () => {
-                        if (!confirm(`删除收藏夹 "${name}"？`)) return;
+                    label: "删除收藏夹", danger: true, fn: async () => {
+                        if (!(await mplConfirm(`删除收藏夹 "${name}"？`, { danger: true, okText: "删除" }))) return;
                         MPL_SIDEBAR.favorites = MPL_SIDEBAR.favorites.filter(c => c.name !== name);
                         mplSaveFavorites().then(() => mplRefreshAllSidebars());
                     }
@@ -1753,14 +2640,43 @@ app.registerExtension({
                     .mpl-folder-row.has-sel {
                         border-left: 4px solid var(--folder-c, var(--folder-def-bar, var(--ma-accent)));
                     }
-                    .mpl-folder-row.ignored {
-                        border-left: 4px dashed #d9822b !important;
+                    .mpl-folder-ignore {
+                        width: 22px; height: 22px; padding: 0; margin: 0 2px;
+                        box-sizing: border-box;
+                        display: inline-flex; align-items: center; justify-content: center; line-height: 0;
+                        background: transparent; border: 2px solid transparent; border-radius: 50%;
+                        color: var(--folder-normal-color, var(--folder-ignore-color, #8fb8e8));
+                        cursor: pointer; flex: 0 0 auto; transition: all 0.14s;
                     }
-                    .mpl-folder-row.ignored .mpl-folder-title { color: #e0a165 !important; }
+                    .mpl-folder-ignore svg { display: block; flex: 0 0 auto; vertical-align: middle; shape-rendering: geometricPrecision; }
+                    .mpl-folder-ignore:not(.active) svg * { stroke-width: 2.1; }
+                    .mpl-folder-ignore:not(.active) svg > ellipse { fill: color-mix(in srgb, currentColor 22%, transparent); }
+                    .mpl-folder-ignore:not(.active) svg > circle { fill: transparent; }
+                    .mpl-folder-ignore:not(.active):hover svg > ellipse { fill: color-mix(in srgb, currentColor 34%, transparent); }
+                    .mpl-folder-ignore:hover { background: transparent; border-color: transparent; }
+                    .mpl-folder-ignore.active {
+                        background: color-mix(in srgb, var(--folder-ignore-color, #8fb8e8) 28%, transparent);
+                        border-color: var(--folder-ignore-color, rgba(159,200,242,0.72));
+                        color: var(--folder-ignore-color, #b7dbff);
+                    }
+                    .mpl-folder-row.ignored {
+                        border-left: 4px dashed var(--folder-ignore-color, #8fb8e8) !important;
+                        background: color-mix(in srgb, var(--folder-ignore-color, #8fb8e8) 7%, var(--ma-surface)) !important;
+                    }
+                    .mpl-folder-row.ignored .mpl-folder-header {
+                        background: color-mix(in srgb, var(--folder-ignore-color, #8fb8e8) 14%, transparent) !important;
+                        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--folder-ignore-color, #8fb8e8) 32%, transparent);
+                    }
+                    .mpl-folder-row.ignored .mpl-folder-title,
+                    .mpl-folder-row.ignored .mpl-folder-title:hover { color: var(--folder-ignore-color, #9fc8f2) !important; }
                     .mpl-folder-row.ignored .mpl-folder-header input[type="checkbox"] { opacity: .45 !important; }
                     .mpl-folder-row.ignored .mpl-lora-row { opacity: .5 !important; }
                     .mpl-folder-row .mpl-lora-row { margin-left: 4px; }
-                    .mpl-folder-row.drag-over { border: 1px dashed var(--ma-accent); box-shadow: 0 0 0 2px var(--ma-accent-soft); }
+                    .mpl-folder-row.drag-over {
+                        border: 2px dashed var(--mpl-folder-drop-color, #ffd166) !important;
+                        box-shadow: 0 0 0 2px var(--mpl-folder-drop-glow, rgba(255,209,102,0.48)),
+                                    0 0 14px var(--mpl-folder-drop-glow, rgba(255,209,102,0.36)) !important;
+                    }
                     .mpl-folder-header {
                         padding: 5px 8px; color: var(--ma-text); cursor: pointer; display: flex; align-items: center; gap: 5px;
                         font-weight: 600; font-size: 12.5px; min-height: 30px;
@@ -1809,6 +2725,23 @@ app.registerExtension({
                     .mpl-weight-container { flex: 0 0 auto; min-width: 106px; display: flex; align-items: center; background: #09090b; border-radius: 6px; border: 1px solid var(--ma-border); overflow: hidden; }
                     .mpl-weight-display { flex: 1 1 auto; min-width: 42px; padding: 2px 6px; text-align: center; color: var(--ma-text); font-size: 11.5px; user-select: none; background: transparent; cursor: pointer; font-variant-numeric: tabular-nums; }
                     .mpl-weight-display:hover { background: var(--ma-surface-raised); }
+                    .mpl-lora-clip-weight {
+                        flex: 0 0 auto; min-width: 46px; height: 22px; padding: 0 5px; box-sizing: border-box;
+                        display: inline-flex; align-items: center; justify-content: center;
+                        border: 1px solid var(--ma-border); border-radius: 6px; background: #09090b;
+                        color: #a1a1aa; font: 10.5px Consolas, monospace; cursor: pointer; user-select: none; white-space: nowrap;
+                    }
+                    .mpl-lora-clip-weight:hover { border-color: rgba(99,102,241,0.5); color: #f4f4f5; }
+                    .mpl-lora-clip-weight.mpl-clip-custom { border-color: rgba(16,185,129,0.5); background: rgba(16,185,129,0.12); color: #6ee7b7; }
+                    .mpl-lora-rec-weight {
+                        flex: 0 0 auto; height: 22px; padding: 0 5px; box-sizing: border-box;
+                        display: inline-flex; align-items: center; justify-content: center;
+                        border: 1px solid rgba(16,185,129,0.36); border-radius: 6px; background: rgba(16,185,129,0.10);
+                        color: #6ee7b7; font: 10px Consolas, monospace; cursor: pointer; user-select: none; white-space: nowrap;
+                        transition: all 0.14s;
+                    }
+                    .mpl-lora-rec-weight:hover { border-color: rgba(16,185,129,0.68); background: rgba(16,185,129,0.2); color: #a7f3d0; }
+                    .mpl-lora-rec-weight.is-applied { border-color: rgba(16,185,129,0.22); background: rgba(16,185,129,0.06); color: #86efac; opacity: 0.78; }
                     .mpl-lora-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 4px; }
                     .mpl-btn-add { flex: 1.4; background: #6366f1; border: none; color: white; border-radius: 6px; height: 28px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
                     .mpl-btn-add:hover { background: #818cf8; }
@@ -1835,6 +2768,7 @@ app.registerExtension({
                     .mpl-mini-btn.tag:hover { color: #d4d4d8; }
                     .mpl-mini-btn.tag.active { color: #a5b4fc; border-color: rgba(99,102,241,0.45); background: rgba(99,102,241,0.14); }
                     .mpl-mini-btn.tag.active:hover { color: #fff; border-color: rgba(99,102,241,0.7); }
+                    .mpl-mini-btn.tag.mpl-trigger-partial { color: #d8b4fe; border-color: rgba(192,132,252,0.52); background: rgba(192,132,252,0.14); }
                     .mpl-mini-btn.tag.mpl-trigger-off { color: #71717a; border-style: dashed; background: transparent; text-decoration: line-through; }
                     .mpl-multisel-bar {
                         position: sticky; top: -8px; z-index: 6;
@@ -1858,8 +2792,8 @@ app.registerExtension({
                         color: #fca5a5; font-size: 11px; line-height: 1; cursor: pointer;
                     }
                     .mpl-top-drop-active { box-shadow: 0 0 0 2px rgba(99,102,241,0.75) inset !important; border-radius: 8px; }
-                    .mpl-top-drop-before { box-shadow: inset 0 3px 0 0 #6366f1 !important; }
-                    .mpl-top-drop-after { box-shadow: inset 0 -3px 0 0 #6366f1 !important; }
+                    .mpl-top-drop-before { box-shadow: inset 0 4px 0 0 var(--mpl-folder-drop-color, #ffd166) !important; }
+                    .mpl-top-drop-after { box-shadow: inset 0 -4px 0 0 var(--mpl-folder-drop-color, #ffd166) !important; }
                     .mpl-insert-line { height: 2px; background: #6366f1; margin: 2px 4px; border-radius: 2px; }
                     .mpl-lora-preview { display: none; }
                     .mpl-metadata-dialog {
@@ -2121,6 +3055,8 @@ app.registerExtension({
                     sliderWidth: 110,
                     showWeightValue: true,
                     snapToZero: true,
+                    hideClip: true,
+                    hideRecWeight: false,
                 };
                 if (this.properties["layout_settings"] && typeof this.properties["layout_settings"] === "object") {
                     this.layoutSettings = Object.assign({}, layoutDefaults, this.properties["layout_settings"]);
@@ -2202,7 +3138,7 @@ app.registerExtension({
                         ? Object.assign({}, colorDefaults, savedColors)
                         : colorDefaults;
                     const savedFolderColors = this.properties["folder_color_settings"];
-                    const folderColorDefaults = { outer: "", inner: "", bar: "" };
+                    const folderColorDefaults = { outer: "", inner: "", bar: "", ignore: "", normal: "" };
                     this.folderColorSettings = (savedFolderColors && typeof savedFolderColors === "object")
                         ? Object.assign({}, folderColorDefaults, savedFolderColors)
                         : folderColorDefaults;
@@ -2211,6 +3147,15 @@ app.registerExtension({
                 this.updateWidget?.();
                 this.applyColorSettings?.();
                 this.applyFolderColorSettings?.();
+                {
+                    const minW = this.minWidth || (MPL_MIN_W + 20);
+                    const curW = Number(this.size?.[0]) || 0;
+                    const curH = Number(this.size?.[1]) || 0;
+                    if (curW > 0 && (curW < minW - 0.5 || curH < MPL_MIN_H - 0.5)) {
+                        this.size[0] = Math.max(curW, minW);
+                        this.size[1] = Math.max(curH, MPL_MIN_H);
+                    }
+                }
                 this._mplSyncDOMLayout?.();
                 
                 setTimeout(() => {
@@ -2221,6 +3166,7 @@ app.registerExtension({
                     mplSyncModelValidationWidgets(this);
                     this._mplSyncDOMLayout?.();
                     this._mplScheduleLayoutSync?.();
+                    this._mplGuardLayout?.();
                     void loadLoraNameList();
                 }, 100);
                 return r;
@@ -2237,6 +3183,12 @@ app.registerExtension({
                     try { this._mplResizeObserver.disconnect(); } catch (e) {}
                     this._mplResizeObserver = null;
                 }
+                if (this._mplGuardTimer) {
+                    clearInterval(this._mplGuardTimer);
+                    this._mplGuardTimer = null;
+                }
+                this._mplGuardInstalled = false;
+                this._mplGuardBusy = false;
                 if (this._previewTimeout) {
                     clearTimeout(this._previewTimeout);
                     this._previewTimeout = null;
@@ -2270,6 +3222,10 @@ app.registerExtension({
                 else root.style.removeProperty("--folder-def-inner");
                 if (f.bar) root.style.setProperty("--folder-def-bar", f.bar);
                 else root.style.removeProperty("--folder-def-bar");
+                if (f.ignore) root.style.setProperty("--folder-ignore-color", f.ignore);
+                else root.style.removeProperty("--folder-ignore-color");
+                if (f.normal && f.normal !== "#8b8d9b") root.style.setProperty("--folder-normal-color", f.normal);
+                else root.style.removeProperty("--folder-normal-color");
             };
             nodeType.prototype._ensureMultiSelectState = function() {
                 if (!this.loraData.selected || typeof this.loraData.selected !== "object") {
@@ -2589,14 +3545,23 @@ app.registerExtension({
                             this.showFolderContextMenu(folder, fDiv, e.clientX, e.clientY);
                         };
 
+                        fDiv.ondragenter = () => {
+                            const dc = mplFolderDropColors(fDiv);
+                            fDiv.style.setProperty("--mpl-folder-drop-color", dc.color);
+                            fDiv.style.setProperty("--mpl-folder-drop-glow", dc.glow);
+                        };
                         fDiv.ondragover = (e) => {
                             e.preventDefault();
-                            fDiv.classList.add("drag-over");
+                            fDiv.classList.remove("drag-over", "mpl-top-drop-before", "mpl-top-drop-after");
                             if (this._currentTopDrag) {
-                                fDiv.classList.remove("mpl-top-drop-before", "mpl-top-drop-after");
                                 const r = fDiv.getBoundingClientRect();
                                 fDiv.classList.add((e.clientY - r.top) > r.height / 2 ? "mpl-top-drop-after" : "mpl-top-drop-before");
+                                return;
                             }
+                            const isLoraDrag = this._currentSortDrag || e.dataTransfer.types.includes("application/x-sort-drag");
+                            const edge = isLoraDrag ? this._mplFolderHeaderDropEdge(fDiv, e.clientY) : "";
+                            if (edge) fDiv.classList.add(edge === "before" ? "mpl-top-drop-before" : "mpl-top-drop-after");
+                            else fDiv.classList.add("drag-over");
                         };
                         fDiv.ondragleave = () => { fDiv.classList.remove("drag-over", "mpl-top-drop-before", "mpl-top-drop-after"); };
                         fDiv.ondrop = (e) => {
@@ -2604,6 +3569,42 @@ app.registerExtension({
                             fDiv.classList.remove("drag-over", "mpl-top-drop-before", "mpl-top-drop-after");
                             try {
                                 const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                                if (data) {
+                                    const loraEdge = this._mplFolderHeaderDropEdge(fDiv, e.clientY);
+                                    const isLoraDrag = data.type === "sort" ||
+                                        (data.type === "top" && typeof data.tok === "string" && data.tok.startsWith("l:"));
+                                    if (isLoraDrag && loraEdge) {
+                                        e.stopPropagation();
+                                        let moved = null;
+                                        if (data.type === "top") {
+                                            const uid = data.tok.slice(2);
+                                            moved = (this.loraData.loras || []).find(l => this._uidFor(l) === uid) || null;
+                                            if (!moved) {
+                                                for (const f of (this.loraData.folders || [])) {
+                                                    const i = (f.loras || []).findIndex(l => this._uidFor(l) === uid);
+                                                    if (i >= 0) { moved = f.loras[i]; f.loras.splice(i, 1); break; }
+                                                }
+                                            }
+                                        } else if (data.sourceType === "root") {
+                                            moved = (this.loraData.loras || [])[data.sourceLIdx] || null;
+                                        } else if (data.sourceType === "folder") {
+                                            const src = this.loraData.folders[data.sourceFIdx];
+                                            if (src && data.sourceLIdx >= 0 && data.sourceLIdx < (src.loras || []).length) {
+                                                moved = src.loras[data.sourceLIdx];
+                                                src.loras.splice(data.sourceLIdx, 1);
+                                            }
+                                        }
+                                        if (moved) {
+                                            if (!(this.loraData.loras || []).includes(moved)) this.loraData.loras.push(moved);
+                                            this._mplPlaceToken("l:" + this._uidFor(moved), tok, loraEdge === "after");
+                                        }
+                                        this._currentTopDrag = null;
+                                        this._currentSortDrag = null;
+                                        this.renderEmbeddedList();
+                                        this.updateWidget();
+                                        return;
+                                    }
+                                }
                                 if (data && data.type === "top" && typeof data.tok === "string") {
                                     e.stopPropagation();
                                     if (data.tok.startsWith("l:")) {
@@ -2678,6 +3679,21 @@ app.registerExtension({
                         collapseIcon.addEventListener("pointerdown", (e)=>e.stopPropagation());
                         collapseIcon.addEventListener("mousedown", (e)=>e.stopPropagation());
 
+                        const ignoreBtn = document.createElement("button");
+                        ignoreBtn.type = "button";
+                        ignoreBtn.className = "mpl-folder-ignore" + (folder.ignored ? " active" : "");
+                        ignoreBtn.innerHTML = mplIcon(folder.ignored ? "eyeOff" : "eyeCute", folder.ignored ? 13 : 16);
+                        ignoreBtn.title = folder.ignored ? "恢复此文件夹（重新参与加载）" : "忽略此文件夹（不参与加载，保留组内勾选状态）";
+                        ignoreBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            folder.ignored = !folder.ignored;
+                            this.updateWidget();
+                            this.renderEmbeddedList();
+                        };
+                        ignoreBtn.addEventListener("pointerdown", (e)=>e.stopPropagation());
+                        ignoreBtn.addEventListener("mousedown", (e)=>e.stopPropagation());
+                        ignoreBtn.addEventListener("click", (e)=>e.stopPropagation());
+
                         const folderToggle = document.createElement("input");
                         folderToggle.type = "checkbox";
                         const _fLoras = (folder.loras || []);
@@ -2702,9 +3718,7 @@ app.registerExtension({
                         const title = document.createElement("span");
                         title.className = "mpl-folder-title";
                         title.textContent = folder.name;
-                        title.title = folder.ignored
-                            ? "已忽略（不参与加载）· 单击恢复 · 右键重命名"
-                            : "单击忽略此文件夹（不参与加载，保留组内勾选状态）· 右键重命名";
+                        title.title = "左键折叠/展开 · 眼睛按钮忽略/恢复 · 右键菜单";
                         title.draggable = true;
                         title.ondragstart = (e) => {
                             e.stopPropagation();
@@ -2716,12 +3730,12 @@ app.registerExtension({
                         };
                         title.onclick = (e) => {
                             e.stopPropagation();
-                            folder.ignored = !folder.ignored;
-                            this.updateWidget();
+                            folder.collapsed = !folder.collapsed;
                             this.renderEmbeddedList();
                         };
 
                         header.appendChild(collapseIcon);
+                        header.appendChild(ignoreBtn);
                         header.appendChild(folderToggle);
                         header.appendChild(title);
 
@@ -2754,9 +3768,9 @@ app.registerExtension({
                         delBtn.className = "mpl-mini-btn del";
                         delBtn.innerHTML = mplIcon("close", 13);
                         delBtn.title = "删除文件夹";
-                        delBtn.onclick = (e) => {
+                        delBtn.onclick = async (e) => {
                             e.stopPropagation();
-                            if (confirm("Delete folder?")) {
+                            if (await mplConfirm("Delete folder?", { danger: true, okText: "删除" })) {
                                 if (this._previewTimeout) { clearTimeout(this._previewTimeout); this._previewTimeout = null; }
                                 if (this._previewDiv) { this._previewDiv.remove(); this._previewDiv = null; }
                                 document.querySelectorAll('.mpl-lora-preview').forEach(p => p.remove());
@@ -3106,11 +4120,11 @@ app.registerExtension({
                             textarea.setSelectionRange(newValue.length, newValue.length);
                         } else {
                             // 没有读取到文件或内容为空
-                            alert("没有获取到现成的tag");
+                            void mplAlert("没有获取到现成的tag");
                         }
                     } catch (error) {
                         console.error("读取txt文件时出错:", error);
-                        alert("没有获取到现成的tag");
+                        void mplAlert("没有获取到现成的tag");
                     }
                 };
                 
@@ -3291,7 +4305,7 @@ app.registerExtension({
                 deleteBtn.textContent = "删除";
                 deleteBtn.className = "ma-btn ma-btn-danger";
                 deleteBtn.onclick = async () => {
-                    if (confirm("确定要删除这个 LoRA 及其所有相关文件吗？此操作不可恢复！")) {
+                    if (await mplConfirm("确定要删除这个 LoRA 及其所有相关文件吗？此操作不可恢复！", { danger: true, okText: "删除" })) {
                         try {
                             const response = await api.fetchApi('/ma/lora/delete_lora_complete', {
                                 method: 'POST',
@@ -3351,13 +4365,13 @@ app.registerExtension({
                                 }
                                 
                                 document.body.removeChild(overlay);
-                                alert(result.message || "删除成功");
+                                void mplAlert(result.message || "删除成功");
                             } else {
-                                alert(result.message || "删除失败");
+                                void mplAlert(result.message || "删除失败");
                             }
                         } catch (error) {
                             console.error("删除LoRA时出错:", error);
-                            alert("删除失败: " + error.message);
+                            void mplAlert("删除失败: " + error.message);
                         }
                     }
                 };
@@ -3378,9 +4392,15 @@ app.registerExtension({
                 addNodeBtn.onclick = () => {
                     if (!this.loraData) this.loraData = { loras: [], folders: [] };
                     if (!Array.isArray(this.loraData.loras)) this.loraData.loras = [];
-                    this.loraData.loras.push(mplDecorateNewLora({
+                    const newLora = mplDecorateNewLora({
                         name: loraName, weight: 1.0, enabled: true, tags: fileContents.txt || "", note: "", triggerWords: fileContents.txt || "", jsonInfo: "", logInfo: "",
-                    }));
+                    });
+                    const _addRec = Number(lmInfo.recommended_weight);
+                    if (Number.isFinite(_addRec) && _addRec > 0 && _addRec <= 1 && newLora.recommendedWeight === undefined) {
+                        newLora.recommendedWeight = _addRec;
+                        newLora.recommendedWeightSource = lmInfo.recommended_weight_source || "作者推荐";
+                    }
+                    this.loraData.loras.push(newLora);
                     this.renderEmbeddedList();
                     this.updateWidget();
                 };
@@ -3404,6 +4424,14 @@ app.registerExtension({
                 fileSpan.style.color = "#d4d4d8";
                 const baseModelSpan = document.createElement("span");
                 baseModelSpan.textContent = `基础模型: ${String(lmInfo.base_model || "").trim() || "—"}`;
+                const _infoRecW = Number(lmInfo.recommended_weight ?? lora?.recommendedWeight);
+                const _hasInfoRec = Number.isFinite(_infoRecW) && _infoRecW > 0 && _infoRecW <= 1;
+                const recSpan = document.createElement("span");
+                recSpan.textContent = `推荐权重: ${_hasInfoRec ? "荐 " + _infoRecW.toFixed(2) : "—"}`;
+                recSpan.style.color = _hasInfoRec ? "#6ee7b7" : "#a1a1aa";
+                recSpan.title = _hasInfoRec
+                    ? `作者推荐权重 ${_infoRecW.toFixed(2)}（${lmInfo.recommended_weight_source || lora?.recommendedWeightSource || "作者推荐"}）`
+                    : "未找到作者推荐权重";
                 const dirSpan = document.createElement("span");
                 dirSpan.textContent = `📂 位置: ${dirPath || "根目录"} (点击打开目录)`;
                 dirSpan.style.cssText = "color:#818cf8;cursor:pointer;";
@@ -3415,7 +4443,7 @@ app.registerExtension({
                         body: JSON.stringify({ lora_name: loraName }),
                     }).catch((e) => console.warn("[MA Loader] 打开文件夹失败:", e));
                 };
-                metaInfoLine.append(fileSpan, baseModelSpan, dirSpan);
+                metaInfoLine.append(fileSpan, baseModelSpan, recSpan, dirSpan);
                 topActions.appendChild(metaInfoLine);
                 infoSection.appendChild(topActions);
 
@@ -3704,7 +4732,7 @@ app.registerExtension({
                         const allOk = results.every(r => r && r.status === "success");
                         if (allOk) {
                             const targetText = targets.length === 2 ? "magicloradate 和 同层级" : (targets[0] === "magicloradate" ? "magicloradate子目录" : "同层级");
-                            alert(`LoRA '${loraName.split(/[/\\]/).pop()}' 的内容已保存到 ${targetText}！`);
+                            void mplAlert(`LoRA '${loraName.split(/[/\\]/).pop()}' 的内容已保存到 ${targetText}！`);
                             
                             lora.triggerWords = txtArea.value;
                             lora.tags = txtArea.value;
@@ -3739,11 +4767,11 @@ app.registerExtension({
                             document.body.removeChild(overlay);
                         } else {
                             const msgs = results.filter(r => r && r.status !== "success").map(r => r.message || "未知错误").join("\n");
-                            alert(`部分或全部保存失败：\n${msgs}`);
+                            void mplAlert(`部分或全部保存失败：\n${msgs}`);
                         }
                     } catch (error) {
                         console.error("保存LoRA内容时出错:", error);
-                        alert(`保存时发生错误：${error.message}`);
+                        void mplAlert(`保存时发生错误：${error.message}`);
                     }
                 };
                 // 爬取信息按钮
@@ -3798,10 +4826,10 @@ app.registerExtension({
                 }, 100);
             };
 
-            // 批量加载选中 LoRA 的触发词与预览图
+            // 批量加载选中 LoRA 的触发词、推荐权重与预览图
             nodeType.prototype.showBatchEditModal = async function(fileList) {
                 const files = Array.from(fileList || []);
-                if (!files.length) { alert("请先选择要处理的 LoRA"); return; }
+                if (!files.length) { void mplAlert("请先选择要处理的 LoRA"); return; }
 
                 const fetchOverlay = document.createElement("div");
                 fetchOverlay.className = "ma-modal-backdrop";
@@ -3857,13 +4885,9 @@ app.registerExtension({
 
                 fetchConfirmBtn.onclick = async () => {
                     const savePathMode = "same_dir";
-                    const options = { download_txt: true, download_json: true, download_image: true, download_log: true };
-                    let okCount = 0, failCount = 0, tagCount = 0, imgCount = 0;
+                    const options = { download_txt: true, download_json: true, download_image: true, download_log: true, download_rec: true };
+                    let okCount = 0, failCount = 0, tagCount = 0, recCount = 0, imgCount = 0;
                     const errs = [];
-                    const findLora = (name) => {
-                        const list = (this.loraData && this.loraData.loras) ? this.loraData.loras : [];
-                        return list.find(l => l && l.name === name);
-                    };
                     fetchConfirmBtn.disabled = true;
                     cancelFetchBtn.disabled = true;
                     fetchConfirmBtn.textContent = "加载中...";
@@ -3887,12 +4911,13 @@ app.registerExtension({
                             if (!(response.ok || ['success','partial','skipped'].includes(rj && rj.status))) {
                                 throw new Error((rj && rj.message) || ('HTTP ' + response.status));
                             }
-                            const v = rj && rj.data ? rj.data.triggerWords : "";
-                            if (typeof v === "string" && v.trim()) {
-                                const lo = findLora(f);
-                                if (lo) mplSetTriggerWords(lo, v);
-                                tagCount++;
-                            }
+                            const data = (rj && rj.data) || {};
+                            const v = typeof data.triggerWords === "string" ? data.triggerWords.trim() : "";
+                            const rw = Number(data.recommendedWeight);
+                            const hasRec = Number.isFinite(rw) && rw > 0;
+                            if (v || hasRec) mplApplyMetadataData(this, f, data);
+                            if (v) tagCount++;
+                            if (hasRec) recCount++;
                             mplBumpImage(f);
                             if (this.refreshLoraImageCache) this.refreshLoraImageCache(f);
                             imgCount++;
@@ -3912,8 +4937,8 @@ app.registerExtension({
                         }
                     };
                     await Promise.all(Array.from({ length: Math.min(3, files.length) }, () => worker()));
-                    statusLine.textContent = `完成：处理 ${okCount} 个（触发词 ${tagCount} 个、预览 ${imgCount} 个），失败 ${failCount} 个`;
-                    if (failCount) alert(`部分失败：\n` + errs.join("\n"));
+                    statusLine.textContent = `完成：处理 ${okCount} 个（触发词 ${tagCount} 个、推荐权重 ${recCount} 个、预览 ${imgCount} 个），失败 ${failCount} 个`;
+                    if (failCount) void mplAlert(`部分失败：\n` + errs.join("\n"));
                     await mplLoadExtraInfo(true);
                     if (this.renderEmbeddedList) this.renderEmbeddedList();
                     if (this.updateWidget) this.updateWidget();
@@ -3925,6 +4950,127 @@ app.registerExtension({
                     fetchConfirmBtn.textContent = "完成";
                     setTimeout(closeFetch, 700);
                 };
+            };
+
+            // 一键补全当前工作流所有强力 LoRA 节点中的全部 LoRA 信息
+            nodeType.prototype.fetchAllLoraMetadata = async function() {
+                const origin = this;
+                if (this._mplFetchAllRunning) { void mplAlert("正在补全中，请稍候…"); return; }
+                const graphNodes = mplMetadataGraphNodes(origin);
+                const nameToNodes = new Map();
+                const names = [];
+                for (const target of graphNodes) {
+                    for (const name of mplCollectMetadataNames(target)) {
+                        const key = mplMetadataNameKey(name);
+                        if (!key) continue;
+                        if (!nameToNodes.has(key)) { nameToNodes.set(key, new Set()); names.push(name); }
+                        nameToNodes.get(key).add(target);
+                    }
+                }
+                if (!names.length) { void mplAlert("当前工作流的 LoRA 节点里还没有 LoRA，请先添加"); return; }
+                if (!(await mplConfirm(
+                    `将强制重新爬取当前工作流中 ${names.length} 个 LoRA 的信息（触发词 + 作者推荐权重 + 预览图），\n并把结果同步回填到所有节点中。\n\n本地自命名、来源查不到的 LoRA 会跳过，保持原样。\n\n开始吗？`,
+                    { title: "一键补全当前工作流 LoRA", okText: "开始" }
+                ))) return;
+
+                this._mplFetchAllRunning = true;
+                const overlay = document.createElement("div");
+                overlay.className = "ma-modal-backdrop";
+                overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.68);z-index:10070;display:flex;align-items:center;justify-content:center;";
+                const dlg = document.createElement("div");
+                dlg.className = "ma-modal ma-modal-static-anim";
+                dlg.style.cssText = "background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:20px 22px;min-width:420px;max-width:540px;width:90%;box-shadow:0 24px 64px rgba(0,0,0,0.78);color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;";
+                const ttl = document.createElement("div");
+                ttl.textContent = "⚡ 一键补全当前工作流 LoRA";
+                ttl.style.cssText = "font-size:15px;font-weight:650;margin-bottom:6px;";
+                const sub = document.createElement("div");
+                sub.textContent = `共 ${names.length} 个 LoRA · 强制重爬并回填到所有节点`;
+                sub.style.cssText = "font-size:12px;color:#a1a1aa;margin-bottom:14px;";
+                const cur = document.createElement("div");
+                cur.style.cssText = "font-size:12px;color:#d4d4d8;margin-bottom:10px;min-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+                const barWrap = document.createElement("div");
+                barWrap.style.cssText = "height:7px;background:#222228;border-radius:4px;overflow:hidden;margin-bottom:10px;";
+                const bar = document.createElement("div");
+                bar.style.cssText = "height:100%;width:0%;background:#6366f1;transition:width .15s;";
+                barWrap.appendChild(bar);
+                const stat = document.createElement("div");
+                stat.style.cssText = "font-size:12px;color:#a1a1aa;min-height:18px;";
+                const btnRow = document.createElement("div");
+                btnRow.style.cssText = "display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.08);";
+                const stopBtn = document.createElement("button");
+                stopBtn.textContent = "停止";
+                stopBtn.type = "button";
+                stopBtn.className = "ma-btn";
+                const closeBtn = document.createElement("button");
+                closeBtn.textContent = "关闭";
+                closeBtn.type = "button";
+                closeBtn.className = "ma-btn ma-btn-primary";
+                closeBtn.style.display = "none";
+                btnRow.append(stopBtn, closeBtn);
+                dlg.append(ttl, sub, cur, barWrap, stat, btnRow);
+                overlay.appendChild(dlg);
+                document.body.appendChild(overlay);
+                for (const ev of ["pointerdown", "pointermove", "pointerup", "mousedown", "wheel", "keydown"]) {
+                    dlg.addEventListener(ev, e => e.stopPropagation(), ev === "wheel" ? { passive: false } : undefined);
+                }
+                closeBtn.onclick = () => { try { document.body.removeChild(overlay); } catch (e) {} };
+
+                const settings = {
+                    download_txt: true, download_json: true, download_image: true, download_log: true, download_rec: true,
+                    save_path: "same_dir", overwrite: true, update_existing: true, force_refresh: true,
+                };
+                const state = { running: false, cancelRequested: false, pauseResult: null };
+                stopBtn.onclick = () => {
+                    state.cancelRequested = true;
+                    stopBtn.disabled = true;
+                    stopBtn.textContent = "停止中…";
+                    cur.textContent = "正在停止，等待当前文件完成…";
+                };
+                let filled = 0, recFilled = 0, notFound = 0, failed = 0;
+                const affected = new Set(graphNodes);
+                try {
+                    const results = await mplRunMetadataQueue(names, settings, state, ({ current, completed, total, result }) => {
+                        cur.textContent = `处理中 ${completed}/${total}：${String(current).split(/[\\/]/).pop()}`;
+                        bar.style.width = Math.round(completed / Math.max(1, total) * 100) + "%";
+                        if (result) {
+                            const w = String(result.data?.triggerWords || "").trim();
+                            const hasRec = typeof result.data?.recommendedWeight === "number" && result.data.recommendedWeight > 0;
+                            if (w || hasRec) {
+                                if (w) filled++;
+                                if (hasRec) recFilled++;
+                                for (const target of (nameToNodes.get(mplMetadataNameKey(result.name)) || [])) {
+                                    if (mplApplyMetadataData(target, result.name, result.data)) affected.add(target);
+                                }
+                                try { mplBumpImage(result.name); } catch (e) {}
+                            }
+                            if (result.status === "not_found" || result.field_states?.txt?.state === "not_found") notFound++;
+                            if (result.status === "error") failed++;
+                        }
+                    });
+                    if (!failed) failed = results.filter(r => r.status === "error").length;
+                } catch (e) {
+                    failed++;
+                    console.warn("[MagicPowerLora] 一键补全异常:", e);
+                }
+
+                try { await mplLoadExtraInfo(true); } catch (e) {}
+                for (const target of affected) {
+                    try {
+                        target.updateWidget?.();
+                        target.renderEmbeddedList?.();
+                        if (target._addLoraModal?.isConnected && target._refreshFileListFunc) {
+                            try { await target._refreshFileListFunc(); } catch (e) {}
+                        }
+                    } catch (e) {}
+                }
+                bar.style.width = "100%";
+                bar.style.background = state.pauseResult ? "#f59e0b" : "#10b981";
+                const pauseNote = state.pauseResult ? "（来源请求受限，已暂停，可稍后重试）" : "";
+                stat.textContent = `完成：触发词 ${filled} 个 · 推荐权重 ${recFilled} 个 · 来源未找到 ${notFound} 个 · 失败 ${failed} 个 ${pauseNote}`;
+                cur.textContent = state.cancelRequested ? "已停止" : "已全部处理";
+                stopBtn.style.display = "none";
+                closeBtn.style.display = "inline-block";
+                this._mplFetchAllRunning = false;
             };
 
             nodeType.prototype.showBatchMetadataModal = function() {
@@ -4103,16 +5249,23 @@ app.registerExtension({
                 }
                 const footer = el("div", "", "mpl-metadata-footer", dialog);
                 const closeBtn = el("button", "关闭", "", footer);
+                const workflowFillBtn = el("button", "⚡ 一键补全当前工作流", "", footer);
+                workflowFillBtn.title = mplT("强制重爬当前工作流所有 LoRA 节点的触发词、作者推荐权重与预览图并回填");
+                workflowFillBtn.onclick = () => {
+                    if (state.running) return;
+                    void node.fetchAllLoraMetadata();
+                };
                 el("div", "", "mpl-metadata-footer-spacer", footer);
                 const stopBtn = el("button", "停止后续下载", "", footer);
                 const retryBtn = el("button", "重试当前范围失败项", "", footer);
                 retryBtn.title = mplT("仅重试当前可见且勾选的失败项，沿用上次处理方式和失败字段。");
                 const startBtn = el("button", "开始下载", "mpl-metadata-primary", footer);
-                [closeBtn, stopBtn, retryBtn, startBtn].forEach(button => { button.type = "button"; });
+                [closeBtn, workflowFillBtn, stopBtn, retryBtn, startBtn].forEach(button => { button.type = "button"; });
                 stopBtn.disabled = true;
                 retryBtn.disabled = true;
                 const readSettings = () => ({
                     ...Object.fromEntries(Object.entries(checkboxes).map(([key, checkbox]) => [key, checkbox.checked])),
+                    download_rec: true,
                     save_path: pathSelect.value,
                     overwrite: modeSelect.value === "update",
                     update_existing: modeSelect.value === "update",
@@ -4350,6 +5503,16 @@ app.registerExtension({
                     name.textContent = result.name;
                     const message = el("div", "", "mpl-metadata-result-message", row);
                     message.textContent = result.message || "";
+                    const recW = result.data?.recommendedWeight;
+                    if (typeof recW === "number" && recW > 0) {
+                        const recLine = el("div", "", "mpl-metadata-result-message", row);
+                        recLine.style.color = "#34d399";
+                        recLine.textContent = `作者推荐权重 ${recW.toFixed(2)}${result.data?.recommendedWeightSource ? "（" + result.data.recommendedWeightSource + "）" : ""}，已保存到信息管理`;
+                    } else if (result.data?.recommendedWeightSkipped === true) {
+                        const recLine = el("div", "", "mpl-metadata-result-message", row);
+                        recLine.style.color = "#71717a";
+                        recLine.textContent = "该项无作者推荐权重信息，已跳过";
+                    }
                     if (result.unavailable?.length) {
                         const unavailable = el("div", "", "mpl-metadata-result-message", row);
                         const explanations = { unavailable: "来源未提供", not_found: "未找到来源", unsupported: "不支持", unresolved: "未提取" };
@@ -4466,9 +5629,11 @@ app.registerExtension({
                             progressCount.textContent = `${completed} / ${total}`;
                             if (result) {
                                 mplMergeMetadataFieldStates(result.name, result, metadata, fieldStates, result.requested_types);
-                                const noopSkipped = result.status === "skipped" && !result.saved?.length && !(result.data && result.data.triggerWords);
+                                const hasRecW = result.data && typeof result.data.recommendedWeight === "number" && result.data.recommendedWeight > 0;
+                                const noopSkipped = result.status === "skipped" && !result.saved?.length
+                                    && !(result.data && result.data.triggerWords) && !hasRecW;
                                 if (!noopSkipped) updateResults(result);
-                                if (result.saved?.length || (result.data && result.data.triggerWords)) {
+                                if (result.saved?.length || (result.data && result.data.triggerWords) || hasRecW) {
                                     changedNames.add(result.name);
                                     for (const target of referencesByName.get(mplMetadataNameKey(result.name)) || []) {
                                         mplApplyMetadataData(target, result.name, result.data);
@@ -4507,8 +5672,10 @@ app.registerExtension({
                         updateControls();
                     }
                 };
-                const startRun = (names, runSettings, clearResults) => {
-                    const snapshot = names.filter(name => mplMetadataRequestedTypes(name, runSettings, metadata, fieldStates).length);
+                const startRun = async (names, runSettings, clearResults) => {
+                    const snapshot = names.filter(name =>
+                        mplMetadataRequestedTypes(name, runSettings, metadata, fieldStates).length ||
+                        (!runSettings.local_action && mplMetadataRecNeeded(name, runSettings, metadata)));
                     if (!snapshot.length) {
                         phase.textContent = mplT("所选信息无需处理。");
                         return;
@@ -4520,7 +5687,7 @@ app.registerExtension({
                                 `${mplT("信息类型：")}${mplMetadataTypes(runSettings).map(type => mplT(typeLabels[`download_${type}`])).join(", ")}`,
                                 mplT("人工确认所选缺项暂不在线补全，不检查来源。可用“恢复自动补全”撤销。"),
                             ].join("\n");
-                            if (!confirm(prompt)) return;
+                            if (!(await mplConfirm(prompt, { okText: "继续" }))) return;
                         }
                         return runLocalReview(snapshot, runSettings);
                     }
@@ -4540,7 +5707,7 @@ app.registerExtension({
                             `${mplT("信息类型：")}${types.map(type => type === "image" ? mplT("预览图像") : `.${type}`).join(", ")}`,
                             mplT("会覆盖所选模型的已有信息文件，节点权重和自定义触发词保持不变。"),
                         ].join("\n");
-                        if (!confirm(prompt)) return;
+                        if (!(await mplConfirm(prompt, { okText: "继续" }))) return;
                     }
                     return run(snapshot, runSettings, clearResults);
                 };
@@ -4807,7 +5974,8 @@ app.registerExtension({
                             download_txt: txtCheckbox.checked,
                             download_json: jsonCheckbox.checked,
                             download_image: imageCheckbox.checked,
-                            download_log: logCheckbox.checked
+                            download_log: logCheckbox.checked,
+                            download_rec: true,
                         };
                         const savePathMode = sameDirRadio.checked ? "same_dir" : "subfolder";
                         
@@ -4836,11 +6004,17 @@ app.registerExtension({
                                 const previous = editorValues.get(field);
                                 if (textarea && (previous.trim() || textarea.value !== previous)) continue;
                                 if (textarea) textarea.value = value;
-                                if (!String(lora[field] || "").trim()) lora[field] = value;
+                                if (!String(lora[field] || "").trim()) {
+                                    if (field === "triggerWords") mplSetTriggerWords(lora, value);
+                                    else lora[field] = value;
+                                }
                             }
+                            const rw = Number(result.data?.recommendedWeight);
+                            if (Number.isFinite(rw) && rw > 0) mplApplyMetadataData(this, lora.name, result.data);
                             
                             // 刷新全局图片列表缓存（类似参考代码的loadImageList）
                             await loadLoraImageList();
+                            await mplLoadExtraInfo(true);
                             
                             // 刷新缓存（重新渲染列表）
                             this.renderEmbeddedList();
@@ -4861,13 +6035,13 @@ app.registerExtension({
                             fetching = false;
                             closeFetch();
                             const message = result.message || mplT(result.saved?.length ? "信息检查与补全完成" : "已检查，未新增信息。");
-                            alert(message + (result.record_warning ? `\n${mplT("检查记录未保存：")}${result.record_warning}` : ""));
+                            void mplAlert(message + (result.record_warning ? `\n${mplT("检查记录未保存：")}${result.record_warning}` : ""));
                         } else {
-                            alert((result.message || mplT("爬取失败")) + (result.record_warning ? `\n${mplT("检查记录未保存：")}${result.record_warning}` : ""));
+                            void mplAlert((result.message || mplT("爬取失败")) + (result.record_warning ? `\n${mplT("检查记录未保存：")}${result.record_warning}` : ""));
                         }
                     } catch (error) {
                         console.error("爬取元数据时出错:", error);
-                        alert("爬取失败: " + error.message);
+                        void mplAlert("爬取失败: " + error.message);
                     } finally {
                         fetching = false;
                         controls.forEach(control => { control.disabled = false; });
@@ -5284,7 +6458,8 @@ app.registerExtension({
                 row._mplCheckEl = check;
 
                 const name = document.createElement("div");
-                name.className = "mpl-lora-name";
+                name.className = "mpl-lora-name notranslate";
+                name.setAttribute("translate", "no");
                 const displayName = (lora.name.split(/[/\\]/).pop() || lora.name).replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, "");
                 name.textContent = displayName;
                 name.dataset.lora = lora.name;
@@ -5329,6 +6504,14 @@ app.registerExtension({
                 noteInput.addEventListener("pointerdown", (e)=>e.stopPropagation());
                 noteInput.addEventListener("mousedown", (e)=>e.stopPropagation());
 
+                let clipBadge = null;
+                let recBadge = null;
+                const refreshClipBadge = () => mplUpdateClipBadgeUI(clipBadge, lora);
+                const syncClipWithWeight = () => {
+                    mplSyncClipWeight(lora);
+                    refreshClipBadge();
+                };
+
                 const weightContainer = document.createElement("div");
                 weightContainer.className = "mpl-weight-container";
                 
@@ -5351,6 +6534,7 @@ app.registerExtension({
                     e.stopPropagation();
                     lora.weight = Math.max(-10, parseFloat((lora.weight - 0.01).toFixed(2)));
                     weightDisplay.textContent = lora.weight.toFixed(2);
+                    syncClipWithWeight();
                     this.updateWidget();
                 };
                 decreaseBtn.onmouseenter = () => decreaseBtn.style.background = "#27272e";
@@ -5360,14 +6544,15 @@ app.registerExtension({
                 const weightDisplay = document.createElement("div");
                 weightDisplay.className = "mpl-weight-display";
                 weightDisplay.textContent = parseFloat(lora.weight).toFixed(2);
-                weightDisplay.onclick = (e) => {
+                weightDisplay.onclick = async (e) => {
                     e.stopPropagation();
-                    const newVal = prompt("输入权重:", lora.weight);
+                    const newVal = await mplEditValueAt(weightDisplay, lora.weight, { label: "权重" });
                     if (newVal !== null) {
                         const numVal = parseFloat(newVal);
                         if (!isNaN(numVal)) {
                             lora.weight = Math.max(-10, Math.min(10, numVal));
                             weightDisplay.textContent = lora.weight.toFixed(2);
+                            syncClipWithWeight();
                             this.updateWidget();
                         }
                     }
@@ -5392,6 +6577,7 @@ app.registerExtension({
                     e.stopPropagation();
                     lora.weight = Math.min(10, parseFloat((lora.weight + 0.01).toFixed(2)));
                     weightDisplay.textContent = lora.weight.toFixed(2);
+                    syncClipWithWeight();
                     this.updateWidget();
                 };
                 increaseBtn.onmouseenter = () => increaseBtn.style.background = "#27272e";
@@ -5419,6 +6605,7 @@ app.registerExtension({
                     const applySliderWeight = (newVal) => {
                         const clamped = Math.max(sliderMin, Math.min(sliderMax, newVal));
                         lora.weight = parseFloat(clamped.toFixed(2));
+                        syncClipWithWeight();
                         updateSliderUI();
                         this.updateWidget();
                     };
@@ -5510,9 +6697,9 @@ app.registerExtension({
                         border-left: 1px solid rgba(255,255,255,0.08);
                         flex-shrink: 0;
                     `;
-                    valueDisplay.onclick = (e) => {
+                    valueDisplay.onclick = async (e) => {
                         e.stopPropagation();
-                        const newVal = prompt("输入权重:", lora.weight);
+                        const newVal = await mplEditValueAt(valueDisplay, lora.weight, { label: "权重" });
                         if (newVal !== null) {
                             const numVal = parseFloat(newVal);
                             if (!isNaN(numVal)) {
@@ -5587,17 +6774,33 @@ app.registerExtension({
                     updateSliderUI();
                 }
 
-                // 🏷️ 触发词按钮：左键编辑触发词，右键临时开关触发词输出（有触发词时亮起）
+                // 🏷️ 触发词按钮：左键编辑触发词；右键开关触发词（多触发词支持逐项屏蔽）
                 const tagBtn = document.createElement("button");
-                tagBtn.className = "mpl-mini-btn tag";
-                const _trigText = (lora.tags || lora.triggerWords || "").trim();
+                tagBtn.className = "mpl-mini-btn tag notranslate";
+                tagBtn.setAttribute("translate", "no");
+                const _rawTrigText = String(lora.tags || lora.triggerWords || "").trim();
+                const _trigWords = mplSplitTriggerWords(_rawTrigText);
+                const _activeTrigWords = _trigWords.filter(w => !mplTriggerEffectivelyDisabled(lora, w));
+                const _trigText = _activeTrigWords.join(", ");
                 const _trigOn = lora.triggerEnabled !== false;
-                if (_trigText && _trigOn) tagBtn.classList.add("active");
-                if (!_trigOn) tagBtn.classList.add("mpl-trigger-off");
+                const _trigOffCount = _trigWords.filter(w => mplTriggerEffectivelyDisabled(lora, w)).length;
+                const _trigPartial = _trigWords.length >= 2 && _trigOffCount > 0 && _trigOffCount < _trigWords.length;
+                if (_activeTrigWords.length && _trigOn) tagBtn.classList.add("active");
+                if (!_trigOn || (_trigWords.length && !_activeTrigWords.length)) tagBtn.classList.add("mpl-trigger-off");
+                if (_trigPartial) tagBtn.classList.add("mpl-trigger-partial");
                 tagBtn.textContent = "🏷️";
-                tagBtn.title = _trigText
-                    ? ((_trigOn ? "触发词：已启用（左键编辑 · 右键关闭）" : "触发词：已关闭（左键编辑 · 右键启用）") + "\n" + _trigText)
-                    : "暂无触发词（左键添加）";
+                if (_activeTrigWords.length) {
+                    if (_trigWords.length >= 2) {
+                        const state = _trigPartial ? `部分屏蔽 ${_trigOffCount}/${_trigWords.length}` : "全部启用";
+                        tagBtn.title = `触发词（${state}）· 左键编辑 · 右键逐项屏蔽\n${_trigText}`;
+                    } else {
+                        tagBtn.title = `触发词：已启用（左键编辑 · 右键关闭）\n${_trigText}`;
+                    }
+                } else if (_trigWords.length) {
+                    tagBtn.title = `触发词：已全部屏蔽（${_trigWords.length} 个已隐藏）· 左键编辑 · 右键启用`;
+                } else {
+                    tagBtn.title = "暂无触发词（左键添加）";
+                }
                 tagBtn.onclick = (e) => {
                     e.stopPropagation();
                     this.showTagEditModal(lora);
@@ -5605,6 +6808,10 @@ app.registerExtension({
                 tagBtn.oncontextmenu = (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (_trigWords.length >= 2) {
+                        this.showTriggerWordMenu(lora, e.clientX, e.clientY);
+                        return;
+                    }
                     lora.triggerEnabled = (lora.triggerEnabled === false);
                     this.renderEmbeddedList();
                     this.updateWidget();
@@ -5632,12 +6839,62 @@ app.registerExtension({
                     if (e.target === check || e.target === sortHandle || e.target === thumb ||
                         e.target === noteInput || 
                         e.target === weightContainer || e.target.closest('.mpl-weight-container') ||
+                        e.target === clipBadge || e.target === recBadge ||
                         e.target === tagBtn || e.target === editBtn || e.target === del ||
                         (typeof decreaseBtn !== 'undefined' && e.target === decreaseBtn) || (typeof increaseBtn !== 'undefined' && e.target === increaseBtn) || (typeof weightDisplay !== 'undefined' && e.target === weightDisplay)) {
                         e.preventDefault();
                         return false;
                     }
                 };
+
+                // 可选 CLIP 权重徽标（默认隐藏，在「⚙️设置 → 布局样式」中开启）
+                mplSyncClipWeight(lora);
+                if (this.layoutSettings && this.layoutSettings.hideClip === false) {
+                    clipBadge = document.createElement("div");
+                    clipBadge.className = "mpl-lora-clip-weight";
+                    mplUpdateClipBadgeUI(clipBadge, lora);
+                    clipBadge.onclick = async (e) => {
+                        e.stopPropagation();
+                        const v = await mplEditValueAt(clipBadge, mplClipWeightValue(lora), { label: "CLIP" });
+                        if (v !== null && mplSetCustomClipWeight(lora, v)) {
+                            refreshClipBadge();
+                            this.updateWidget();
+                        }
+                    };
+                    clipBadge.oncontextmenu = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        mplToggleClipFollow(lora);
+                        refreshClipBadge();
+                        this.updateWidget();
+                    };
+                    clipBadge.addEventListener("pointerdown", e => e.stopPropagation());
+                    clipBadge.addEventListener("mousedown", e => e.stopPropagation());
+                    clipBadge.addEventListener("dragstart", preventDrag);
+                }
+
+                // 紧凑作者推荐权重标签：仅在存在推荐值且未隐藏时显示，不占用空位
+                if (!(this.layoutSettings && this.layoutSettings.hideRecWeight)) {
+                    const _recW = Number(lora.recommendedWeight);
+                    if (Number.isFinite(_recW) && _recW > 0 && _recW <= 1) {
+                        recBadge = document.createElement("div");
+                        const _same = Math.abs(mplLoraWeight(lora) - _recW) < 0.005;
+                        recBadge.className = "mpl-lora-rec-weight" + (_same ? " is-applied" : "");
+                        recBadge.textContent = "荐 " + _recW.toFixed(2);
+                        const _src = lora.recommendedWeightSource || "作者推荐";
+                        recBadge.title = "作者推荐权重 " + _recW.toFixed(2) + "（" + _src + "）\n单击套用到模型权重" + (_same ? "\n（当前已是推荐值）" : "");
+                        recBadge.onclick = (e) => {
+                            e.stopPropagation();
+                            lora.weight = _recW;
+                            mplSyncClipWeight(lora);
+                            this.renderEmbeddedList();
+                            this.updateWidget();
+                        };
+                        recBadge.addEventListener("pointerdown", e => e.stopPropagation());
+                        recBadge.addEventListener("mousedown", e => e.stopPropagation());
+                        recBadge.addEventListener("dragstart", preventDrag);
+                    }
+                }
                 
                 check.addEventListener("dragstart", preventDrag);
                 thumb.addEventListener("dragstart", preventDrag);
@@ -5651,7 +6908,12 @@ app.registerExtension({
                 actions.className = "mpl-lora-actions";
                 actions.append(tagBtn, editBtn, del);
 
-                row.append(thumb, sortHandle, check, name, dragArea, noteInput, weightContainer, actions);
+                row.append(
+                    thumb, sortHandle, check, name, dragArea, noteInput, weightContainer,
+                    ...(clipBadge ? [clipBadge] : []),
+                    ...(recBadge ? [recBadge] : []),
+                    actions
+                );
 
                 row.oncontextmenu = (e) => {
                     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -5815,7 +7077,7 @@ app.registerExtension({
             nodeType.prototype.showFolderColorModal = function(folder, fDiv) {
                 const old = document.querySelector('.mpl-folder-color-overlay');
                 if (old) old.remove();
-                const DEF = { outer: "#18181c", inner: "#222228", bar: "#6366f1" };
+                const DEF = { outer: "#18181c", inner: "#222228", bar: "#6366f1", ignore: "#8fb8e8", normal: "#8fb8e8" };
                 const overlay = document.createElement("div");
                 overlay.className = "ma-modal-backdrop mpl-folder-color-overlay";
                 overlay.style.cssText = "position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;";
@@ -5832,6 +7094,8 @@ app.registerExtension({
                     outer: gcs.outer || "",
                     inner: gcs.inner || "",
                     bar: gcs.bar || "",
+                    ignore: gcs.ignore || "",
+                    normal: gcs.normal && gcs.normal !== "#8b8d9b" ? gcs.normal : "",
                 };
                 const hasLocal = !!(folder.color || folder.bgColor || folder.headBg);
                 const lcur = {
@@ -5907,6 +7171,8 @@ app.registerExtension({
                 const gInner = mkRow(globalSec, "标题栏背景", gcur.inner || DEF.inner);
                 const gOuter = mkRow(globalSec, "卡片背景", gcur.outer || DEF.outer);
                 const gBar = mkRow(globalSec, "左侧色条", gcur.bar || DEF.bar);
+                const gIgnore = mkRow(globalSec, "忽略时颜色", gcur.ignore || DEF.ignore);
+                const gNormal = mkRow(globalSec, "未忽略颜色", gcur.normal || DEF.normal);
 
                 applyFolderMode = (mode) => {
                     const follow = mode === "global";
@@ -5945,7 +7211,9 @@ app.registerExtension({
                 resetBtn.className = "ma-btn";
                 resetBtn.onclick = () => {
                     gOuter.value = DEF.outer; gInner.value = DEF.inner; gBar.value = DEF.bar;
+                    gIgnore.value = DEF.ignore; gNormal.value = DEF.normal;
                     gOuter.dataset.cleared = "1"; gInner.dataset.cleared = "1"; gBar.dataset.cleared = "1";
+                    gIgnore.dataset.cleared = "1"; gNormal.dataset.cleared = "1";
                     if (modeSwitch.getMode() === "global") {
                         lOuter.value = DEF.outer; lInner.value = DEF.inner; lBar.value = DEF.bar;
                         renderPreview();
@@ -5972,6 +7240,8 @@ app.registerExtension({
                         outer: gOuter.dataset.cleared ? "" : gOuter.value,
                         inner: gInner.dataset.cleared ? "" : gInner.value,
                         bar: gBar.dataset.cleared ? "" : gBar.value,
+                        ignore: gIgnore.dataset.cleared ? "" : gIgnore.value,
+                        normal: gNormal.dataset.cleared ? "" : gNormal.value,
                     };
                     this.properties["folder_color_settings"] = this.folderColorSettings;
                     this.renderEmbeddedList(); this.updateWidget();
@@ -6025,6 +7295,8 @@ app.registerExtension({
                     outer: f.outer || "",
                     inner: f.inner || "",
                     bar: f.bar || "",
+                    ignore: f.ignore || "",
+                    normal: f.normal || "",
                 };
                 this.properties["color_settings"] = this.colorSettings;
                 this.properties["folder_color_settings"] = this.folderColorSettings;
@@ -6072,7 +7344,7 @@ app.registerExtension({
                 });
                 if (!picked.length && fallbackLora) {
                     if (this._mplLoraInIgnoredFolder(fallbackLora)) {
-                        alert("该 LoRA 所在群组已被忽略，不参与分组；请先取消忽略。");
+                        void mplAlert("该 LoRA 所在群组已被忽略，不参与分组；请先取消忽略。");
                         return;
                     }
                     const tok = "l:" + this._uidFor(fallbackLora);
@@ -6139,7 +7411,7 @@ app.registerExtension({
                 });
                 if (!picked.length && fallbackLora) {
                     if (this._mplLoraInIgnoredFolder(fallbackLora)) {
-                        alert("该 LoRA 所在群组已被忽略，不参与额外群组；请先取消忽略。");
+                        void mplAlert("该 LoRA 所在群组已被忽略，不参与额外群组；请先取消忽略。");
                         return;
                     }
                     picked.push({ lora: fallbackLora, tok: "l:" + this._uidFor(fallbackLora) });
@@ -6208,6 +7480,92 @@ app.registerExtension({
                 this.updateWidget();
             };
 
+            nodeType.prototype.showTriggerWordMenu = function(lora, x, y) {
+                const old = document.querySelector('.mpl-ctx-menu');
+                if (old) old.remove();
+                const words = mplSplitTriggerWords(lora?.tags || lora?.triggerWords);
+                if (!words.length) return;
+                const menu = document.createElement("div");
+                menu.className = "mpl-ctx-menu";
+                menu.style.cssText = "position:fixed;z-index:10030;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.72);padding:6px;min-width:210px;max-width:300px;font-size:12.5px;color:#f4f4f5;";
+                menu.style.left = x + "px";
+                menu.style.top = y + "px";
+
+                const head = document.createElement("div");
+                head.textContent = `触发词（${words.length} 个）`;
+                head.style.cssText = "padding:5px 10px 7px;color:#a1a1aa;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:4px;font-size:12px;";
+                menu.appendChild(head);
+
+                const mkAction = (label, danger, fn) => {
+                    const it = document.createElement("div");
+                    it.textContent = label;
+                    it.style.cssText = "padding:7px 10px;border-radius:7px;cursor:pointer;white-space:nowrap;color:" + (danger ? "#f87171" : "#d4d4d8") + ";";
+                    it.onmouseenter = () => it.style.background = danger ? "rgba(239,68,68,0.14)" : "rgba(99,102,241,0.16)";
+                    it.onmouseleave = () => it.style.background = "transparent";
+                    it.onclick = (ev) => {
+                        ev.stopPropagation();
+                        menu.remove();
+                        fn();
+                        this.renderEmbeddedList();
+                        this.updateWidget();
+                    };
+                    menu.appendChild(it);
+                };
+                mkAction("全部启用", false, () => {
+                    lora.triggerEnabled = true;
+                    lora.triggerDisabled = [];
+                });
+                mkAction("全部屏蔽", true, () => {
+                    lora.triggerEnabled = false;
+                });
+
+                const sep = document.createElement("div");
+                sep.style.cssText = "height:1px;background:rgba(255,255,255,0.08);margin:5px 4px;";
+                menu.appendChild(sep);
+
+                const listWrap = document.createElement("div");
+                listWrap.style.cssText = "max-height:240px;overflow-y:auto;";
+                words.forEach(word => {
+                    const row = document.createElement("label");
+                    row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;cursor:pointer;color:#d4d4d8;";
+                    row.onmouseenter = () => row.style.background = "rgba(99,102,241,0.12)";
+                    row.onmouseleave = () => row.style.background = "transparent";
+                    const cb = document.createElement("input");
+                    cb.type = "checkbox";
+                    cb.checked = !mplTriggerEffectivelyDisabled(lora, word);
+                    cb.style.cssText = "accent-color:#6366f1;cursor:pointer;flex-shrink:0;";
+                    cb.addEventListener("pointerdown", e => e.stopPropagation());
+                    cb.onchange = () => {
+                        mplSetTriggerWordEnabled(lora, word, cb.checked);
+                        this.renderEmbeddedList();
+                        this.updateWidget();
+                    };
+                    const txt = document.createElement("span");
+                    txt.className = "notranslate";
+                    txt.setAttribute("translate", "no");
+                    txt.textContent = word;
+                    txt.title = word;
+                    txt.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+                    row.append(cb, txt);
+                    listWrap.appendChild(row);
+                });
+                menu.appendChild(listWrap);
+
+                document.body.appendChild(menu);
+                const r = menu.getBoundingClientRect();
+                if (r.right > window.innerWidth) menu.style.left = (window.innerWidth - r.width - 6) + "px";
+                if (r.bottom > window.innerHeight) menu.style.top = (window.innerHeight - r.height - 6) + "px";
+                ["pointerdown", "mousedown", "wheel"].forEach(ev =>
+                    menu.addEventListener(ev, e => e.stopPropagation(), { passive: ev === "wheel" }));
+
+                const close = (ev) => {
+                    if (menu.contains(ev.target)) return;
+                    menu.remove();
+                    document.removeEventListener("pointerdown", close, true);
+                };
+                setTimeout(() => document.addEventListener("pointerdown", close, true), 0);
+            };
+
             nodeType.prototype.showLoraRowContextMenu = function(lora, type, fIdx, lIdx, x, y) {
                 const old = document.querySelector('.mpl-ctx-menu');
                 if (old) old.remove();
@@ -6230,6 +7588,9 @@ app.registerExtension({
                 const selectedLoras = this._getMultiSelectedLoras();
                 const actionLoras = selectedLoras.length > 1 ? selectedLoras : [lora];
                 const many = actionLoras.length > 1;
+                mkItem("替换 LoRA", () => {
+                    this.showAddLoraModal({ replaceTarget: { type, fIdx, lIdx } });
+                }, false, 'refresh');
                 mkItem("加入收藏夹 ⭐", () => {
                     this._mplAddLoraToFavoriteMenu(lora.name, x, y);
                 });
@@ -6446,15 +7807,38 @@ app.registerExtension({
                     it.onclick = (ev) => { ev.stopPropagation(); menu.remove(); fn(); };
                     menu.appendChild(it);
                 };
+                mkItem("保存为预设组", async () => {
+                    const defName = String(folder.name || "预设").trim() || "预设";
+                    const oldCat = (MPL_SIDEBAR.assignments && MPL_SIDEBAR.assignments[defName]) || "";
+                    const name = await mplAsk("保存为预设组", defName, {
+                        message: "保存当前 LORA 组为预设（同名会覆盖更新）" + (oldCat ? "\n当前分类：" + oldCat : ""),
+                    });
+                    if (!name || !name.trim()) return;
+                    const nm = name.trim();
+                    const category = (MPL_SIDEBAR.assignments && MPL_SIDEBAR.assignments[nm]) || oldCat || "";
+                    const content = { folders: [JSON.parse(JSON.stringify(folder))] };
+                    delete content.folders[0]._uid;
+                    (content.folders[0].loras || []).forEach(l => delete l._uid);
+                    api.fetchApi("/ma/lora/save_preset", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: nm, content, category }),
+                    }).then(r => r.json()).then(res => {
+                        if (res && res.status === "error") {
+                            void mplAlert("保存预设失败：" + ((res && res.message) || "未知错误"));
+                            return;
+                        }
+                        return mplLoadSidebar(true).then(() => mplRefreshAllSidebars());
+                    }).catch(err => void mplAlert("保存预设失败: " + err));
+                }, false, 'save');
                 mkItem("颜色设置", () => {
                     this.showFolderColorModal(folder, fDiv);
                 }, false, 'palette');
-                mkItem("重命名", () => {
-                    const newName = prompt("Rename:", folder.name);
-                    if (newName) { folder.name = newName; this.renderEmbeddedList(); this.updateWidget(); }
+                mkItem("重命名", async () => {
+                    const newName = await mplAsk("重命名文件夹", folder.name, { message: "输入新的文件夹名称：" });
+                    if (newName && newName.trim()) { folder.name = newName.trim(); this.renderEmbeddedList(); this.updateWidget(); }
                 }, false, 'edit');
-                mkItem("删除文件夹", () => {
-                    if (confirm("Delete folder?")) {
+                mkItem("删除文件夹", async () => {
+                    if (await mplConfirm("Delete folder?", { danger: true, okText: "删除" })) {
                         if (this._previewTimeout) { clearTimeout(this._previewTimeout); this._previewTimeout = null; }
                         if (this._previewDiv) { this._previewDiv.remove(); this._previewDiv = null; }
                         document.querySelectorAll('.mpl-lora-preview').forEach(p => p.remove());
@@ -6549,9 +7933,12 @@ app.registerExtension({
                 }
             };
 
-            nodeType.prototype.showAddLoraModal = async function() {
+            nodeType.prototype.showAddLoraModal = async function(opts) {
                 try {
+                    const pendingReplace = opts && opts.replaceTarget ? opts.replaceTarget : null;
+                    const actionMode = pendingReplace ? "replace" : "add";
                     let cacheTimestamp = new Date().getTime();
+                    try { await mplLoadSidebar(); } catch (e) {}
                     
                     const resp = await api.fetchApi("/ma/lora/list");
                     const data = await resp.json();
@@ -6628,14 +8015,29 @@ app.registerExtension({
                     header.style.cssText = "padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;gap:10px;align-items:center;background:#151519;border-radius:14px 14px 0 0;cursor:move;user-select:none;";
                     
                     const title = document.createElement("div");
-                    title.textContent = "添加 Lora";
+                    title.textContent = actionMode === "replace" ? "替换 Lora" : "添加 Lora";
                     title.style.cssText = "color:#f4f4f5;font-weight:650;font-size:15px;white-space:nowrap;flex:1;letter-spacing:-0.01em;";
                     
                     header.appendChild(title);
+                    if (actionMode === "add") {
+                        const loraStrBtn = document.createElement("button");
+                        loraStrBtn.type = "button";
+                        loraStrBtn.className = "ma-btn";
+                        loraStrBtn.textContent = "📋 导入 LORA 串";
+                        loraStrBtn.title = "粘贴 <lora:名称:权重> 批量导入（支持前缀忽略与近似匹配）";
+                        loraStrBtn.style.cssText = "padding:5px 11px;font-size:12px;white-space:nowrap;";
+                        loraStrBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+                        loraStrBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            try { document.body.removeChild(dialog); } catch (_) {}
+                            void this.showLoraStringModal();
+                        };
+                        header.appendChild(loraStrBtn);
+                    }
                     dialog.appendChild(header);
                     
                     const pathBar = document.createElement("div");
-                    pathBar.style.cssText = "padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.06);background:#0d0d10;display:flex;align-items:center;gap:10px;flex-wrap:wrap;";
+                    pathBar.style.cssText = "padding:8px 18px;border-bottom:1px solid rgba(255,255,255,0.06);background:#0d0d10;display:flex;align-items:center;gap:10px;flex-wrap:wrap;";
                     
                     const allTabIdleStyle = "padding:4px 10px;background:#18181c;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:#d4d4d8;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.15s;";
                     const allTabActiveStyle = "padding:4px 10px;background:rgba(239,68,68,0.16);border:1px solid rgba(239,68,68,0.45);border-radius:6px;color:#fca5a5;cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s;";
@@ -6716,6 +8118,42 @@ app.registerExtension({
                     
                     updatePathDisplay();
                     pathBar.appendChild(pathDisplay);
+
+                    // 添加位置选择器（放在路径栏右侧，避免挤压搜索工具栏导致换行）
+                    const addTargetWrap = document.createElement("div");
+                    addTargetWrap.style.cssText = "display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-left:auto;";
+                    const addTargetLabel = document.createElement("span");
+                    addTargetLabel.textContent = "加入位置:";
+                    addTargetLabel.style.cssText = "color:#a1a1aa;font-size:12px;white-space:nowrap;";
+                    const addTargetSelect = document.createElement("select");
+                    addTargetSelect.className = "ma-select";
+                    addTargetSelect.style.cssText = "padding:4px 9px;font-size:12px;max-width:220px;width:auto;";
+                    addTargetSelect.title = "添加 LoRA 时归入的节点群组或预设组";
+                    const buildAddTargetOptions = () => {
+                        const prev = addTargetSelect.value;
+                        addTargetSelect.innerHTML = "";
+                        const mkOpt = (v, t) => {
+                            const o = document.createElement("option");
+                            o.value = v; o.textContent = t; addTargetSelect.appendChild(o);
+                        };
+                        mkOpt("root", "📂 当前节点（不分组）");
+                        (this.loraData.folders || []).forEach((f, i) => {
+                            mkOpt("f:" + i, "📁 " + (f.name || ("组 " + (i + 1))) + "（本节点）");
+                        });
+                        Object.keys(MPL_SIDEBAR.presets || {}).forEach(n => {
+                            const cat = (MPL_SIDEBAR.assignments && MPL_SIDEBAR.assignments[n]) || "";
+                            mkOpt("p:" + n, "⭐ " + n + (cat ? "（" + cat + "）" : "（预设组）"));
+                        });
+                        try {
+                            const saved = localStorage.getItem("MA_ADD_TARGET") || "root";
+                            if ([...addTargetSelect.options].some(o => o.value === saved)) addTargetSelect.value = saved;
+                            else if (prev && [...addTargetSelect.options].some(o => o.value === prev)) addTargetSelect.value = prev;
+                        } catch (e) {}
+                    };
+                    buildAddTargetOptions();
+                    addTargetSelect.onchange = () => { try { localStorage.setItem("MA_ADD_TARGET", addTargetSelect.value); } catch (e) {} };
+                    addTargetWrap.append(addTargetLabel, addTargetSelect);
+                    if (actionMode !== "replace") pathBar.appendChild(addTargetWrap);
                     dialog.appendChild(pathBar);
                     
                     const toolbar = document.createElement("div");
@@ -6724,8 +8162,8 @@ app.registerExtension({
                     const search = document.createElement("input");
                     search.placeholder = "🔍 搜索当前目录（支持文件名与标题）...";
                     search.className = "ma-input";
-                    // 宽度要能完整显示提示语，但不再无限撑满
-                    search.style.cssText = "flex:1 1 320px;min-width:300px;max-width:460px;padding:7px 11px;font-size:12.5px;";
+                    // 弹性铺开并与右侧控件同行对齐，避免多余换行
+                    search.style.cssText = "flex:1 1 220px;min-width:180px;padding:7px 11px;font-size:12.5px;";
                     search.addEventListener("keydown", (e) => { e.stopPropagation(); });
                     search.addEventListener("pointerdown", (e) => { e.stopPropagation(); });
 
@@ -6755,6 +8193,33 @@ app.registerExtension({
                         renderContent();
                     };
                     sortContainer.append(sortLabel, sortSelect);
+
+                    const resolveAddTarget = () => {
+                        const val = addTargetSelect.value || "root";
+                        if (val === "root") return this.loraData.loras;
+                        if (val.indexOf("f:") === 0) {
+                            const idx = parseInt(val.slice(2), 10);
+                            let f = (this.loraData.folders || [])[idx];
+                            if (!f) { f = { name: "新组", loras: [], collapsed: false }; this.loraData.folders.push(f); }
+                            return (f.loras = f.loras || []);
+                        }
+                        if (val.indexOf("p:") === 0) {
+                            const pname = val.slice(2);
+                            let f = (this.loraData.folders || []).find(x => x && x.name === pname);
+                            if (!f) {
+                                let base = [];
+                                try {
+                                    const pfs = mplPresetFolders(MPL_SIDEBAR.presets[pname]);
+                                    const src = pfs.find(x => x.name === pname) || pfs[0];
+                                    if (src) base = (src.loras || []).map(l => mplDecorateNewLora(JSON.parse(JSON.stringify(l))));
+                                } catch (e) {}
+                                f = { name: pname, loras: base, collapsed: false };
+                                (this.loraData.folders = this.loraData.folders || []).push(f);
+                            }
+                            return (f.loras = f.loras || []);
+                        }
+                        return this.loraData.loras;
+                    };
 
                     const mplSortList = (arr) => {
                         const copy = arr.slice();
@@ -6825,9 +8290,9 @@ app.registerExtension({
                         }
                     };
                     
-                    // 右侧控件成组靠右：搜索在左、排序/开关/刷新在右，互不挤压
+                    // 右侧控件成组靠右：搜索在左、排序/开关/刷新同行靠右，不折行错位
                     const toolbarRight = document.createElement("div");
-                    toolbarRight.style.cssText = "display:flex;align-items:center;gap:12px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;";
+                    toolbarRight.style.cssText = "display:flex;align-items:center;gap:12px;flex:0 0 auto;flex-wrap:nowrap;";
                     toolbarRight.append(sortContainer, autoTagContainer, refreshBtn);
                     toolbar.append(search, toolbarRight);
                     dialog.appendChild(toolbar);
@@ -6865,7 +8330,7 @@ app.registerExtension({
                     
                     const addBtn = document.createElement("button");
                     addBtn.className = "ma-btn ma-btn-primary";
-                    addBtn.textContent = "添加选中 LoRA";
+                    addBtn.textContent = actionMode === "replace" ? "替换为选中 LoRA" : "添加选中 LoRA";
                     addBtn.style.cssText = "padding:7px 16px;font-size:12.5px;";
                     
                     const closeBtn = document.createElement("button");
@@ -7178,6 +8643,14 @@ app.registerExtension({
                     };
                     
                     addBtn.onclick = async () => {
+                        if (actionMode === "replace") {
+                            if (!pendingReplace) { void mplAlert("请先选择要替换的 LoRA"); return; }
+                            const first = Array.from(selectedFiles)[0];
+                            if (!first) { void mplAlert("请选择要替换成的 LoRA"); return; }
+                            await this.performReplaceLora(pendingReplace, first);
+                            document.body.removeChild(dialog);
+                            return;
+                        }
                         const parsePreferredWeight = (logContent) => {
                             if (!logContent || !logContent.trim()) return null;
                             try {
@@ -7257,9 +8730,10 @@ app.registerExtension({
                                 tagMap.set(fileName, tags);
                             });
                             
+                            const addDest = resolveAddTarget();
                             selectedFiles.forEach(fileName => {
                                 const preferredWeight = weightMap.get(fileName);
-                                this.loraData.loras.push(mplDecorateNewLora({ 
+                                addDest.push(mplDecorateNewLora({ 
                                     name: fileName, 
                                     weight: preferredWeight !== null ? preferredWeight : 1.0, 
                                     enabled: true, 
@@ -7268,9 +8742,10 @@ app.registerExtension({
                                 }));
                             });
                         } else {
+                            const addDest = resolveAddTarget();
                             selectedFiles.forEach(fileName => {
                                 const preferredWeight = weightMap.get(fileName);
-                                this.loraData.loras.push(mplDecorateNewLora({ 
+                                addDest.push(mplDecorateNewLora({ 
                                     name: fileName, 
                                     weight: preferredWeight !== null ? preferredWeight : 1.0, 
                                     enabled: true, 
@@ -7309,7 +8784,52 @@ app.registerExtension({
                     requestAnimationFrame(() => {
                         try { renderContent(); } catch(e) { console.error(e); }
                     });
-                } catch(e) { alert("Error: "+e); }
+                } catch(e) { void mplAlert("Error: "+e); }
+            };
+
+            // 替换指定位置 LoRA 文件；保留模型/CLIP 权重与启用状态，按新文件重新同步触发词、备注与推荐权重
+            nodeType.prototype.performReplaceLora = async function(target, newName) {
+                if (!target) return;
+                let lora = null;
+                if (target.type === "root") {
+                    lora = (this.loraData.loras || [])[target.lIdx] || null;
+                } else if (target.type === "folder") {
+                    const folder = (this.loraData.folders || [])[target.fIdx];
+                    if (folder) lora = (folder.loras || [])[target.lIdx] || null;
+                }
+                if (!lora) return;
+                const keep = {
+                    weight: lora.weight,
+                    clipWeight: lora.clipWeight,
+                    clipFollow: lora.clipFollow,
+                    enabled: lora.enabled,
+                };
+                lora.name = newName;
+                lora.tags = "";
+                lora.triggerWords = "";
+                delete lora.triggerDisabled;
+                delete lora.recommendedWeight;
+                delete lora.recommendedWeightSource;
+                lora.note = "";
+                mplDecorateNewLora(lora);
+                if (!String(lora.tags || "").trim() || lora.recommendedWeight === undefined) {
+                    try {
+                        await mplLoadExtraInfo(true);
+                        mplDecorateNewLora(lora);
+                    } catch (e) {}
+                }
+                if (!String(lora.tags || "").trim()) {
+                    try {
+                        const res = await api.fetchApi("/ma/lora/get_lora_file", {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ lora_filename: newName, file_type: "txt" }),
+                        }).then(r => r.json());
+                        if (res && res.status === "success" && res.content) mplSetTriggerWords(lora, res.content);
+                    } catch (e) {}
+                }
+                Object.assign(lora, keep);
+                this.renderEmbeddedList();
+                this.updateWidget();
             };
 
             nodeType.prototype.showLoraDetectModal = async function(opts) {
@@ -7772,23 +9292,23 @@ app.registerExtension({
                     closeX.onclick = () => closeDetectModal();
                     document.addEventListener("keydown", escHandler, true);
                 } catch (e) {
-                    alert("LoRA 检测: " + e);
+                    void mplAlert("LoRA 检测: " + e);
                 }
             };
 
             nodeType.prototype.saveFolderPreset = async function(folder) {
-                const name = prompt("Save Preset As:", folder.name);
-                if(!name) return;
+                const name = await mplAsk("保存为预设", folder.name, { message: "预设名称：" });
+                if(!name || !name.trim()) return;
                 try {
                     await api.fetchApi("/ma/lora/save_preset", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ name, content: { folders: [folder] } })
+                        body: JSON.stringify({ name: name.trim(), content: { folders: [folder] } })
                     });
                     await mplLoadSidebar(true);
                     mplRefreshAllSidebars();
-                    alert("Saved!");
-                } catch(e) { alert(e); }
+                    void mplAlert("预设已保存");
+                } catch(e) { void mplAlert(String(e)); }
             };
 
             nodeType.prototype.showSettingsModal = function(initialTab = "mode") {
@@ -7813,53 +9333,80 @@ app.registerExtension({
                 else if (sdnqOn) primaryMode = "sdnq";
                 else if (currentAnimaMode === "anima") primaryMode = "anima";
                 
-                // 创建遮罩层
-                const overlay = document.createElement("div");
-                overlay.className = "ma-modal-backdrop";
-                overlay.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    z-index: 10001;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                `;
+                // 关闭已存在的悬浮设置窗口，避免重复堆叠
+                document.querySelectorAll(".mpl-settings-floating").forEach(el => {
+                    try { el.__mplCleanup?.(); } catch (e) { el.remove(); }
+                });
 
-                // 创建弹窗（一比一参考 magic_resolution.js：fixed + translate(-50%,-50%) 居中）
+                let _spos = null;
+                try { _spos = JSON.parse(localStorage.getItem("MA_SETTINGS_WIN") || "null"); } catch (e) { _spos = null; }
+                let _sw = Math.min(580, Math.round(window.innerWidth * 0.94));
+                let _sh = Math.min(680, Math.round(window.innerHeight * 0.85));
+                let _sl = Math.max(16, Math.round(window.innerWidth / 2 - _sw / 2));
+                let _st = Math.max(16, Math.round(window.innerHeight / 2 - _sh / 2));
+                if (_spos && typeof _spos.w === "number" && typeof _spos.left === "number") {
+                    _sw = Math.max(460, Math.min(_spos.w, window.innerWidth - 24));
+                    _sh = Math.max(360, Math.min(_spos.h, window.innerHeight - 24));
+                    _sl = Math.max(0, Math.min(_spos.left, window.innerWidth - 120));
+                    _st = Math.max(0, Math.min(_spos.top, window.innerHeight - 80));
+                }
+
+                // 无全屏遮罩悬浮设置窗，可边改设置边查看/操作画布
                 const dialog = document.createElement("div");
-                dialog.className = "ma-modal";
+                dialog.className = "ma-modal mpl-settings-floating";
+                dialog.tabIndex = -1;
                 dialog.style.cssText = `
                     position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
+                    top: ${_st}px;
+                    left: ${_sl}px;
                     padding: 0;
-                    width: 580px;
+                    width: ${_sw}px;
+                    height: ${_sh}px;
+                    min-width: min(460px, 94vw);
+                    min-height: 360px;
                     max-width: 96vw;
-                    max-height: 85vh;
-                    z-index: 10002;
+                    max-height: 92vh;
+                    resize: both;
+                    z-index: 9999;
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
+                    outline: none;
                 `;
+                dialog.__maSaveWinPos = () => {
+                    try {
+                        const r = dialog.getBoundingClientRect();
+                        localStorage.setItem("MA_SETTINGS_WIN", JSON.stringify({ left: r.left, top: r.top, w: r.width, h: r.height }));
+                    } catch (e) {}
+                };
 
-                // 标题栏（可拖拽）
+                // 标题栏（可拖拽，带右上角关闭按钮）
                 const title = document.createElement("div");
-                title.textContent = "设置";
                 title.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 10px;
                     font-size: 15px;
                     font-weight: 650;
                     color: #f4f4f5;
-                    padding: 14px 20px;
+                    padding: 12px 16px 12px 20px;
                     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
                     cursor: move;
                     user-select: none;
                     background: #151519;
                     flex-shrink: 0;
                 `;
+                const titleText = document.createElement("span");
+                titleText.textContent = "设置";
+                const closeX = document.createElement("button");
+                closeX.type = "button";
+                closeX.textContent = "✕";
+                closeX.style.cssText = "width:26px;height:26px;padding:0;border-radius:7px;border:1px solid transparent;background:transparent;color:#a1a1aa;cursor:pointer;font-size:14px;";
+                closeX.onmouseenter = () => { closeX.style.background = "#222228"; closeX.style.color = "#f4f4f5"; };
+                closeX.onmouseleave = () => { closeX.style.background = "transparent"; closeX.style.color = "#a1a1aa"; };
+                closeX.addEventListener("pointerdown", (e) => e.stopPropagation());
+                title.append(titleText, closeX);
 
                 // Tab 切换栏
                 const tabBar = document.createElement("div");
@@ -8385,12 +9932,12 @@ app.registerExtension({
                 sliderParamsSection.appendChild(maxRow.row);
                 sliderParamsSection.appendChild(widthRow.row);
 
-                const buildCheckboxRow = (labelText, key) => {
+                const buildCheckboxRow = (labelText, key, defaultValue = true) => {
                     const row = document.createElement("label");
                     row.style.cssText = "display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 0;";
                     const cb = document.createElement("input");
                     cb.type = "checkbox";
-                    cb.checked = this.layoutSettings?.[key] ?? true;
+                    cb.checked = this.layoutSettings?.[key] ?? defaultValue;
                     cb.style.cssText = "width: 15px; height: 15px; cursor: pointer; accent-color: #6366f1;";
                     const lab = document.createElement("div");
                     lab.textContent = labelText;
@@ -8399,10 +9946,22 @@ app.registerExtension({
                     row.appendChild(lab);
                     return { row, cb };
                 };
-                const showValueRow = buildCheckboxRow("滑条旁显示当前数值", "showWeightValue");
-                const snapRow = buildCheckboxRow("拖动时吸附 0（±0.02 范围内）", "snapToZero");
+                const showValueRow = buildCheckboxRow("滑条旁显示当前数值", "showWeightValue", true);
+                const snapRow = buildCheckboxRow("拖动时吸附 0（±0.02 范围内）", "snapToZero", true);
                 sliderParamsSection.appendChild(showValueRow.row);
                 sliderParamsSection.appendChild(snapRow.row);
+
+                // 列表显示开关（CLIP 权重列 & 作者推荐权重标签）
+                const displaySection = document.createElement("div");
+                displaySection.style.cssText = "display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; background: #18181c; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);";
+                const displayTitle = document.createElement("div");
+                displayTitle.textContent = "列表显示";
+                displayTitle.style.cssText = "color: #f4f4f5; font-size: 13px; font-weight: 600; margin-bottom: 2px;";
+                const showClipRow = buildCheckboxRow("显示 CLIP 权重列（右键切换跟随/自定义，默认隐藏）", "__showClip", !(this.layoutSettings?.hideClip ?? true));
+                showClipRow.cb.checked = !(this.layoutSettings?.hideClip ?? true);
+                const showRecRow = buildCheckboxRow("显示作者推荐权重标签（存在推荐值时显示「荐」，单击套用）", "__showRec", !(this.layoutSettings?.hideRecWeight ?? false));
+                showRecRow.cb.checked = !(this.layoutSettings?.hideRecWeight ?? false);
+                displaySection.append(displayTitle, showClipRow.row, showRecRow.row);
 
                 const updateStyleSelection = () => {
                     [styleArrows, styleSlider].forEach((s) => {
@@ -8424,6 +9983,7 @@ app.registerExtension({
                 layoutContainer.appendChild(layoutDesc);
                 layoutContainer.appendChild(styleSection);
                 layoutContainer.appendChild(sliderParamsSection);
+                layoutContainer.appendChild(displaySection);
 
                 // ========== 主题配色与颜色预设（融合进布局样式 Tab） ==========
                 const colorDivider = document.createElement("div");
@@ -8733,9 +10293,10 @@ app.registerExtension({
                     renderPresetCards();
                 };
 
-                savePresetBtn.onclick = () => {
-                    const name = (savePresetInput.value || "").trim() || prompt("给当前配色起个名字：", "我的配色");
-                    if (!name) return;
+                savePresetBtn.onclick = async () => {
+                    const name = (savePresetInput.value || "").trim() || await mplAsk("保存配色预设", "我的配色", { message: "给当前配色起个名字：" });
+                    if (!name || !name.trim()) return;
+                    const curFs = this.folderColorSettings || {};
                     const preset = {
                         name: name.trim(),
                         lora: {
@@ -8747,6 +10308,8 @@ app.registerExtension({
                             outer: folderGroup.inputs.outer.value || DEF_FOLDER_COLOR.outer,
                             inner: folderGroup.inputs.inner.value || DEF_FOLDER_COLOR.inner,
                             bar: folderGroup.inputs.bar.value || DEF_FOLDER_COLOR.bar,
+                            ignore: curFs.ignore || "",
+                            normal: curFs.normal || "",
                         },
                     };
                     const arr = this._loadCustomColorPresets();
@@ -8764,21 +10327,29 @@ app.registerExtension({
                 content.appendChild(modeTabContent);
                 content.appendChild(layoutTabContent);
 
-                // 点击遮罩层关闭
-                overlay.onclick = (e) => {
-                    if (e.target === overlay) {
-                        document.body.removeChild(overlay);
-                    }
+                const closeSettings = () => {
+                    try { dialog.__maSaveWinPos?.(); } catch (e) {}
+                    dialog.remove();
                 };
+                dialog.__mplCleanup = closeSettings;
+                closeX.onclick = () => closeSettings();
 
-                // ESC键关闭
-                const handleEsc = (e) => {
-                    if (e.key === "Escape") {
-                        document.body.removeChild(overlay);
-                        document.removeEventListener("keydown", handleEsc);
+                const stopProp = (e) => { e.stopPropagation(); };
+                dialog.addEventListener("pointerdown", stopProp);
+                dialog.addEventListener("pointermove", stopProp);
+                dialog.addEventListener("pointerup", (e) => {
+                    e.stopPropagation();
+                    dialog.__maSaveWinPos?.();
+                });
+                dialog.addEventListener("mousedown", stopProp);
+                dialog.addEventListener("wheel", stopProp, { passive: false });
+                dialog.addEventListener("keydown", (e) => {
+                    e.stopPropagation();
+                    if (e.key === "Escape" && !document.querySelector(".mpl-dialog-overlay")) {
+                        e.preventDefault();
+                        closeSettings();
                     }
-                };
-                document.addEventListener("keydown", handleEsc);
+                });
 
                 // 确定按钮
                 const confirmBtn = document.createElement("button");
@@ -8787,7 +10358,7 @@ app.registerExtension({
                 confirmBtn.onclick = () => {
                     const isAdaptiveSelected = radioAdaptive.checked;
                     const isDefaultSelected = radioDefault.checked;
-                    const scope = overlay;
+                    const scope = dialog;
                     let selectedSdnqMode = "none";
                     if (!isDefaultSelected && !isAdaptiveSelected) selectedSdnqMode = scope.querySelector('input[name="sdnq_mode"]:checked')?.value || "none";
                     this.sdnqMode = selectedSdnqMode;
@@ -8818,6 +10389,8 @@ app.registerExtension({
                         sliderWidth: Math.max(60, Math.min(300, parseInt(widthRow.input.value, 10) || 110)),
                         showWeightValue: showValueRow.cb.checked,
                         snapToZero: snapRow.cb.checked,
+                        hideClip: !showClipRow.cb.checked,
+                        hideRecWeight: !showRecRow.cb.checked,
                     };
                     if (newLayout.sliderMin >= newLayout.sliderMax) {
                         newLayout.sliderMax = newLayout.sliderMin + 0.1;
@@ -8825,7 +10398,8 @@ app.registerExtension({
                     this.layoutSettings = newLayout;
                     this.properties["layout_settings"] = newLayout;
 
-                    // 保存主题配色设置
+                    // 保存主题配色设置（保留已设置的文件夹忽略/未忽略颜色）
+                    const prevFs = this.folderColorSettings || {};
                     this.colorSettings = {
                         selectBg: loraGroup.inputs.selectBg.value || DEF_LORA_COLOR.selectBg,
                         selectBar: loraGroup.inputs.selectBar.value || DEF_LORA_COLOR.selectBar,
@@ -8836,8 +10410,10 @@ app.registerExtension({
                               outer: folderGroup.inputs.outer.value || DEF_FOLDER_COLOR.outer,
                               inner: folderGroup.inputs.inner.value || DEF_FOLDER_COLOR.inner,
                               bar: folderGroup.inputs.bar.value || DEF_FOLDER_COLOR.bar,
+                              ignore: prevFs.ignore || "",
+                              normal: prevFs.normal || "",
                           }
-                        : { outer: "", inner: "", bar: "" };
+                        : { outer: "", inner: "", bar: "", ignore: prevFs.ignore || "", normal: prevFs.normal || "" };
                     this.properties["color_settings"] = this.colorSettings;
                     this.properties["folder_color_settings"] = this.folderColorSettings;
                     this.applyColorSettings?.();
@@ -8861,38 +10437,57 @@ app.registerExtension({
                     this.updateWidget();
                     this._updateKleinBanner?.();
                     this.renderEmbeddedList?.();
-                    document.body.removeChild(overlay);
+                    closeSettings();
                 };
 
                 // 取消按钮
                 const cancelBtn = document.createElement("button");
                 cancelBtn.className = "ma-btn";
                 cancelBtn.textContent = "取消";
-                cancelBtn.onclick = () => document.body.removeChild(overlay);
+                cancelBtn.onclick = () => closeSettings();
 
-                // 组装弹窗
+                // 组装弹窗（直接挂 body，无全屏遮罩）
                 buttonContainer.appendChild(cancelBtn);
                 buttonContainer.appendChild(confirmBtn);
                 dialog.appendChild(title);
                 dialog.appendChild(tabBar);
                 dialog.appendChild(content);
                 dialog.appendChild(buttonContainer);
-                overlay.appendChild(dialog);
-                document.body.appendChild(overlay);
+                document.body.appendChild(dialog);
 
                 // 使弹窗可拖拽
                 this.makeDialogDraggable(dialog, title);
             };
 
-            // 📂 预设与收藏中心：预设分类 + 收藏夹全部收进这个弹窗（节点内不再放左侧栏）
+            // 📂 预设与收藏中心：无遮罩悬浮窗口，可边操作画布边使用预设与收藏
             nodeType.prototype.loadPresetModal = async function() {
-                const overlay = document.createElement("div");
-                overlay.className = "ma-modal-backdrop";
-                overlay.style.cssText = "position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.55);";
+                document.querySelectorAll(".mpl-preset-floating").forEach(el => {
+                    try { el.__mplCleanup?.(); } catch (e) { el.remove(); }
+                });
+
+                let _ppos = null;
+                try { _ppos = JSON.parse(localStorage.getItem("MA_PRESET_WIN") || "null"); } catch (e) { _ppos = null; }
+                let _pw = Math.min(820, Math.round(window.innerWidth * 0.92));
+                let _ph = Math.min(580, Math.round(window.innerHeight * 0.85));
+                let _pl = Math.max(16, Math.round(window.innerWidth / 2 - _pw / 2));
+                let _pt = Math.max(16, Math.round(window.innerHeight / 2 - _ph / 2));
+                if (_ppos && typeof _ppos.w === "number" && typeof _ppos.left === "number") {
+                    _pw = Math.max(520, Math.min(_ppos.w, window.innerWidth - 24));
+                    _ph = Math.max(360, Math.min(_ppos.h, window.innerHeight - 24));
+                    _pl = Math.max(0, Math.min(_ppos.left, window.innerWidth - 120));
+                    _pt = Math.max(0, Math.min(_ppos.top, window.innerHeight - 80));
+                }
 
                 const dialog = document.createElement("div");
-                dialog.className = "ma-modal";
-                dialog.style.cssText = "position:relative;width:min(880px,94vw);height:min(620px,88vh);display:flex;flex-direction:column;overflow:hidden;background:#111114;border:1px solid rgba(255,255,255,0.11);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,0.78);color:#f4f4f5;z-index:10002;font:12.5px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;";
+                dialog.className = "ma-modal mpl-preset-floating";
+                dialog.tabIndex = -1;
+                dialog.style.cssText = `position:fixed;top:${_pt}px;left:${_pl}px;width:${_pw}px;height:${_ph}px;min-width:min(520px,94vw);min-height:360px;max-width:96vw;max-height:92vh;resize:both;display:flex;flex-direction:column;overflow:hidden;background:#111114;border:1px solid rgba(255,255,255,0.12);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,0.78);color:#f4f4f5;z-index:9998;outline:none;font:12.5px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;`;
+                dialog.__maSaveWinPos = () => {
+                    try {
+                        const r = dialog.getBoundingClientRect();
+                        localStorage.setItem("MA_PRESET_WIN", JSON.stringify({ left: r.left, top: r.top, w: r.width, h: r.height }));
+                    } catch (e) {}
+                };
 
                 // ---------------- 头部 ----------------
                 const header = document.createElement("div");
@@ -8908,10 +10503,30 @@ app.registerExtension({
                 const headRight = document.createElement("div");
                 headRight.style.cssText = "margin-left:auto;display:flex;align-items:center;gap:8px;";
 
-                const refreshBtn = document.createElement("button");
-                refreshBtn.type = "button";
-                refreshBtn.textContent = "刷新";
-                refreshBtn.style.cssText = "padding:5px 12px;font-size:12px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:#18181c;color:#d4d4d8;cursor:pointer;";
+                const mkHeadBtn = (text, titleText, primary = false) => {
+                    const b = document.createElement("button");
+                    b.type = "button";
+                    b.textContent = text;
+                    if (titleText) b.title = titleText;
+                    b.style.cssText = primary
+                        ? "padding:5px 12px;font-size:12px;border-radius:7px;border:1px solid rgba(99,102,241,0.55);background:rgba(99,102,241,0.16);color:#e0e7ff;cursor:pointer;white-space:nowrap;"
+                        : "padding:5px 12px;font-size:12px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:#18181c;color:#d4d4d8;cursor:pointer;white-space:nowrap;";
+                    b.onmouseenter = () => { b.style.borderColor = "rgba(99,102,241,0.7)"; b.style.color = "#fff"; };
+                    b.onmouseleave = () => {
+                        b.style.borderColor = primary ? "rgba(99,102,241,0.55)" : "rgba(255,255,255,0.12)";
+                        b.style.color = primary ? "#e0e7ff" : "#d4d4d8";
+                    };
+                    return b;
+                };
+
+                const exportBtn = mkHeadBtn("导出备份", "导出全部预设、分类、排序与收藏夹为 JSON 文件");
+                const importBtn = mkHeadBtn("导入备份", "从 JSON 文件导入预设与收藏（导入前会自动下载当前数据备份）");
+                const backupFileInput = document.createElement("input");
+                backupFileInput.type = "file";
+                backupFileInput.accept = ".json,application/json";
+                backupFileInput.style.display = "none";
+
+                const refreshBtn = mkHeadBtn("刷新", "刷新预设与收藏列表");
 
                 const closeBtn = document.createElement("button");
                 closeBtn.type = "button";
@@ -8920,7 +10535,7 @@ app.registerExtension({
                 closeBtn.onmouseenter = () => { closeBtn.style.background = "#222228"; closeBtn.style.color = "#f4f4f5"; };
                 closeBtn.onmouseleave = () => { closeBtn.style.background = "transparent"; closeBtn.style.color = "#a1a1aa"; };
 
-                headRight.append(refreshBtn, closeBtn);
+                headRight.append(exportBtn, importBtn, backupFileInput, refreshBtn, closeBtn);
                 header.append(title, tabBar, headRight);
 
                 // ---------------- 主体：左侧筛选 + 右侧列表 ----------------
@@ -8955,8 +10570,56 @@ app.registerExtension({
                 body.append(filterCol, listCol);
 
                 const footer = document.createElement("div");
-                footer.style.cssText = "flex:0 0 auto;padding:8px 16px;display:flex;align-items:center;gap:10px;background:#151519;border-top:1px solid rgba(255,255,255,0.08);color:#71717a;font-size:11.5px;";
-                footer.textContent = "提示：节点里点文件夹标题栏的 💾 可保存为预设；右键左侧分类可以重命名 / 删除。";
+                footer.style.cssText = "flex:0 0 auto;padding:9px 16px;min-height:36px;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#151519;border-top:1px solid rgba(255,255,255,0.08);color:#71717a;font-size:11.5px;line-height:1.4;";
+                const footerHint = document.createElement("span");
+                footerHint.textContent = "提示：节点里点文件夹标题栏的 💾 可保存为预设；右键左侧分类可以重命名 / 删除。";
+                const footerStatus = document.createElement("span");
+                footerStatus.style.cssText = "color:#6ee7b7;white-space:nowrap;flex-shrink:0;";
+                footer.append(footerHint, footerStatus);
+
+                const stamp = () => new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+                exportBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    try {
+                        await mplLoadSidebar(true);
+                        const data = mplBuildSidebarBackup();
+                        mplDownloadJson(`magic-assistant-presets-favorites-${stamp()}.json`, data);
+                        footerStatus.textContent = `已导出 ${Object.keys(data.presets).length} 个预设、${data.favorites.length} 个收藏夹`;
+                    } catch (err) {
+                        const msg = "导出失败：" + ((err && err.message) || err);
+                        footerStatus.textContent = msg;
+                        void mplAlert(msg);
+                    }
+                };
+                importBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    backupFileInput.click();
+                };
+                backupFileInput.onchange = async () => {
+                    const file = backupFileInput.files && backupFileInput.files[0];
+                    if (!file) return;
+                    try {
+                        const payload = JSON.parse(await file.text());
+                        mplNormalizeSidebarImport(payload);
+                        await mplLoadSidebar(true);
+                        mplDownloadJson(`magic-assistant-backup-before-import-${stamp()}.json`, mplBuildSidebarBackup());
+                        if (!(await mplConfirm("导入会覆盖当前所有预设与收藏。当前数据已自动下载为备份文件，继续导入吗？", { okText: "继续导入" }))) {
+                            footerStatus.textContent = "已取消导入";
+                            return;
+                        }
+                        const count = await mplImportSidebarBackup(payload);
+                        const msg = `导入完成：${count} 个预设，${(MPL_SIDEBAR.favorites || []).length} 个收藏夹`;
+                        footerStatus.textContent = msg;
+                        await doRefresh();
+                        void mplAlert(msg);
+                    } catch (err) {
+                        const msg = "导入失败：" + ((err && err.message) || err);
+                        footerStatus.textContent = msg;
+                        void mplAlert(msg);
+                    } finally {
+                        backupFileInput.value = "";
+                    }
+                };
 
                 dialog.append(header, body, footer);
 
@@ -9031,10 +10694,10 @@ app.registerExtension({
                     if (activeTab === "presets") {
                         filterTitle.textContent = "预设分类";
                         addBtn.textContent = "+ 分类";
-                        addBtn.onclick = (e) => {
+                        addBtn.onclick = async (e) => {
                             e.stopPropagation();
-                            this._mplNewPresetCategory();
-                            setTimeout(() => { try { renderFilters(); renderBody(); } catch (err) {} }, 60);
+                            await this._mplNewPresetCategory();
+                            try { renderFilters(); renderBody(); } catch (err) {}
                         };
                         const allNames = Object.keys(st.presets || {});
                         const cats = Array.isArray(st.categories) ? st.categories.slice() : [];
@@ -9064,10 +10727,10 @@ app.registerExtension({
                     } else {
                         filterTitle.textContent = "收藏夹";
                         addBtn.textContent = "+ 收藏夹";
-                        addBtn.onclick = (e) => {
+                        addBtn.onclick = async (e) => {
                             e.stopPropagation();
-                            this._mplNewFavoriteCollection();
-                            setTimeout(() => { try { renderFilters(); renderBody(); } catch (err) {} }, 60);
+                            await this._mplNewFavoriteCollection();
+                            try { renderFilters(); renderBody(); } catch (err) {}
                         };
                         const cols = Array.isArray(st.favorites) ? st.favorites : [];
                         const seen = new Set();
@@ -9150,7 +10813,7 @@ app.registerExtension({
                     };
 
                     const renameBtn = mkBtn("✎", "重命名预设", async () => {
-                        const nn = prompt("预设新名称：", name);
+                        const nn = await mplAsk("重命名预设", name, { message: "输入新的预设名称：" });
                         if (!nn || !nn.trim() || nn.trim() === name) return;
                         try {
                             const resp = await api.fetchApi("/ma/lora/rename_preset", {
@@ -9160,12 +10823,12 @@ app.registerExtension({
                             });
                             const rj = await resp.json();
                             if (!rj || rj.status !== "success") {
-                                alert("重命名失败：" + ((rj && rj.message) || "未知错误"));
+                                void mplAlert("重命名失败：" + ((rj && rj.message) || "未知错误"));
                                 return;
                             }
                             await doRefresh();
                         } catch (err) {
-                            alert("重命名失败：" + err);
+                            void mplAlert("重命名失败：" + err);
                         }
                     });
 
@@ -9176,7 +10839,7 @@ app.registerExtension({
                     });
 
                     const delBtn = mkBtn("×", "删除预设", async () => {
-                        if (!confirm(`确定要删除预设 "${name}" 吗？`)) return; 
+                        if (!(await mplConfirm(`确定要删除预设 "${name}" 吗？`, { danger: true, okText: "删除" }))) return; 
                         try {
                             await api.fetchApi("/ma/lora/delete_preset", {
                                 method: "POST",
@@ -9187,7 +10850,7 @@ app.registerExtension({
                             delete MPL_SIDEBAR.assignments[name];
                             await doRefresh();
                         } catch (err) {
-                            alert("删除失败：" + err);
+                            void mplAlert("删除失败：" + err);
                         }
                     }, true);
 
@@ -9313,37 +10976,45 @@ app.registerExtension({
                 tabBar.append(tabPresets, tabFavs);
                 paintTabs();
 
-                // ---------------- 关闭 / 事件 ----------------
+                // ---------------- 关闭 / 事件（无全屏遮罩，不阻塞画布操作） ----------------
                 const cleanup = () => {
+                    try { dialog.__maSaveWinPos?.(); } catch (e) {}
                     MPL_PRESET_MODAL_REFRESHERS.delete(doRefresh);
-                    document.removeEventListener("keydown", handleEsc);
-                    overlay.remove();
+                    dialog.remove();
                 };
-                const handleEsc = (e) => { if (e.key === "Escape") cleanup(); };
-                document.addEventListener("keydown", handleEsc);
-                overlay.onclick = (e) => { if (e.target === overlay) cleanup(); };
+                dialog.__mplCleanup = cleanup;
                 closeBtn.onclick = () => cleanup();
                 refreshBtn.onclick = () => { void doRefresh(); };
 
                 const stopProp = (e) => { e.stopPropagation(); };
                 dialog.addEventListener("pointerdown", stopProp);
                 dialog.addEventListener("pointermove", stopProp);
-                dialog.addEventListener("pointerup", stopProp);
+                dialog.addEventListener("pointerup", (e) => {
+                    e.stopPropagation();
+                    dialog.__maSaveWinPos?.();
+                });
                 dialog.addEventListener("mousedown", stopProp);
                 dialog.addEventListener("wheel", stopProp, { passive: false });
+                dialog.addEventListener("keydown", (e) => {
+                    e.stopPropagation();
+                    if (e.key === "Escape" && !document.querySelector(".mpl-dialog-overlay")) {
+                        e.preventDefault();
+                        cleanup();
+                    }
+                });
 
-                overlay.appendChild(dialog);
-                document.body.appendChild(overlay);
+                // 先载入并渲染列表再挂载到 DOM，避免先闪空框再跳出内容
+                await mplLoadSidebar();
+                renderFilters();
+                renderBody();
+
+                document.body.appendChild(dialog);
 
                 // 点击标签/按钮时不要让弹窗被拖走
                 tabBar.addEventListener("pointerdown", stopProp);
                 headRight.addEventListener("pointerdown", stopProp);
 
                 this.makeDialogDraggable(dialog, header);
-
-                await mplLoadSidebar();
-                renderFilters();
-                renderBody();
             };
 
         }
@@ -9388,3 +11059,20 @@ app.registerExtension({
         };
     }
 });
+
+if (typeof document !== "undefined" && !window.__MPL_GUARD_POINTER_BOUND__) {
+    window.__MPL_GUARD_POINTER_BOUND__ = true;
+    let _mplLastGuard = 0;
+    document.addEventListener("pointerup", () => {
+        const now = Date.now();
+        if (now - _mplLastGuard < 200) return;
+        _mplLastGuard = now;
+        setTimeout(() => {
+            try {
+                (app?.graph?._nodes || []).forEach(n => {
+                    if (n && typeof n._mplGuardLayout === "function") n._mplGuardLayout();
+                });
+            } catch (e) {}
+        }, 30);
+    }, true);
+}

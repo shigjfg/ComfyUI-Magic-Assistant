@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import "./magic_ui_shared.js";
+import { ensureLocalStudioCss, showLocalStudioModal } from "./magic_local_studio.js";
 
 const NODE_NAME = "MagicPhotopeaNode";
 const WIN_ID = "magic-photopea-window";
@@ -30,12 +31,52 @@ const savePinnedFiles = (set) => {
     localStorage.setItem(PINNED_KEY, JSON.stringify([...set]));
 };
 
+// --- 0.5 多语言辅助（读取 language_switcher.js）---
+function getCurrentLang() {
+    try {
+        if (typeof window !== "undefined" && typeof window.getCurrentLanguage === "function") {
+            return window.getCurrentLanguage() || "zh";
+        }
+        return localStorage.getItem("magic_assistant_language") || "zh";
+    } catch {
+        return "zh";
+    }
+}
+
+function mpT(key) {
+    if (!key) return key;
+    try {
+        const lang = getCurrentLang();
+        if (typeof window !== "undefined" && typeof window.translateText === "function") {
+            return window.translateText(key, lang, NODE_NAME);
+        }
+        return key;
+    } catch {
+        return key;
+    }
+}
+
 // --- 1. 监听 Python 消息 ---
 api.addEventListener("magic_photopea_imported", ({ detail }) => {
     const { node_id, filename } = detail;
     const node = app.graph.getNodeById(node_id);
     if (node) refreshNodeImageWidget(node, filename);
 });
+
+// 监听语言切换事件，实时重绘所有 MagicPhotopeaNode 的原生双按钮
+if (typeof window !== "undefined") {
+    window.addEventListener("magic-language-change", () => {
+        try {
+            const nodes = app.graph?._nodes || [];
+            for (const n of nodes) {
+                if (n?.type === NODE_NAME || n?.comfyClass === NODE_NAME) {
+                    n.setDirtyCanvas?.(true, true);
+                }
+            }
+            app.canvas?.setDirty?.(true, true);
+        } catch (_) {}
+    });
+}
 
 app.registerExtension({
     name: "Magic.Photopea.Studio",
@@ -49,15 +90,126 @@ app.registerExtension({
                     showGalleryModal(this);
                 });
 
-                this.addWidget("button", "🖌️ 打开编辑器 / Open Editor", null, () => {
-                    showPhotopeaModal(this);
-                });
+                ensureLocalStudioCss();
+                this.addCustomWidget(createDualEditorButtonWidget(this));
                 
                 return r;
             };
         }
     }
 });
+
+// ============================================================
+// 🧩 Native LiteGraph Dual-Button Widget (matches ComfyUI buttons 1:1)
+// ============================================================
+function createDualEditorButtonWidget(node) {
+    let hoveredSide = null; // "left" | "right" | null
+    let pressedSide = null;
+
+    const getRects = (widgetWidth, y, H) => {
+        const margin = 15;
+        const gap = 6;
+        const totalW = Math.max(40, widgetWidth - margin * 2);
+        const btnW = (totalW - gap) / 2;
+        return {
+            left: { x: margin, y, w: btnW, h: H },
+            right: { x: margin + btnW + gap, y, w: btnW, h: H },
+        };
+    };
+
+    const hitSide = (pos, widgetWidth, y, H) => {
+        if (!pos) return null;
+        const [px, py] = pos;
+        if (py < y || py > y + H) return null;
+        const { left, right } = getRects(widgetWidth, y, H);
+        if (px >= left.x && px <= left.x + left.w) return "left";
+        if (px >= right.x && px <= right.x + right.w) return "right";
+        return null;
+    };
+
+    return {
+        name: "magic_photopea_dual_editor",
+        type: "magic_dual_button",
+        value: null,
+        options: { serialize: false },
+        y: 0,
+        last_y: 0,
+        computeSize(width) {
+            return [width, 20];
+        },
+        draw(ctx, targetNode, widgetWidth, y, H) {
+            this.last_y = y;
+            const height = H || 20;
+            const { left, right } = getRects(widgetWidth, y, height);
+            const showText = !ctx.low_quality;
+
+            const drawNativeButton = (rect, label, isHover, isPressed) => {
+                ctx.save();
+                ctx.fillStyle = isPressed ? "#1b1b1e" : isHover ? "#2d2d33" : "#222222";
+                ctx.strokeStyle = isHover ? "#7a7a85" : "#555555";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.rect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+                ctx.fill();
+                ctx.stroke();
+
+                if (showText) {
+                    ctx.fillStyle = isHover ? "#ffffff" : "#dddddd";
+                    ctx.font = "12px Arial, -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(rect.x + 4, rect.y, rect.w - 8, rect.h);
+                    ctx.clip();
+                    ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 0.5);
+                    ctx.restore();
+                }
+                ctx.restore();
+            };
+
+            drawNativeButton(left, mpT("🖌️ Photopea编辑"), hoveredSide === "left", pressedSide === "left");
+            drawNativeButton(right, mpT("🛠️ 本地处理"), hoveredSide === "right", pressedSide === "right");
+        },
+        mouse(event, pos, targetNode) {
+            const H = 20;
+            const y = this.last_y ?? this.y ?? 0;
+            const w = targetNode?.size?.[0] || 240;
+            const side = hitSide(pos, w, y, H);
+
+            if (event.type === "pointermove" || event.type === "mousemove") {
+                if (hoveredSide !== side) {
+                    hoveredSide = side;
+                    targetNode?.setDirtyCanvas?.(true, false);
+                }
+                return false;
+            }
+            if (event.type === "pointerdown" || event.type === "mousedown") {
+                if (!side) return false;
+                pressedSide = side;
+                targetNode?.setDirtyCanvas?.(true, false);
+                return true;
+            }
+            if (event.type === "pointerup" || event.type === "mouseup") {
+                const triggered = pressedSide && pressedSide === side ? side : null;
+                pressedSide = null;
+                targetNode?.setDirtyCanvas?.(true, false);
+                if (triggered === "left") {
+                    showPhotopeaModal(targetNode || node);
+                    return true;
+                }
+                if (triggered === "right") {
+                    showLocalStudioModal(targetNode || node, (newFilename) => {
+                        refreshNodeImageWidget(targetNode || node, newFilename);
+                    });
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        },
+    };
+}
 
 // ============================================================
 // 🖼️ Part 1: Magic Gallery V4.3 (Pin Feature Added)
@@ -487,13 +639,30 @@ function showGalleryModal(node) {
 // ============================================================
 function showPhotopeaModal(node) {
     let win = document.getElementById(WIN_ID);
-    if (win) win.remove();
+    if (win) {
+        win._maCleanup?.();
+        win.remove();
+    }
+
+    const getViewportBounds = () => {
+        const vw = Math.max(320, Math.floor(window.innerWidth));
+        const vh = Math.max(320, Math.floor(window.innerHeight));
+        const minW = Math.min(800, Math.max(320, vw - 16));
+        const minH = Math.min(600, Math.max(320, vh - 16));
+        return { vw, vh, minW, minH };
+    };
+
+    const { vw, vh, minW, minH } = getViewportBounds();
+    const initWidth = Math.max(minW, Math.min(Math.floor(vw * 0.9), vw - 16));
+    const initHeight = Math.max(minH, Math.min(Math.floor(vh * 0.85), vh - 16));
+    const initLeft = Math.max(0, Math.floor((vw - initWidth) / 2));
+    const initTop = Math.max(0, Math.floor((vh - initHeight) / 2));
 
     win = document.createElement("div");
     win.id = WIN_ID;
     win.className = "ma-modal ma-modal-static-anim";
     win.dataset.currentNodeId = node.id;
-    win.style.cssText = `position: fixed; top: 5vh; left: 5vw; width: 90vw; height: 85vh; min-width: min(800px, calc(90vw - 16px)); min-height: min(600px, calc(85vh - 16px)); max-width: calc(100vw - var(--mp-left, 5vw) - 8px); max-height: calc(100vh - var(--mp-top, 5vh) - 8px); z-index: 9000; resize: both;`;
+    win.style.cssText = `position: fixed; top: ${initTop}px; left: ${initLeft}px; width: ${initWidth}px; height: ${initHeight}px; min-width: ${minW}px; min-height: ${minH}px; max-width: 100vw; max-height: 100vh; z-index: 9000; resize: both;`;
 
     // Header
     const header = document.createElement("div");
@@ -503,30 +672,81 @@ function showPhotopeaModal(node) {
     
     const btnGroup = document.createElement("div"); btnGroup.style.display = "flex"; btnGroup.style.gap = "6px";
     
+    let prevRect = null;
+    const clampWindowToViewport = () => {
+        if (win.dataset.isMaximized === "true") return;
+        const { vw: curVw, vh: curVh, minW: curMinW, minH: curMinH } = getViewportBounds();
+        win.style.minWidth = `${curMinW}px`;
+        win.style.minHeight = `${curMinH}px`;
+        const rect = win.getBoundingClientRect();
+        const width = Math.max(curMinW, Math.min(Math.round(rect.width), curVw));
+        const height = Math.max(curMinH, Math.min(Math.round(rect.height), curVh));
+        const left = Math.round(Math.min(Math.max(0, curVw - width), Math.max(0, rect.left)));
+        const top = Math.round(Math.min(Math.max(0, curVh - height), Math.max(0, rect.top)));
+        win.style.width = `${width}px`;
+        win.style.height = `${height}px`;
+        win.style.left = `${left}px`;
+        win.style.top = `${top}px`;
+    };
+
     const maxBtn = document.createElement("button"); maxBtn.textContent = "⬜"; maxBtn.className = "ma-modal-close";
     maxBtn.onclick = () => {
         if (win.dataset.isMaximized !== "true") {
-            win.dataset.prevStyle = win.style.cssText; win.dataset.isMaximized = "true";
-            win.style.top = "0"; win.style.left = "0"; win.style.width = "100vw"; win.style.height = "100vh";
-            win.style.resize = "none"; win.style.maxWidth = "none"; win.style.maxHeight = "none"; maxBtn.textContent = "❐";
+            const rect = win.getBoundingClientRect();
+            prevRect = {
+                left: Math.round(rect.left),
+                top: Math.round(rect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+            };
+            win.dataset.isMaximized = "true";
+            win.style.top = "0px";
+            win.style.left = "0px";
+            win.style.width = "100vw";
+            win.style.height = "100vh";
+            win.style.resize = "none";
+            win.style.borderRadius = "0";
+            win.style.border = "none";
+            maxBtn.textContent = "❐";
         } else {
-            win.style.cssText = win.dataset.prevStyle; win.dataset.isMaximized = "false"; maxBtn.textContent = "⬜";
+            win.dataset.isMaximized = "false";
+            win.style.resize = "both";
+            win.style.borderRadius = "";
+            win.style.border = "";
+            if (prevRect) {
+                win.style.left = `${prevRect.left}px`;
+                win.style.top = `${prevRect.top}px`;
+                win.style.width = `${prevRect.width}px`;
+                win.style.height = `${prevRect.height}px`;
+            }
+            clampWindowToViewport();
+            maxBtn.textContent = "⬜";
         }
     };
     btnGroup.appendChild(maxBtn);
 
+    const closeModal = () => {
+        win._maCleanup?.();
+        win.remove();
+    };
+
     const closeBtn = document.createElement("button"); closeBtn.textContent = "✕"; closeBtn.className = "ma-modal-close";
-    closeBtn.onclick = () => win.style.display = "none";
+    closeBtn.onclick = closeModal;
     btnGroup.appendChild(closeBtn);
     header.appendChild(btnGroup);
     win.appendChild(header);
 
-    // Iframe
+    // Iframe Container + Iframe
+    const iframeWrap = document.createElement("div");
+    iframeWrap.style.cssText = "position: relative; flex: 1 1 0%; min-width: 0; min-height: 0; width: 100%; overflow: hidden; background: #09090b;";
+
     const iframe = document.createElement("iframe");
     const ppConfig = { "files": [], "environment": { "theme": 2, "lang": "zh", "vmode": 0, "intro": false, "menus": [1,1,1,1,1,1,1,1,1] } };
     const hash = encodeURIComponent(JSON.stringify(ppConfig));
     iframe.src = `https://www.photopea.com#${hash}`;
-    iframe.style.cssText = "flex: 1 1 0%; min-width: 0; min-height: 0; border: none; background: #09090b; width: 100%; display: block;";
+    iframe.setAttribute("scrolling", "no");
+    iframe.style.cssText = "position: absolute; inset: 0; width: 100%; height: 100%; border: none; background: #09090b; display: block;";
+    iframeWrap.appendChild(iframe);
     
     // Auto-Load
     iframe.onload = async () => {
@@ -549,8 +769,14 @@ function showPhotopeaModal(node) {
 
                 if (blob) {
                     const buffer = await blob.arrayBuffer();
-                    iframe.contentWindow.postMessage(buffer, "*");
-                    setTimeout(() => iframe.contentWindow.postMessage(buffer, "*"), 800);
+                    if (win.isConnected && iframe.contentWindow) {
+                        iframe.contentWindow.postMessage(buffer, "*");
+                        setTimeout(() => {
+                            if (win.isConnected && iframe.contentWindow) {
+                                iframe.contentWindow.postMessage(buffer, "*");
+                            }
+                        }, 800);
+                    }
                 }
             } catch (e) { console.error(e); }
         }
@@ -561,7 +787,7 @@ function showPhotopeaModal(node) {
     footer.className = "ma-modal-footer";
     footer.innerHTML = `<button id="mp-save-btn" class="ma-btn ma-btn-primary" style="padding:8px 22px;">💾 保存并发送 (Save)</button>`;
     
-    win.appendChild(iframe);
+    win.appendChild(iframeWrap);
     win.appendChild(footer);
     document.body.appendChild(win);
 
@@ -571,7 +797,7 @@ function showPhotopeaModal(node) {
         iframe.contentWindow.postMessage("activeDocument.saveToOE('png');", "*");
     };
 
-    window.addEventListener("message", async function(e) {
+    const handleMessage = async (e) => {
         if (e.source !== iframe.contentWindow) return;
         if (e.data instanceof ArrayBuffer) {
             try {
@@ -588,36 +814,68 @@ function showPhotopeaModal(node) {
                 const currentNode = app.graph.getNodeById(win.dataset.currentNodeId);
                 if (currentNode) refreshNodeImageWidget(currentNode, result.name);
 
-                setTimeout(() => { win.style.display = "none"; }, 500);
-            } catch (err) { saveBtn.disabled = false; alert("Upload failed: " + err); }
+                setTimeout(() => { closeModal(); }, 500);
+            } catch (err) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = "💾 保存并发送 (Save)";
+                alert("Upload failed: " + err);
+            }
         }
-    });
+    };
+    window.addEventListener("message", handleMessage);
 
-    let isDragging = false; let startX, startY, startLeft, startTop;
+    let isDragging = false;
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0, dragWidth = 0, dragHeight = 0;
+
+    const handleWindowResize = () => {
+        if (!isDragging) clampWindowToViewport();
+    };
+    window.addEventListener("resize", handleWindowResize);
+
+    win._maCleanup = () => {
+        window.removeEventListener("message", handleMessage);
+        window.removeEventListener("resize", handleWindowResize);
+    };
+
     header.addEventListener("pointerdown", (e) => {
         if (e.button !== 0 || e.target.closest("button")) return;
         if (win.dataset.isMaximized === "true") return;
         const rect = win.getBoundingClientRect();
-        isDragging = true; startX = e.clientX; startY = e.clientY; startLeft = rect.left; startTop = rect.top;
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = rect.left;
+        startTop = rect.top;
+        dragWidth = Math.round(rect.width);
+        dragHeight = Math.round(rect.height);
+        win.style.width = `${dragWidth}px`;
+        win.style.height = `${dragHeight}px`;
+        win.style.left = `${Math.round(startLeft)}px`;
+        win.style.top = `${Math.round(startTop)}px`;
+        iframe.style.pointerEvents = "none";
         e.preventDefault();
         header.setPointerCapture(e.pointerId);
     });
     header.addEventListener("pointermove", (e) => {
         if (!isDragging) return;
-        const rect = win.getBoundingClientRect();
-        const maxLeft = Math.max(0, window.innerWidth - rect.width);
-        const maxTop = Math.max(0, window.innerHeight - rect.height);
-        const left = Math.min(maxLeft, Math.max(0, startLeft + e.clientX - startX));
-        const top = Math.min(maxTop, Math.max(0, startTop + e.clientY - startY));
-        win.style.left = `${left}px`; win.style.top = `${top}px`;
-        win.style.setProperty("--mp-left", `${left}px`); win.style.setProperty("--mp-top", `${top}px`);
+        const maxLeft = Math.max(0, window.innerWidth - dragWidth);
+        const maxTop = Math.max(0, window.innerHeight - dragHeight);
+        const left = Math.round(Math.min(maxLeft, Math.max(0, startLeft + e.clientX - startX)));
+        const top = Math.round(Math.min(maxTop, Math.max(0, startTop + e.clientY - startY)));
+        win.style.left = `${left}px`;
+        win.style.top = `${top}px`;
     });
     const stopDragging = (e) => {
+        if (!isDragging) return;
         isDragging = false;
-        if (header.hasPointerCapture(e.pointerId)) header.releasePointerCapture(e.pointerId);
+        iframe.style.pointerEvents = "";
+        if (e?.pointerId != null && header.hasPointerCapture(e.pointerId)) {
+            header.releasePointerCapture(e.pointerId);
+        }
     };
     header.addEventListener("pointerup", stopDragging);
     header.addEventListener("pointercancel", stopDragging);
+    header.addEventListener("lostpointercapture", stopDragging);
 }
 
 // ============================================================

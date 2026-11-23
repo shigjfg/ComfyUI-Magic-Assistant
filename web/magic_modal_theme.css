@@ -70,7 +70,7 @@
     overflow: hidden;
     box-sizing: border-box;
     color-scheme: dark;
-    animation: ma-modal-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: ma-fade-in 0.12s ease-out;
 }
 
 .ma-modal *,
@@ -85,12 +85,12 @@
 }
 
 @keyframes ma-modal-pop {
-    from { opacity: 0.6; transform: translate(-50%, -48%) scale(0.98); }
-    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .ma-modal-static-anim {
-    animation: ma-fade-in 0.14s ease-out !important;
+    animation: ma-fade-in 0.12s ease-out !important;
 }
 
 /* Scrollbar Styling */

@@ -61,6 +61,20 @@ def notes(meta):
     return str((meta or {}).get("notes") or "").strip()
 
 
+def recommended_weight(meta):
+    """读取已持久化的作者推荐权重，返回 (weight|None, source)。"""
+    if not isinstance(meta, dict):
+        return None, ""
+    value = meta.get("recommended_weight")
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None, ""
+    if not (0.01 <= num <= 1.0):
+        return None, ""
+    return round(num, 2), str(meta.get("recommended_weight_source") or "")
+
+
 def preview_path(lora_path, meta=None):
     """LM 的预览：优先 sidecar.preview_url 指向的本地文件，其次同目录 <名>.<ext>。"""
     if meta is None:
@@ -87,6 +101,7 @@ def info(lora_path):
     if not meta:
         return {}
     cv = _civitai(meta)
+    rec_w, rec_src = recommended_weight(meta)
     return {
         "title": title(meta),
         "notes": notes(meta),
@@ -95,11 +110,14 @@ def info(lora_path):
         "base_model": str(meta.get("base_model") or cv.get("baseModel") or "").strip(),
         "civitai_id": cv.get("id"),
         "model_id": cv.get("modelId"),
+        "recommended_weight": rec_w,
+        "recommended_weight_source": rec_src,
     }
 
 
 def write(lora_path, *, title=None, trigger_words=None, preview=None,
-          notes=None, civitai=None, sha256=None):
+          notes=None, civitai=None, sha256=None, recommended_weight=None,
+          recommended_weight_source=None, recommended_weight_checked=None):
     """合并式写入，保留 LM 侧已有的未知字段；原子替换避免写坏。"""
     path = sidecar_path(lora_path)
     data = read(lora_path) or {}
@@ -119,6 +137,11 @@ def write(lora_path, *, title=None, trigger_words=None, preview=None,
         data["notes"] = notes
     if preview:
         data["preview_url"] = preview.replace("\\", "/")
+    if recommended_weight is not None:
+        data["recommended_weight"] = recommended_weight
+        data["recommended_weight_source"] = recommended_weight_source or ""
+    if recommended_weight_checked is not None:
+        data["recommended_weight_checked"] = bool(recommended_weight_checked)
 
     if civitai is not None:
         cv = _civitai(data)

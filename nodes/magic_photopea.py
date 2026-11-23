@@ -12,6 +12,8 @@ import node_helpers
 from comfy_api.latest import InputImpl
 from server import PromptServer
 
+from . import magic_local_image_api  # noqa: F401 - registers /ma/local_studio/* routes
+
 class MagicPhotopeaNode:
     OUTPUT_NODE = True 
 
