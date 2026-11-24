@@ -66,17 +66,10 @@
 >    * **Multi-Layer Image Compose**: Uses the current image as the base layer; supports drag-and-drop, multi-file import, ComfyUI `input/` gallery picker, and `Ctrl+V` clipboard paste; includes layer ordering (up/down/show/hide/duplicate/delete), move with center snap guides, scale, rotate, flip, opacity, 7 blend modes, and one-click per-layer **RMBG cutout** with revert
 >    * **ControlNet Aux Preprocessors**: Auto-discovers installed `comfyui_controlnet_aux` nodes with category filters, search, dynamic native parameter UI, and clear installation guidance if missing
 >    * **rgthree-Style Swipe Comparer, Chaining & i18n**: Added `🪞 Swipe` (hover/drag curtain comparer with alpha-safe clipping) alongside `⚖️ Side-by-Side`, `↪ Use as Input` multi-step chaining, and `💾 Apply to Node`; fixed Photopea modal drag jitter/resizing & iframe clipping, and added complete live ZH/EN translations in `language_switcher.js`
-><img width="427" height="366" alt="屏幕截图 2026-11-24 070354" src="https://github.com/user-attachments/assets/137c7304-39c5-4e4f-9a8d-5fba4904fa3b" />
-<img width="1028" height="494" alt="屏幕截图 2026-11-24 070406" src="https://github.com/user-attachments/assets/285c9db3-e4fd-4d0a-a33d-dbfee7e3d4f0" />
-<img width="1018" height="499" alt="屏幕截图 2026-11-24 070421" src="https://github.com/user-attachments/assets/e6f88956-dfa2-43ba-9e59-061311bd3aa3" />
-<img width="1028" height="494" alt="屏幕截图 2026-11-24 070439" src="https://github.com/user-attachments/assets/8d48f4e1-e78d-45ae-b588-c294302337cc" />
-<img width="1021" height="496" alt="屏幕截图 2026-11-24 070445" src="https://github.com/user-attachments/assets/b520fb64-fe6e-443a-8cc7-93620ae331dd" />
-<img width="1028" height="499" alt="屏幕截图 2026-11-24 070511" src="https://github.com/user-attachments/assets/44fbe974-2572-4716-a5b7-9977eb365659" />
-<img width="1028" height="506" alt="屏幕截图 2026-11-24 070531" src="https://github.com/user-attachments/assets/338eb814-0b5a-4d32-a99f-537199de130b" />
 >
+><img width="427" height="366" alt="屏幕截图 2026-11-24 070354" src="https://github.com/user-attachments/assets/137c7304-39c5-4e4f-9a8d-5fba4904fa3b" /><img width="1028" height="494" alt="屏幕截图 2026-11-24 070406" src="https://github.com/user-attachments/assets/285c9db3-e4fd-4d0a-a33d-dbfee7e3d4f0" /><img width="1018" height="499" alt="屏幕截图 2026-11-24 070421" src="https://github.com/user-attachments/assets/e6f88956-dfa2-43ba-9e59-061311bd3aa3" /><img width="1028" height="494" alt="屏幕截图 2026-11-24 070439" src="https://github.com/user-attachments/assets/8d48f4e1-e78d-45ae-b588-c294302337cc" /><img width="1021" height="496" alt="屏幕截图 2026-11-24 070445" src="https://github.com/user-attachments/assets/b520fb64-fe6e-443a-8cc7-93620ae331dd" /><img width="1028" height="499" alt="屏幕截图 2026-11-24 070511" src="https://github.com/user-attachments/assets/44fbe974-2572-4716-a5b7-9977eb365659" /><img width="1028" height="506" alt="屏幕截图 2026-11-24 070531" src="https://github.com/user-attachments/assets/338eb814-0b5a-4d32-a99f-537199de130b" />
 > 
 > **V1.4.8 版本介绍 / Version Introduction** 2026-11-17
->
 > 
 > 🙏 **特别鸣谢 / Special Thanks**: 本版本整合了来自 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) 的多项强力 LoRA 管理增强功能，并结合本项目 UI 风格进行了深度优化与重构。
 > 🙏 **Special Thanks**: This release integrates enhanced LoRA management features from [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader), refined to fit Magic Assistant's dark UI system.
@@ -88,7 +81,9 @@
 >    * **文件夹与加载增强**: 支持文件夹忽略/恢复、根列表与文件夹自由混排、在 Civitai 打开/打开所在文件夹、同步官方 `lora_metadata` 缓存及链末端可选 `clip`
 >    * **界面与排版优化**: 修复工作流恢复或缩放节点时嵌入 UI 宽度异常锁死的 Bug；整合「主题配色与预设」（内置 10 套配色 + 自定义方案）进「⚙️设置 → 布局样式」
 >    * **Major Upgrade**: Integrated LoRA-Manager sidecar/cache interop, WebP thumbnail caching, master & per-row trigger toggles, unified `📂Preset` & Favorites modal, Civitai/folder quick actions, and 10+ theme color presets
-><img width="845" height="405" alt="image" src="https://github.com/user-attachments/assets/0d091cdb-a3da-4cf0-8d57-599749ee5f15" /><img width="663" height="400" alt="image" src="https://github.com/user-attachments/assets/4f71b8b5-01f5-4024-bc58-91da3189a24a" /><img width="613" height="533" alt="image" src="https://github.com/user-attachments/assets/890d296c-09d9-4021-b356-3898cc42eafc" /><img width="629" height="443" alt="image" src="https://github.com/user-attachments/assets/088a08ad-d8c2-49fe-82a5-721e46da657b" /><img width="418" height="488" alt="image" src="https://github.com/user-attachments/assets/23980a88-475f-4478-89aa-21b57ddea988" /><img width="686" height="408" alt="image" src="https://github.com/user-attachments/assets/3ee4e3aa-2b65-4ebd-a27a-a03acf470c6f" />
+>
+>
+<img width="845" height="405" alt="image" src="https://github.com/user-attachments/assets/0d091cdb-a3da-4cf0-8d57-599749ee5f15" /><img width="663" height="400" alt="image" src="https://github.com/user-attachments/assets/4f71b8b5-01f5-4024-bc58-91da3189a24a" /><img width="613" height="533" alt="image" src="https://github.com/user-attachments/assets/890d296c-09d9-4021-b356-3898cc42eafc" /><img width="629" height="443" alt="image" src="https://github.com/user-attachments/assets/088a08ad-d8c2-49fe-82a5-721e46da657b" /><img width="418" height="488" alt="image" src="https://github.com/user-attachments/assets/23980a88-475f-4478-89aa-21b57ddea988" /><img width="686" height="408" alt="image" src="https://github.com/user-attachments/assets/3ee4e3aa-2b65-4ebd-a27a-a03acf470c6f" />
 >
 > 2. **🎨 视觉升级**: 全插件统一 Linear / Vercel Modern Dark 暗黑主题与双语完善
 >    * 新增共享样式表 `magic_modal_theme.css` 与主题加载器 `magic_ui_shared.js`，统一升级全插件节点弹窗的深色质感、玻璃遮罩、圆角与交互细节
