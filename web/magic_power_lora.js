@@ -1060,15 +1060,26 @@ const MA_LoraPreview = (() => {
     function installGlobalGuards() {
         if (boundDocMove) return;
         boundDocMove = true;
-        window.addEventListener("scroll", teardown, true);
+        window.addEventListener("scroll", (e) => {
+            if (!activeRow && !div) return;
+            const target = e.target;
+            if (target === window || target === document || !activeRow ||
+                (target && typeof target.contains === "function" && target.contains(activeRow))) {
+                teardown();
+            }
+        }, true);
         window.addEventListener("resize", teardown, true);
-        document.addEventListener("pointerleave", teardown, true);
+        // 仅监听离开整个页面文档（非捕获阶段！捕获阶段会误伤行内子元素的 pointerleave，导致悬停预览随机消失/不显示）
+        document.documentElement.addEventListener("pointerleave", teardown);
+        window.addEventListener("blur", teardown);
         document.addEventListener("visibilitychange", () => { if (document.hidden) teardown(); });
     }
 
     function place(rect) {
         if (!div) return;
-        const pw = 300, ph = 300, margin = 10;
+        const pw = div.offsetWidth || 300;
+        const ph = div.offsetHeight || 300;
+        const margin = 10;
         let left = rect.right + margin;
         let top = rect.top;
         if (left + pw > window.innerWidth) left = rect.left - pw - margin;
@@ -1085,10 +1096,10 @@ const MA_LoraPreview = (() => {
             if (timer) { clearTimeout(timer); timer = null; }
             teardown();
             activeRow = row;
-            const rect0 = row.getBoundingClientRect();
             timer = setTimeout(() => {
                 timer = null;
-                if (activeRow !== row || !document.body.contains(row)) { activeRow = null; return; }
+                if (activeRow !== row || !row.isConnected) { activeRow = null; return; }
+                const rectNow = row.getBoundingClientRect();
                 document.querySelectorAll(".mpl-lora-preview").forEach(p => p.remove());
                 div = document.createElement("div");
                 div.className = "mpl-lora-preview";
@@ -1098,18 +1109,25 @@ const MA_LoraPreview = (() => {
                     "pointer-events:none;max-width:300px;max-height:300px;display:block;";
                 const img = document.createElement("img");
                 img.style.cssText = "max-width:284px;max-height:284px;object-fit:contain;display:block;border-radius:6px;";
+                img.decoding = "async";
                 const safeName = encodeURIComponent(lora.name);
-                img.src = api.apiURL(`/ma/lora/image?name=${safeName}&t=${Date.now()}`);
+                img.src = api.apiURL(`/ma/lora/image?name=${safeName}&w=320${mplBustSuffix(lora.name)}`);
+                img.onload = () => {
+                    if (div && activeRow === row && row.isConnected) {
+                        place(row.getBoundingClientRect());
+                    }
+                };
                 img.onerror = () => {
                     if (div) div.innerHTML = `<div style="padding:20px;color:#71717a;text-align:center;">${mplT("无预览图")}</div>`;
                 };
                 div.appendChild(img);
                 document.body.appendChild(div);
-                place(rect0);
+                place(rectNow);
                 startGuard(row);
             }, 300);
         };
         row.onmouseleave = () => {
+            if (activeRow !== row) return;
             if (timer) { clearTimeout(timer); timer = null; }
             teardown();
         };
@@ -1941,7 +1959,7 @@ app.registerExtension({
                 this.setDirtyCanvas?.(true, true);
             };
             nodeType.prototype._mplGuardLayout = function() {
-                if (!this.embeddedDiv || this._mplGuardBusy) return;
+                if (!this.embeddedDiv || this._mplGuardBusy || this.flags?.collapsed) return;
                 this._mplGuardBusy = true;
                 try {
                     const minW = this.minWidth || (MPL_MIN_W + 20);
@@ -1956,9 +1974,12 @@ app.registerExtension({
                         changed = true;
                     }
                     const w = this._mplDomWidget;
-                    if (w && w.width != null) {
+                    if (w && Object.prototype.hasOwnProperty.call(w, "width") && w.width != null) {
+                        const prevW = Number(w.width);
                         try { delete w.width; } catch (e) { w.width = null; }
-                        changed = true;
+                        if (!Number.isFinite(prevW) || !Number.isFinite(sw) || Math.abs(prevW - sw) > 2) {
+                            changed = true;
+                        }
                     }
                     if (changed) this.setDirtyCanvas?.(true, true);
                 } finally {
@@ -1968,9 +1989,8 @@ app.registerExtension({
             nodeType.prototype._mplInstallLayoutGuard = function() {
                 if (this._mplGuardInstalled) return;
                 this._mplGuardInstalled = true;
-                this._mplGuardTimer = setInterval(() => {
-                    try { this._mplGuardLayout?.(); } catch (e) {}
-                }, 600);
+                // 不再使用 600ms 常驻 setInterval 轮询（会反复触发 setDirtyCanvas 造成画布卡顿）；
+                // 节点宽度守护由 onResize / onConfigure / 一次性 _mplScheduleLayoutSync / pointerup 覆盖。
             };
             // 文件夹头部上下边缘：拖 LoRA 时插到该文件夹前/后；中间仍拖入文件夹
             nodeType.prototype._mplFolderHeaderDropEdge = function(fDiv, y) {
@@ -1996,11 +2016,14 @@ app.registerExtension({
                 });
                 if (!this._mplResizeObserver && typeof ResizeObserver !== "undefined" && this.embeddedDiv) {
                     try {
-                        this._mplResizeObserver = new ResizeObserver(() => {
-                            const w = this.embeddedDiv ? this.embeddedDiv.clientWidth : 0;
-                            if (this.size?.[0] && w !== this.size[0]) {
-                                this.setDirtyCanvas?.(true, true);
-                            }
+                        this._mplLastObservedWidth = 0;
+                        this._mplResizeObserver = new ResizeObserver((entries) => {
+                            if (this.flags?.collapsed) return;
+                            const rectW = entries && entries[0]?.contentRect ? Math.round(entries[0].contentRect.width) : 0;
+                            if (rectW <= 0) return;
+                            if (this._mplLastObservedWidth && Math.abs(rectW - this._mplLastObservedWidth) <= 1) return;
+                            this._mplLastObservedWidth = rectW;
+                            this.setDirtyCanvas?.(true, true);
                         });
                         this._mplResizeObserver.observe(this.embeddedDiv);
                     } catch (e) {}
@@ -2616,10 +2639,11 @@ app.registerExtension({
                         height: 100%;
                         min-height: 0;
                         max-height: none;
+                        contain: layout style paint;
                         --comfy-widget-min-height: 220px;
                         --comfy-widget-height: 100%;
                     }
-                    .mpl-list-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px; background: #09090b; pointer-events: auto; }
+                    .mpl-list-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px; background: #09090b; pointer-events: auto; contain: layout style; }
                     .mpl-list-scroll::-webkit-scrollbar { width: 7px; }
                     .mpl-list-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 6px; }
                     .mpl-list-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.24); }
@@ -2646,7 +2670,7 @@ app.registerExtension({
                         display: inline-flex; align-items: center; justify-content: center; line-height: 0;
                         background: transparent; border: 2px solid transparent; border-radius: 50%;
                         color: var(--folder-normal-color, var(--folder-ignore-color, #8fb8e8));
-                        cursor: pointer; flex: 0 0 auto; transition: all 0.14s;
+                        cursor: pointer; flex: 0 0 auto; transition: background-color 0.14s, border-color 0.14s, color 0.14s;
                     }
                     .mpl-folder-ignore svg { display: block; flex: 0 0 auto; vertical-align: middle; shape-rendering: geometricPrecision; }
                     .mpl-folder-ignore:not(.active) svg * { stroke-width: 2.1; }
@@ -2738,7 +2762,7 @@ app.registerExtension({
                         display: inline-flex; align-items: center; justify-content: center;
                         border: 1px solid rgba(16,185,129,0.36); border-radius: 6px; background: rgba(16,185,129,0.10);
                         color: #6ee7b7; font: 10px Consolas, monospace; cursor: pointer; user-select: none; white-space: nowrap;
-                        transition: all 0.14s;
+                        transition: background-color 0.14s, border-color 0.14s, color 0.14s;
                     }
                     .mpl-lora-rec-weight:hover { border-color: rgba(16,185,129,0.68); background: rgba(16,185,129,0.2); color: #a7f3d0; }
                     .mpl-lora-rec-weight.is-applied { border-color: rgba(16,185,129,0.22); background: rgba(16,185,129,0.06); color: #86efac; opacity: 0.78; }
@@ -2757,7 +2781,7 @@ app.registerExtension({
                     .mpl-mini-btn {
                         background: var(--ma-surface); border: 1px solid var(--ma-border); cursor: pointer; color: var(--ma-muted);
                         padding: 0; border-radius: 6px; font-size: 13px; width: 24px; height: 22px;
-                        display: flex; align-items: center; justify-content: center; transition: all 0.14s;
+                        display: flex; align-items: center; justify-content: center; transition: background-color 0.14s, border-color 0.14s, color 0.14s;
                     }
                     .mpl-mini-btn:hover { background: var(--ma-surface-raised); color: var(--ma-text); border-color: rgba(99,102,241,0.45); }
                     .mpl-mini-btn.del:hover { background: rgba(239,68,68,0.16); color: #f87171; border-color: rgba(239,68,68,0.45); }
@@ -2774,8 +2798,8 @@ app.registerExtension({
                         position: sticky; top: -8px; z-index: 6;
                         display: none; align-items: center; gap: 8px;
                         margin: 0 0 6px; padding: 5px 9px; border-radius: 8px;
-                        background: rgba(24,24,28,0.97); border: 1px solid var(--ma-border);
-                        font-size: 11.5px; color: var(--ma-muted); backdrop-filter: blur(6px);
+                        background: #18181c; border: 1px solid var(--ma-border);
+                        font-size: 11.5px; color: var(--ma-muted);
                     }
                     .mpl-multisel-bar .mpl-multisel-count { font-weight: 600; color: #f4f4f5; }
                     .mpl-ms-master {
@@ -6416,14 +6440,16 @@ app.registerExtension({
 
                 MA_LoraPreview.bindRowHover(row, lora);
 
-                // 🖼 左侧缩略图（加载失败时只留空占位，不会撑大行）
+                // 🖼 左侧缩略图（使用 w=64 磁盘缓存 WebP 缩略图，避免行内加载原图拖慢画布拖动）
                 const thumb = document.createElement("div");
                 thumb.className = "mpl-lora-thumb";
                 const thumbImg = document.createElement("img");
                 const safeThumbName = encodeURIComponent(lora.name);
+                thumbImg.width = 26;
+                thumbImg.height = 26;
                 thumbImg.loading = "lazy";
                 thumbImg.decoding = "async";
-                thumbImg.src = api.apiURL(`/ma/lora/image?name=${safeThumbName}${mplBustSuffix(lora.name)}`);
+                thumbImg.src = api.apiURL(`/ma/lora/image?name=${safeThumbName}&w=64${mplBustSuffix(lora.name)}`);
                 thumbImg.onerror = () => { thumb.classList.add("mpl-lora-thumb-empty"); thumbImg.remove(); };
                 thumb.appendChild(thumbImg);
                 thumb.title = lora.name;
@@ -8441,7 +8467,7 @@ app.registerExtension({
                         imgBox.appendChild(img);
                         
                         const nameBox = document.createElement("div");
-                        nameBox.style.cssText = "position:absolute;bottom:0;left:0;width:100%;padding:5px 6px;font-size:11px;color:#f4f4f5;background:rgba(9,9,11,0.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;z-index:1;text-align:center;backdrop-filter:blur(6px);border-top:1px solid rgba(255,255,255,0.06);";
+                        nameBox.style.cssText = "position:absolute;bottom:0;left:0;width:100%;padding:5px 6px;font-size:11px;color:#f4f4f5;background:rgba(9,9,11,0.88);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;z-index:1;text-align:center;border-top:1px solid rgba(255,255,255,0.06);";
                         const titleText = mplTitleFor(f);
                         nameBox.textContent = titleText || f.split(/[/\\]/).pop().replace(/\.(safetensors|pt|ckpt)$/, "");
 
@@ -8453,8 +8479,7 @@ app.registerExtension({
                             right: 6px;
                             width: 24px;
                             height: 24px;
-                            background: rgba(17, 17, 20, 0.78);
-                            backdrop-filter: blur(6px);
+                            background: rgba(17, 17, 20, 0.88);
                             border: 1px solid rgba(255, 255, 255, 0.16);
                             border-radius: 6px;
                             color: #e4e4e7;
@@ -8466,7 +8491,7 @@ app.registerExtension({
                             z-index: 10;
                             padding: 0;
                             line-height: 1;
-                            transition: all 0.15s;
+                            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
                         `;
                         editBtn.onclick = (e) => {
                             e.stopPropagation();

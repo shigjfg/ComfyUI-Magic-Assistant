@@ -1,4 +1,4 @@
-<img width="2" height="1" alt="image" src="https://github.com/user-attachments/assets/044e31f8-3bd9-4ecc-9d93-668d8d0ce35b" /># ✨ Magic Assistant for ComfyUI
+# ✨ Magic Assistant for ComfyUI
 
 **A powerful 12-in-1 suite designed to simplify your workflow.**
 **一个专注于"多功能集成"的强大 ComfyUI 助手插件。**
@@ -18,6 +18,24 @@
 
 > Latest Update / 最新更新：**2026-11-24**
 >
+> **V1.5.0 版本介绍 / Version Introduction** 2026-11-24
+>
+> 🙏 **特别鸣谢 / Special Thanks**: 感谢 [@anupam-orbisai](https://github.com/anupam-orbisai) 提交的 [PR #15](https://github.com/shigjfg/ComfyUI-Magic-Assistant/pull/15) 安全改进！
+> 🙏 **Special Thanks**: Thanks to [@anupam-orbisai](https://github.com/anupam-orbisai) for the security fix in [PR #15](https://github.com/shigjfg/ComfyUI-Magic-Assistant/pull/15)!
+>
+> 1. **⚡ 流畅度优化**: 强力 LoRA 加载器 - 解决画布拖动卡顿问题
+>    * **画布拖动丝滑回归**: 减轻了节点界面的绘制负担和多余的后台刷新，并让列表里的小图标改为加载轻量缩略图；现在即使画布里放着强力 LoRA 加载器，拖动画布、缩放画面以及在「添加 LoRA」图库里翻页浏览都非常顺畅，不再卡顿
+>    * **Smoother Canvas Dragging**: Reduced UI rendering overhead and switched inline row icons to lightweight cached thumbnails so panning/zooming the canvas and browsing the Add LoRA gallery stay smooth even with Power LoRA Loader nodes in view
+>
+> 2. **🐛 问题修复**: 强力 LoRA 加载器 - 修复悬停时预览图偶尔不显示的问题
+>    * **悬停预览稳稳弹出**: 修复了鼠标在 LoRA 条目里稍微移动一下，预览大图就容易被误取消、时有时无的问题；现在鼠标停在任意 LoRA 行上都能稳定弹出，而且加载更快、位置更准
+>    * **Reliable Hover Previews**: Fixed an issue where moving the cursor slightly inside a LoRA row could randomly cancel the hover preview; preview thumbnails now appear consistently, load faster, and stay properly positioned
+>
+> 3. **🔒 安全优化**: Magic Prompt（魔法提示词）- 本地模型启动更安全
+>    * 合并了 [@anupam-orbisai](https://github.com/anupam-orbisai) 贡献的 [PR #15](https://github.com/shigjfg/ComfyUI-Magic-Assistant/pull/15)：使用本地 `llama.cpp` 模式时，启动前会自动核对服务程序是否为正规的 `llama-server`，防止异常配置误启动其他程序，使用更安心
+>    * **Safer Local Backend Startup (PR #15)**: Merged [PR #15](https://github.com/shigjfg/ComfyUI-Magic-Assistant/pull/15) by [@anupam-orbisai](https://github.com/anupam-orbisai) to verify that the configured local `llama.cpp` executable is `llama-server` before starting it
+>
+
 > **V1.4.9 版本介绍 / Version Introduction** 2026-11-24
 >
 > 🙏 **特别鸣谢 / Special Thanks**: 本版本继续同步整合了 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader)（1.0.4 ~ 1.0.8）的强力 LoRA 管理增强特性，同时保持 Magic Assistant 原有暗黑主题与简洁 UI 布局，并修复了弹窗卡顿闪现等老问题。
@@ -92,6 +110,9 @@
 >    * **UI Unification & i18n**: Unified all plugin modals under a modern dark design system (`magic_modal_theme.css` / `magic_ui_shared.js`), fixed nested modal translation in `language_switcher.js`, and completed bilingual coverage for all new UI elements
 >
 
+<details>
+<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
+
 > **V1.4.7 版本介绍 / Version Introduction** 2026-11-08
 >
 > 
@@ -117,9 +138,6 @@
 >    * 内置修图画板弹窗现在会根据屏幕分辨率自适应弹性缩放，并在不同窗口尺寸下均能居中显示
 >    * 增加拖拽边界碰撞保护，防止窗口不小心被拖到屏幕外找不到
 >    * **UI Polish**: Magic Photopea modal now features adaptive viewport scaling and drag boundary constraints, preventing the dialog from being dragged offscreen
-
-<details>
-<summary>Click to view more previous updates / 点击查看往期更多更新内容</summary>
 
 > **V1.4.6 版本介绍 / Version Introduction** 2026-10-09
 >
