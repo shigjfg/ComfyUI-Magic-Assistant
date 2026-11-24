@@ -289,6 +289,8 @@ class _LlamaCppServer:
         server = self._resolve_path(server_value, Path.cwd()) if server_value else _bundled_llama_server()
         if server is None or not server.is_file():
             raise FileNotFoundError("llama.cpp 配置缺少有效的 server_path（llama-server.exe）")
+        if server.name.lower() not in ("llama-server", "llama-server.exe"):
+            raise ValueError(f"server_path 必须指向 llama-server 可执行文件，而不是: {server.name}")
         context = max(1024, min(int(profile.get("context", 8192)), 131072))
         gpu_layers = int(profile.get("gpu_layers", 99))
         signature = (
