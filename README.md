@@ -69,6 +69,7 @@
 >
 ><img width="427" height="366" alt="屏幕截图 2026-11-24 070354" src="https://github.com/user-attachments/assets/137c7304-39c5-4e4f-9a8d-5fba4904fa3b" /><img width="1028" height="494" alt="屏幕截图 2026-11-24 070406" src="https://github.com/user-attachments/assets/285c9db3-e4fd-4d0a-a33d-dbfee7e3d4f0" /><img width="1018" height="499" alt="屏幕截图 2026-11-24 070421" src="https://github.com/user-attachments/assets/e6f88956-dfa2-43ba-9e59-061311bd3aa3" /><img width="1028" height="494" alt="屏幕截图 2026-11-24 070439" src="https://github.com/user-attachments/assets/8d48f4e1-e78d-45ae-b588-c294302337cc" /><img width="1021" height="496" alt="屏幕截图 2026-11-24 070445" src="https://github.com/user-attachments/assets/b520fb64-fe6e-443a-8cc7-93620ae331dd" /><img width="1028" height="499" alt="屏幕截图 2026-11-24 070511" src="https://github.com/user-attachments/assets/44fbe974-2572-4716-a5b7-9977eb365659" /><img width="1028" height="506" alt="屏幕截图 2026-11-24 070531" src="https://github.com/user-attachments/assets/338eb814-0b5a-4d32-a99f-537199de130b" />
 > 
+
 > **V1.4.8 版本介绍 / Version Introduction** 2026-11-17
 > 
 > 🙏 **特别鸣谢 / Special Thanks**: 本版本整合了来自 [shengdaklp99/ComfyUI-lyw-MA-Loader](https://github.com/shengdaklp99/ComfyUI-lyw-MA-Loader) 的多项强力 LoRA 管理增强功能，并结合本项目 UI 风格进行了深度优化与重构。
@@ -90,7 +91,7 @@
 >    * 修复语言切换器（`language_switcher.js`）在嵌套弹窗 DOM 挂载时遗漏子元素翻译的问题，并补齐所有新增弹窗与右键菜单的中英文对照
 >    * **UI Unification & i18n**: Unified all plugin modals under a modern dark design system (`magic_modal_theme.css` / `magic_ui_shared.js`), fixed nested modal translation in `language_switcher.js`, and completed bilingual coverage for all new UI elements
 >
-> 
+
 > **V1.4.7 版本介绍 / Version Introduction** 2026-11-08
 >
 > 
